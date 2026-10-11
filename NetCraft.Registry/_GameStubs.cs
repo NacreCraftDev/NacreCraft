@@ -90,7 +90,6 @@ public interface FlatLevelGeneratorPreset { }
 public interface FloatProvider { }
 public interface FoliagePlacerType<T1> { }
 public interface FrogVariant { }
-public interface GameEvent { }
 public interface GameTestHelper { }
 public interface GameTestInstance { }
 public interface HeightProviderType<T1> { }

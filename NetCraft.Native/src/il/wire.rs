@@ -366,6 +366,19 @@ fn write_compressed_uint(output: &mut Vec<u8>, value: u32) {
     }
 }
 
+//write_type_def_or_ref 按 ECMA 335 II.23.2.8 编一个 TypeDefOrRef
+//它是 2 位表号加 26 位行号 不是 token 本身: 直接写 token 的低位出来的是个非法索引
+fn write_type_def_or_ref(output: &mut Vec<u8>, token: u32) -> Result<(), String> {
+    let tag = match token >> 24 {
+        0x02 => 0u32, //TypeDef
+        0x01 => 1u32, //TypeRef
+        0x1B => 2u32, //TypeSpec
+        other => return Err(format!("token 0x{token:08X} 不是 TypeDefOrRef 表号 0x{other:02X}")),
+    };
+    write_compressed_uint(output, ((token & 0x00FF_FFFF) << 2) | tag);
+    Ok(())
+}
+
 //write_type 把一个类型描述写进签名
 //自定义类型要转成 TypeDefOrRef 的压缩编码 所以要走 resolve 拿 token
 fn write_type<F>(output: &mut Vec<u8>, desc: &TypeDesc, resolve: &F) -> Result<(), String>
@@ -376,11 +389,11 @@ where
         TypeDesc::Primitive(tag) => output.push(*tag),
         TypeDesc::Class { assembly, name } => {
             output.push(ELEMENT_CLASS);
-            write_compressed_uint(output, resolve(assembly, name)? & 0x00FF_FFFF);
+            write_type_def_or_ref(output, resolve(assembly, name)?)?;
         }
         TypeDesc::ValueType { assembly, name } => {
             output.push(ELEMENT_VALUETYPE);
-            write_compressed_uint(output, resolve(assembly, name)? & 0x00FF_FFFF);
+            write_type_def_or_ref(output, resolve(assembly, name)?)?;
         }
         TypeDesc::SZArray(inner) => {
             output.push(ELEMENT_SZARRAY);
@@ -403,7 +416,7 @@ where
             //ECMA 335 II.23.2.12: 标签 随后是 class/valuetype 泛型定义的 TypeDefOrRef 实参个数与实参
             output.push(ELEMENT_GENERICINST);
             output.push(*kind);
-            write_compressed_uint(output, resolve(assembly, name)? & 0x00FF_FFFF);
+            write_type_def_or_ref(output, resolve(assembly, name)?)?;
             write_compressed_uint(output, arguments.len() as u32);
             for argument in arguments {
                 write_type(output, argument, resolve)?;

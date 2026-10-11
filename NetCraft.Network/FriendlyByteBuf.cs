@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO;
 using System.Text;
+using NetCraft.Primitives;
 
 namespace NetCraft.Network;
 
@@ -194,6 +195,18 @@ public class FriendlyByteBuf : IDisposable
         buf[6] = bytes[7]; buf[7] = bytes[6];
         for (int i = 8; i < 16; i++) buf[i] = bytes[i];
         _writer.Write(buf);
+        return this;
+    }
+
+    //ReadBlockPos reads a block position as three VarInts, maps to vanilla FriendlyByteBuf.readBlockPos
+    public BlockPos ReadBlockPos() => new(ReadVarInt(), ReadVarInt(), ReadVarInt());
+
+    //WriteBlockPos writes a block position as three VarInts, maps to vanilla FriendlyByteBuf.writeBlockPos
+    public FriendlyByteBuf WriteBlockPos(BlockPos value)
+    {
+        WriteVarInt(value.X);
+        WriteVarInt(value.Y);
+        WriteVarInt(value.Z);
         return this;
     }
 

@@ -16,6 +16,7 @@ internal static class WireWriter
     private const byte KindVar = 5;
     private const byte KindBranch = 6;
     private const byte KindSwitch = 7;
+    private const byte KindToken = 8;
     private const byte KindRef = 9;
     private const byte KindField = 10;
     private const byte KindType = 11;
@@ -170,6 +171,16 @@ internal static class WireWriter
 
     private static void WriteReference(List<byte> bytes, MethodReference callee)
     {
+        //A member of this very module is addressed by its own token
+        //Going through the reference table would make the assembly reference the assembly it already is, and the runtime
+        //refuses to resolve a reference an assembly makes to itself
+        if (IsSameModule(callee.DeclaringType) && callee.Resolve() is { } target)
+        {
+            bytes.Add(KindToken);
+            AppendU32(bytes, (uint)target.MetadataToken.ToUInt32());
+            return;
+        }
+
         WriteTypeName(bytes, Definition(callee.DeclaringType));
         AppendText(bytes, callee.Name);
         bytes.Add(callee.HasThis ? (byte)1 : (byte)0);
@@ -182,10 +193,22 @@ internal static class WireWriter
     //WriteFieldReference 编一条字段引用 没有参数表也没有 HASTHIS 一个字段类型就够
     private static void WriteFieldReference(List<byte> bytes, FieldReference field)
     {
+        //Same-module fields carry their own token, for the reason spelled out above
+        if (IsSameModule(field.DeclaringType) && field.Resolve() is { } target)
+        {
+            bytes.Add(KindToken);
+            AppendU32(bytes, (uint)target.MetadataToken.ToUInt32());
+            return;
+        }
+
         WriteTypeName(bytes, Definition(field.DeclaringType));
         AppendText(bytes, field.Name);
         WriteType(bytes, field.FieldType);
     }
+
+    //IsSameModule reports whether a type is defined in the module being written
+    //The load-time rewriter gets this for free from Cecil's importer; the description format has to do it by hand
+    private static bool IsSameModule(TypeReference type) => type.Scope is ModuleDefinition;
 
     //Definition 泛型实例化退回到泛型定义
     //成员引用的父类型指向的是定义本身 实例化信息在签名里表达 两者不能混

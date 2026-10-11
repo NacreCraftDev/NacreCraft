@@ -69,6 +69,11 @@ public abstract class Block
     //Defaults to 0.6; slippery surfaces like ice override it to 0.98
     public virtual float Friction => 0.6f;
 
+    //ExplosionResistance how much this block resists a blast, maps to vanilla Properties.explosionResistance
+    //Vanilla defaults to 0, which means the blast destroys the block outright; stone sits at 6 and obsidian at 1200
+    //Like PushReaction, the per-block value belongs to the embedded block table and will be injected from there
+    public virtual float ExplosionResistance => 0.0f;
+
     //GetFluidState gets the fluid state of this state; non-fluid blocks return empty, maps to vanilla getFluidState
     public virtual FluidState GetFluidState(BlockState state) => FluidState.Empty;
 

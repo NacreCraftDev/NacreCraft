@@ -35,8 +35,7 @@ public static class ParticleTypes
         Simple("copper_fire_flame", false);                               //12
         Simple("crit", false);                                            //13
         Simple("damage_indicator", true);                                 //14
-        //dragon_breath's PowerParticleOption parameter is a float, out of this package's scope, see the report
-        Unsupported("dragon_breath", false);                              //15
+        PowerType("dragon_breath", false);                                //15
         Simple("dripping_lava", false);                                   //16
         Simple("falling_lava", false);                                    //17
         Simple("landing_lava", false);                                    //18
@@ -44,8 +43,7 @@ public static class ParticleTypes
         Simple("falling_water", false);                                   //20
         DustType("dust", false);                                          //21
         DustColorTransitionType("dust_color_transition", false);           //22
-        //effect/instant_effect's SpellParticleOption parameter is a color and strength, out of this package's scope
-        Unsupported("effect", false);                                     //23
+        SpellType("effect", false);                                       //23
         Simple("elder_guardian", true);                                   //24
         Simple("enchanted_hit", false);                                   //25
         Simple("enchant", false);                                         //26
@@ -67,8 +65,7 @@ public static class ParticleTypes
         Simple("pale_oak_leaves", false);                                 //42
         ColorType("tinted_leaves", false);                                //43
         Simple("sculk_soul", false);                                      //44
-        //sculk_charge's parameter is a roll angle, out of this scope
-        Unsupported("sculk_charge", true);                                //45
+        SculkChargeType("sculk_charge", true);                            //45
         Simple("sculk_charge_pop", true);                                 //46
         Simple("soul_fire_flame", false);                                 //47
         Simple("soul", false);                                            //48
@@ -76,10 +73,9 @@ public static class ParticleTypes
         Simple("happy_villager", false);                                  //50
         Simple("composter", false);                                       //51
         Simple("heart", false);                                           //52
-        Unsupported("instant_effect", false);                             //53
+        SpellType("instant_effect", false);                               //53
         ItemType("item", false);                                          //54
-        //vibration's parameter is a position source, depending on a nonexistent PositionSource
-        Unsupported("vibration", true);                                   //55
+        VibrationType("vibration", true);                                 //55
         //trail's parameters are a target coordinate and a color, depending on nonexistent vector serialization
         Unsupported("trail", false);                                      //56
         Simple("pause_mob_growth", false);                                //57
@@ -137,8 +133,7 @@ public static class ParticleTypes
         Simple("wax_off", true);                                          //109
         Simple("electric_spark", true);                                   //110
         Simple("scrape", true);                                           //111
-        //shriek's parameter is a delay in ticks, out of this scope
-        Unsupported("shriek", false);                                     //112
+        ShriekType("shriek", false);                                      //112
         Simple("egg_crack", false);                                       //113
         Simple("dust_plume", false);                                      //114
         Simple("trial_spawner_detection", true);                          //115
@@ -174,6 +169,21 @@ public static class ParticleTypes
 
     private static ColorParticleType ColorType(string path, bool overrideLimiter)
         => Register(path, new ColorParticleType(overrideLimiter));
+
+    private static PowerParticleType PowerType(string path, bool overrideLimiter)
+        => Register(path, new PowerParticleType(overrideLimiter));
+
+    private static SpellParticleType SpellType(string path, bool overrideLimiter)
+        => Register(path, new SpellParticleType(overrideLimiter));
+
+    private static SculkChargeParticleType SculkChargeType(string path, bool overrideLimiter)
+        => Register(path, new SculkChargeParticleType(overrideLimiter));
+
+    private static ShriekParticleType ShriekType(string path, bool overrideLimiter)
+        => Register(path, new ShriekParticleType(overrideLimiter));
+
+    private static VibrationParticleType VibrationType(string path, bool overrideLimiter)
+        => Register(path, new VibrationParticleType(overrideLimiter));
 
     private static UnsupportedParticleType Unsupported(string path, bool overrideLimiter)
         => Register(path, new UnsupportedParticleType(path, overrideLimiter));

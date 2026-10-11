@@ -115,12 +115,26 @@ public static class GameBootstrap
             _bootstrapped = true;
             Noises.Bootstrap();
             RegisterBiomes();
+            //Chunk sections keep a listener registry slot in Storage, but the registry itself is built here: it needs the
+            //level and the event system, neither of which Storage can see
+            NetCraft.Storage.ChunkAccess.ListenerRegistryFactory = CreateListenerRegistry;
             Log.Debug("Game layer bootstrap finished, blocks registered");
             //Log.Debug("BootstrapAfterDataLoad exit");
             //Set the flag last: when the fast path reads true the bootstrap must truly be done; setting it early would let other threads read a half-built state
             _ready = true;
         }
     }
+
+    //CreateListenerRegistry builds the game event listener registry of one chunk section, maps to the vanilla
+    //EuclideanGameEventListenerRegistry built by the LevelChunk constructor
+    //A loaded LevelChunk carries the level it belongs to; anything else, in particular a generation-stage chunk, gets
+    //the no-op registry so that listeners are simply never collected there
+    private static NetCraft.Storage.IGameEventListenerRegistry CreateListenerRegistry(
+        NetCraft.Storage.ChunkAccess chunk, int sectionY)
+        => chunk is NetCraft.Storage.LevelChunk { Level: NetCraft.Storage.ServerLevel level }
+            ? new World.Level.GameEvents.EuclideanGameEventListenerRegistry(level, sectionY, _ => { })
+            //The no-op registry is declared as the listener interface, so it has to be widened back to the storage slot
+            : (NetCraft.Storage.IGameEventListenerRegistry)World.Level.GameEvents.GameEventListenerRegistry.Noop;
 
     //StructureTemplates structure template manager injected by world assembly
     //Loading a pool element piece takes its context from here; without injection, loaded structure pieces cannot place anything

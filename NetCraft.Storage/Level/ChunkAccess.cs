@@ -53,6 +53,24 @@ public abstract class ChunkAccess : LevelHeightAccessor
     //SetFluidTicks replaces the whole fluid scheduled tick container on load
     public void SetFluidTicks(Ticks.LevelChunkTicks<NetCraft.Registry.Fluid> ticks) => FluidTicks = ticks;
 
+    //ListenerRegistries per-section game event listener registries, maps to vanilla ChunkAccess.listenerRegistries
+    //Created lazily: the registry depends on the world and the event system, so only the Game layer can build one
+    private IGameEventListenerRegistry?[]? _listenerRegistries;
+
+    //ListenerRegistryFactory builds the registry of one section, installed once by the Game layer
+    //Without it the sections simply have no listeners, which is what generation-stage chunks want anyway
+    public static Func<ChunkAccess, int, IGameEventListenerRegistry>? ListenerRegistryFactory { get; set; }
+
+    //GetListenerRegistry gets the listener registry of a section, maps to vanilla ChunkAccess.getListenerRegistry
+    //Out of range sections have none, and the registry is built on first use
+    public IGameEventListenerRegistry? GetListenerRegistry(int sectionY)
+    {
+        if (sectionY < MinSectionY || sectionY > MaxSectionY) return null;
+        _listenerRegistries ??= new IGameEventListenerRegistry?[SectionsCount];
+        var index = sectionY - MinSectionY;
+        return _listenerRegistries[index] ??= ListenerRegistryFactory?.Invoke(this, sectionY);
+    }
+
     //SetBlockState writes a block by world coords, maps to vanilla setBlockState; out-of-range sections are dropped
     public virtual void SetBlockState(int worldX, int worldY, int worldZ, BlockState state)
     {

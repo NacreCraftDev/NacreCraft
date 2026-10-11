@@ -932,17 +932,27 @@ static WideString ToWide(const char* text)
     return wide;
 }
 
-//ncn_get_module_name spells out a module's file name, which is what identifies the target of a request
+//ncn_get_module_name spells out the name a request is matched against
+//
+//The assembly name is taken rather than the module path: an assembly handed to the runtime as a byte array leaves its
+//module with no path at all, while its assembly name is present however it was loaded. The managed side can only name
+//the same thing, which is what makes the two sides meet
 extern "C" int32_t ncn_get_module_name(uint64_t module_id, char* buffer, uint32_t capacity)
 {
     if (g_profiler_info7 == nullptr || buffer == nullptr || capacity == 0)
         return -1;
 
+    AssemblyID assembly_id = 0;
+    if (FAILED(g_profiler_info7->GetModuleInfo(static_cast<ModuleID>(module_id), nullptr, 0, nullptr, nullptr,
+                                               &assembly_id)))
+        return -1;
+
     WCHAR name[512] = {};
     ULONG length = 0;
-    const HRESULT hr = g_profiler_info7->GetModuleInfo(static_cast<ModuleID>(module_id), nullptr, 512,
-                                                       &length, name, nullptr);
-    if (hr != S_OK)
+    AppDomainID app_domain_id = 0;
+    ModuleID manifest_module_id = 0;
+    if (FAILED(g_profiler_info7->GetAssemblyInfo(assembly_id, 512, &length, name, &app_domain_id,
+                                                 &manifest_module_id)))
         return -1;
 
     uint32_t index = 0;

@@ -1,4 +1,5 @@
 using NetCraft.Game.World.Items;
+using NetCraft.Game.World.Level.GameEvents;
 using NetCraft.Network;
 using NetCraft.Registry.State;
 
@@ -107,4 +108,62 @@ public sealed class UnsupportedParticleType(string name, bool overrideLimiter) :
 
     public override ParticleOptions ReadParameters(RegistryFriendlyByteBuf buf)
         => throw new NotSupportedException($"parameter decoding for particle {Name} is not implemented");
+}
+
+//PowerParticleType single float power parameter, maps to vanilla PowerParticleOption.streamCodec
+public sealed class PowerParticleType(bool overrideLimiter) : ParticleType(overrideLimiter)
+{
+    public override void WriteParameters(RegistryFriendlyByteBuf buf, ParticleOptions options)
+        => buf.WriteFloat(((PowerParticleOption)options).Power);
+
+    public override ParticleOptions ReadParameters(RegistryFriendlyByteBuf buf)
+        => new PowerParticleOption(this, buf.ReadFloat());
+}
+
+//SpellParticleType color and power parameters, maps to vanilla SpellParticleOption.streamCodec
+public sealed class SpellParticleType(bool overrideLimiter) : ParticleType(overrideLimiter)
+{
+    public override void WriteParameters(RegistryFriendlyByteBuf buf, ParticleOptions options)
+    {
+        var spell = (SpellParticleOption)options;
+        buf.WriteInt(spell.Color);
+        buf.WriteFloat(spell.Power);
+    }
+
+    public override ParticleOptions ReadParameters(RegistryFriendlyByteBuf buf)
+        => new SpellParticleOption(this, buf.ReadInt(), buf.ReadFloat());
+}
+
+//SculkChargeParticleType roll angle parameter, maps to vanilla SculkChargeParticleOptions.STREAM_CODEC
+public sealed class SculkChargeParticleType(bool overrideLimiter) : ParticleType(overrideLimiter)
+{
+    public override void WriteParameters(RegistryFriendlyByteBuf buf, ParticleOptions options)
+        => buf.WriteFloat(((SculkChargeParticleOptions)options).Roll);
+
+    public override ParticleOptions ReadParameters(RegistryFriendlyByteBuf buf)
+        => new SculkChargeParticleOptions(this, buf.ReadFloat());
+}
+
+//ShriekParticleType delay parameter, maps to vanilla ShriekParticleOption.STREAM_CODEC
+public sealed class ShriekParticleType(bool overrideLimiter) : ParticleType(overrideLimiter)
+{
+    public override void WriteParameters(RegistryFriendlyByteBuf buf, ParticleOptions options)
+        => buf.WriteVarInt(((ShriekParticleOption)options).Delay);
+
+    public override ParticleOptions ReadParameters(RegistryFriendlyByteBuf buf)
+        => new ShriekParticleOption(this, buf.ReadVarInt());
+}
+
+//VibrationParticleType destination and delay parameters, maps to vanilla VibrationParticleOption.streamCodec
+public sealed class VibrationParticleType(bool overrideLimiter) : ParticleType(overrideLimiter)
+{
+    public override void WriteParameters(RegistryFriendlyByteBuf buf, ParticleOptions options)
+    {
+        var vibration = (VibrationParticleOption)options;
+        PositionSource.StreamCodec.Encode(buf, vibration.Destination);
+        buf.WriteVarInt(vibration.ArrivalInTicks);
+    }
+
+    public override ParticleOptions ReadParameters(RegistryFriendlyByteBuf buf)
+        => new VibrationParticleOption(this, PositionSource.StreamCodec.Decode(buf), buf.ReadVarInt());
 }

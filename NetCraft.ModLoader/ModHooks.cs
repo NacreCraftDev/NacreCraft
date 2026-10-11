@@ -296,7 +296,9 @@ public sealed class ModHooks
             try
             {
                 //What is submitted is the method body rewritten from the original bytes, without load-time rewrite changes
-                var injected = RuntimeInjector.Inject(bytes, assembly.ManifestModule.Name, _engine);
+                //The assembly simple name identifies the target: a kernel assembly arrives as a byte array and its module
+                //carries no name at all, while the assembly name is there however it was loaded
+                var injected = RuntimeInjector.Inject(bytes, name, _engine);
                 Log.Info($"Runtime injected {injected.Count} methods into {name}");
             }
             catch (Exception ex)

@@ -43,6 +43,7 @@ public sealed class ReportType
         "This is a token for 1 free hug. Redeem at your nearest Mojangsta: [~~HUG~~]",
         "There are four lights!",
         "But it works on my machine.",
+        "OAO",
     });
 
     //NetworkProtocolError used when protocol parsing fails, corresponds to the network subsystem in the server list

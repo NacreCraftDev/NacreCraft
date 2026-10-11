@@ -56,8 +56,8 @@ extern "C" {
 /// The body travels as a description rather than as IL, because its references can only be resolved against the
 /// module once that module is loaded
 struct RewriteRequest {
-    //The tail of the module file name, which is what identifies the target
-    module_suffix: String,
+    //The assembly simple name, which is what identifies the target
+    module_name: String,
     type_name: String,
     method_name: String,
     //The description the managed side produced
@@ -98,7 +98,8 @@ fn fulfil_pending() -> bool {
             continue;
         }
         for (module_id, name) in loaded.iter() {
-            if name.ends_with(&request.module_suffix) {
+            //An exact match: both sides name the assembly, so there is no tail to compare
+            if name == &request.module_name {
                 fulfil(request, *module_id);
                 break;
             }
@@ -220,18 +221,18 @@ pub extern "C" fn ncn_request_rewrite(
         return -1;
     }
 
-    let module_suffix = unsafe { CStr::from_ptr(module_suffix) }.to_string_lossy().into_owned();
+    let module_name = unsafe { CStr::from_ptr(module_suffix) }.to_string_lossy().into_owned();
     let type_name = unsafe { CStr::from_ptr(type_name) }.to_string_lossy().into_owned();
     let method_name = unsafe { CStr::from_ptr(method_name) }.to_string_lossy().into_owned();
     let description = unsafe { slice::from_raw_parts(description, size as usize) }.to_vec();
 
     logging::write(&format!(
-        "rewrite requested for {module_suffix} {type_name}::{method_name}, {} bytes",
+        "rewrite requested for {module_name} {type_name}::{method_name}, {} bytes",
         description.len()
     ));
 
     requests().0.lock().unwrap().push(RewriteRequest {
-        module_suffix,
+        module_name,
         type_name,
         method_name,
         description,

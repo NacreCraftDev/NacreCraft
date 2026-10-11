@@ -33,6 +33,18 @@ public static class ByteBufCodecs
     //Identifier codec for namespace identifiers, maps to Identifier in vanilla ByteBufCodecs
     public static StreamCodec<RegistryFriendlyByteBuf, Identifier> Identifier()
         => new IdentifierStreamCodec();
+
+    //Float float codec, big-endian 4 bytes, maps to vanilla ByteBufCodecs.FLOAT
+    public static StreamCodec<RegistryFriendlyByteBuf, float> Float { get; } =
+        new FuncCodec<RegistryFriendlyByteBuf, float>(buf => buf.ReadFloat(), (buf, value) => buf.WriteFloat(value));
+
+    //Int int codec, big-endian 4 bytes, maps to vanilla ByteBufCodecs.INT
+    public static StreamCodec<RegistryFriendlyByteBuf, int> Int { get; } =
+        new FuncCodec<RegistryFriendlyByteBuf, int>(buf => buf.ReadInt(), (buf, value) => buf.WriteInt(value));
+
+    //VarInt variable-length int codec, maps to vanilla ByteBufCodecs.VAR_INT
+    public static StreamCodec<RegistryFriendlyByteBuf, int> VarInt { get; } =
+        new FuncCodec<RegistryFriendlyByteBuf, int>(buf => buf.ReadVarInt(), (buf, value) => buf.WriteVarInt(value));
 }
 
 //IdentifierStreamCodec codec for namespace identifiers, encoded as a namespace:path string
