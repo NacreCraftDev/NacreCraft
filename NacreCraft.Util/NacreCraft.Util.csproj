@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\NacreCraft.Primitives\NacreCraft.Primitives.csproj" />
+    <ProjectReference Include="..\NacreCraft.Config\NacreCraft.Config.csproj" />
+    <ProjectReference Include="..\NacreCraft.Codec\NacreCraft.Codec.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
+    <!--RuntimeTraceRecorder drives an EventPipe capture through this client-->
+    <PackageReference Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.745401" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

@@ -1,4 +1,4 @@
-# NetCraft Server Console
+# NacreCraft Server Console
 
 Once the server starts, commands have two entry points: the command input box in the GUI window, and the command line in the current terminal.
 The terminal route is independent of the GUI switch; it is available both with `--nogui` and when starting with the GUI, and with the GUI it runs on its own background thread.
@@ -15,7 +15,7 @@ At startup it checks whether input and output are redirected and automatically p
 Pass-through mode is for scripts:
 
 ```powershell
-@('version', 'stop') | .\NetCraft.ServerExe.exe --nogui
+@('version', 'stop') | .\NacreCraft.ServerExe.exe --nogui
 ```
 
 The pipe can feed commands before the server is ready: when `stop` arrives before the main loop, the shutdown request is recorded and the main loop exits immediately once it starts.
@@ -23,7 +23,7 @@ The pipe can feed commands before the server is ready: when `stop` arrives befor
 To turn off the terminal command line entirely (handing it to a script, CI, or an external wrapper), add `--noconsole`:
 
 ```powershell
-.\NetCraft.ServerExe.exe --nogui --noconsole
+.\NacreCraft.ServerExe.exe --nogui --noconsole
 ```
 
 ## Shortcuts

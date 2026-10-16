@@ -1,0 +1,1212 @@
+# Vanilla 26.2 block registry, ordered as declared in vanilla Blocks.java
+# Each line: registry name<TAB>property definition[<TAB>extension section]
+# Property definitions are separated by |, in the form name:bool / name:int:min:max / name:enum:enumName:value1,value2
+# Extension sections are separated by ; and support several entries
+#   default=name:value,name:value  default-state overrides, listing only properties that differ from vanilla any()
+#     maps to registerDefaultState at the end of the vanilla constructor; without it the default state falls back to any()
+#     but BooleanProperty orders values as true,false and enums use declaration order, so any() is often the wrong one
+#   place=category          general placement-facing implementation category
+#     walks the class chain to the first class that defines getStateForPlacement; only the vanilla generic implementations can be copied
+#   occlude=false        the block does not block light, maps to vanilla Properties.noOcclusion
+#   conductor=false/true redstone conductor special case, maps to vanilla Properties.isRedstoneConductor
+#     vanilla defaults to checking whether the collision shape fills a full block; glass and leaves fill it yet set never, soul sand and mud do not fill it yet set always
+#     only these two special cases are written; anything unlisted is decided by shape
+#   blast=value          explosion resistance, maps to vanilla Properties.explosionResistance
+#     vanilla strength(x) means strength(x, x), so a single-argument strength sets the resistance as well
+#     only values above zero are written; anything unlisted keeps the vanilla default of 0
+air
+stone		blast=6
+granite		blast=6
+polished_granite		blast=6
+diorite		blast=6
+polished_diorite		blast=6
+andesite		blast=6
+polished_andesite		blast=6
+grass_block	snowy:bool	default=snowy:false;blast=0.6
+dirt		blast=0.5
+coarse_dirt		blast=0.5
+podzol	snowy:bool	default=snowy:false;blast=0.5
+cobblestone		blast=6
+oak_planks		blast=3
+spruce_planks		blast=3
+birch_planks		blast=3
+jungle_planks		blast=3
+acacia_planks		blast=3
+cherry_planks		blast=3
+dark_oak_planks		blast=3
+pale_oak_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+pale_oak_planks		blast=3
+mangrove_planks		blast=3
+bamboo_planks		blast=3
+bamboo_mosaic		blast=3
+oak_sapling	stage:int:0:1
+spruce_sapling	stage:int:0:1
+birch_sapling	stage:int:0:1
+jungle_sapling	stage:int:0:1
+acacia_sapling	stage:int:0:1
+cherry_sapling	stage:int:0:1
+dark_oak_sapling	stage:int:0:1
+pale_oak_sapling	stage:int:0:1
+mangrove_propagule	age:int:0:4|hanging:bool|stage:int:0:1|waterlogged:bool	default=hanging:false,waterlogged:false
+bedrock		blast=3600000
+water	level:int:0:15	blast=100
+lava	level:int:0:15	blast=100
+sand		blast=0.5
+suspicious_sand	dusted:int:0:3	blast=0.25
+red_sand		blast=0.5
+gravel		blast=0.6
+suspicious_gravel	dusted:int:0:3	blast=0.25
+gold_ore		blast=3
+deepslate_gold_ore		blast=3
+iron_ore		blast=3
+deepslate_iron_ore		blast=3
+coal_ore		blast=3
+deepslate_coal_ore		blast=3
+nether_gold_ore		blast=3
+oak_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+spruce_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+birch_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+jungle_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+acacia_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+cherry_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+dark_oak_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+pale_oak_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+mangrove_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+mangrove_roots	waterlogged:bool	default=waterlogged:false;occlude=false;blast=0.7
+muddy_mangrove_roots	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=0.7
+bamboo_block	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_spruce_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_birch_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_jungle_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_acacia_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_cherry_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_dark_oak_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_pale_oak_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_oak_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_mangrove_log	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_bamboo_block	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+oak_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+spruce_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+birch_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+jungle_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+acacia_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+cherry_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+dark_oak_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+mangrove_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_oak_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_spruce_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_birch_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_jungle_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_acacia_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_cherry_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_dark_oak_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_pale_oak_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_mangrove_wood	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+oak_leaves	distance:int:1:7|persistent:bool|waterlogged:bool	default=distance:7,persistent:false,waterlogged:false;conductor=false;blast=0.2
+spruce_leaves	distance:int:1:7|persistent:bool|waterlogged:bool	default=distance:7,persistent:false,waterlogged:false;conductor=false;blast=0.2
+birch_leaves	distance:int:1:7|persistent:bool|waterlogged:bool	default=distance:7,persistent:false,waterlogged:false;conductor=false;blast=0.2
+jungle_leaves	distance:int:1:7|persistent:bool|waterlogged:bool	default=distance:7,persistent:false,waterlogged:false;conductor=false;blast=0.2
+acacia_leaves	distance:int:1:7|persistent:bool|waterlogged:bool	default=distance:7,persistent:false,waterlogged:false;conductor=false;blast=0.2
+cherry_leaves	distance:int:1:7|persistent:bool|waterlogged:bool	default=distance:7,persistent:false,waterlogged:false;occlude=false;conductor=false;blast=0.2
+dark_oak_leaves	distance:int:1:7|persistent:bool|waterlogged:bool	default=distance:7,persistent:false,waterlogged:false;conductor=false;blast=0.2
+pale_oak_leaves	distance:int:1:7|persistent:bool|waterlogged:bool	default=distance:7,persistent:false,waterlogged:false;occlude=false;conductor=false;blast=0.2
+mangrove_leaves	distance:int:1:7|persistent:bool|waterlogged:bool	default=distance:7,persistent:false,waterlogged:false;conductor=false;blast=0.2
+azalea_leaves	distance:int:1:7|persistent:bool|waterlogged:bool	default=distance:7,persistent:false,waterlogged:false;conductor=false;blast=0.2
+flowering_azalea_leaves	distance:int:1:7|persistent:bool|waterlogged:bool	default=distance:7,persistent:false,waterlogged:false;conductor=false;blast=0.2
+sponge		blast=0.6
+wet_sponge		blast=0.6
+glass		occlude=false;conductor=false;blast=0.3
+lapis_ore		blast=3
+deepslate_lapis_ore		blast=3
+lapis_block		blast=3
+dispenser	facing:enum:Direction:north,east,south,west,up,down|triggered:bool	default=triggered:false;place=directional;blast=3.5
+sandstone		blast=0.8
+chiseled_sandstone		blast=0.8
+cut_sandstone		blast=0.8
+note_block	instrument:enum:NoteBlockInstrument:harp,basedrum,snare,hat,bass,flute,bell,guitar,chime,xylophone,iron_xylophone,cow_bell,didgeridoo,bit,banjo,pling,trumpet,trumpet_exposed,trumpet_oxidized,trumpet_weathered,zombie,skeleton,creeper,dragon,wither_skeleton,piglin,custom_head|note:int:0:24|powered:bool	default=powered:false;blast=0.8
+white_bed	facing:enum:Direction:north,south,west,east|occupied:bool|part:enum:BedPart:head,foot	default=occupied:false,part:foot;occlude=false;blast=0.2
+orange_bed	facing:enum:Direction:north,south,west,east|occupied:bool|part:enum:BedPart:head,foot	default=occupied:false,part:foot;occlude=false;blast=0.2
+magenta_bed	facing:enum:Direction:north,south,west,east|occupied:bool|part:enum:BedPart:head,foot	default=occupied:false,part:foot;occlude=false;blast=0.2
+light_blue_bed	facing:enum:Direction:north,south,west,east|occupied:bool|part:enum:BedPart:head,foot	default=occupied:false,part:foot;occlude=false;blast=0.2
+yellow_bed	facing:enum:Direction:north,south,west,east|occupied:bool|part:enum:BedPart:head,foot	default=occupied:false,part:foot;occlude=false;blast=0.2
+lime_bed	facing:enum:Direction:north,south,west,east|occupied:bool|part:enum:BedPart:head,foot	default=occupied:false,part:foot;occlude=false;blast=0.2
+pink_bed	facing:enum:Direction:north,south,west,east|occupied:bool|part:enum:BedPart:head,foot	default=occupied:false,part:foot;occlude=false;blast=0.2
+gray_bed	facing:enum:Direction:north,south,west,east|occupied:bool|part:enum:BedPart:head,foot	default=occupied:false,part:foot;occlude=false;blast=0.2
+light_gray_bed	facing:enum:Direction:north,south,west,east|occupied:bool|part:enum:BedPart:head,foot	default=occupied:false,part:foot;occlude=false;blast=0.2
+cyan_bed	facing:enum:Direction:north,south,west,east|occupied:bool|part:enum:BedPart:head,foot	default=occupied:false,part:foot;occlude=false;blast=0.2
+purple_bed	facing:enum:Direction:north,south,west,east|occupied:bool|part:enum:BedPart:head,foot	default=occupied:false,part:foot;occlude=false;blast=0.2
+blue_bed	facing:enum:Direction:north,south,west,east|occupied:bool|part:enum:BedPart:head,foot	default=occupied:false,part:foot;occlude=false;blast=0.2
+brown_bed	facing:enum:Direction:north,south,west,east|occupied:bool|part:enum:BedPart:head,foot	default=occupied:false,part:foot;occlude=false;blast=0.2
+green_bed	facing:enum:Direction:north,south,west,east|occupied:bool|part:enum:BedPart:head,foot	default=occupied:false,part:foot;occlude=false;blast=0.2
+red_bed	facing:enum:Direction:north,south,west,east|occupied:bool|part:enum:BedPart:head,foot	default=occupied:false,part:foot;occlude=false;blast=0.2
+black_bed	facing:enum:Direction:north,south,west,east|occupied:bool|part:enum:BedPart:head,foot	default=occupied:false,part:foot;occlude=false;blast=0.2
+powered_rail	powered:bool|shape:enum:RailShape:north_south,east_west,ascending_east,ascending_west,ascending_north,ascending_south|waterlogged:bool	default=powered:false,waterlogged:false;blast=0.7
+detector_rail	powered:bool|shape:enum:RailShape:north_south,east_west,ascending_east,ascending_west,ascending_north,ascending_south|waterlogged:bool	default=powered:false,waterlogged:false;blast=0.7
+sticky_piston	extended:bool|facing:enum:Direction:north,east,south,west,up,down	default=extended:false;place=directional;conductor=false;blast=1.5
+cobweb		blast=4
+short_grass
+fern
+dead_bush
+bush
+short_dry_grass
+tall_dry_grass
+seagrass
+tall_seagrass	half:enum:DoubleBlockHalf:upper,lower	default=half:lower
+piston	extended:bool|facing:enum:Direction:north,east,south,west,up,down	default=extended:false;place=directional;conductor=false;blast=1.5
+piston_head	facing:enum:Direction:north,east,south,west,up,down|short:bool|type:enum:PistonType:normal,sticky	default=short:false;blast=1.5
+white_wool		blast=0.8
+orange_wool		blast=0.8
+magenta_wool		blast=0.8
+light_blue_wool		blast=0.8
+yellow_wool		blast=0.8
+lime_wool		blast=0.8
+pink_wool		blast=0.8
+gray_wool		blast=0.8
+light_gray_wool		blast=0.8
+cyan_wool		blast=0.8
+purple_wool		blast=0.8
+blue_wool		blast=0.8
+brown_wool		blast=0.8
+green_wool		blast=0.8
+red_wool		blast=0.8
+black_wool		blast=0.8
+moving_piston	facing:enum:Direction:north,east,south,west,up,down|type:enum:PistonType:normal,sticky	occlude=false
+dandelion
+golden_dandelion
+torchflower
+poppy
+blue_orchid
+allium
+azure_bluet
+red_tulip
+orange_tulip
+white_tulip
+pink_tulip
+oxeye_daisy
+cornflower
+wither_rose
+lily_of_the_valley
+brown_mushroom
+red_mushroom
+gold_block		blast=6
+iron_block		blast=6
+bricks		blast=6
+tnt	unstable:bool	default=unstable:false;conductor=false
+bookshelf		blast=1.5
+chiseled_bookshelf	facing:enum:Direction:north,south,west,east|slot_0_occupied:bool|slot_1_occupied:bool|slot_2_occupied:bool|slot_3_occupied:bool|slot_4_occupied:bool|slot_5_occupied:bool	default=slot_0_occupied:false,slot_1_occupied:false,slot_2_occupied:false,slot_3_occupied:false,slot_4_occupied:false,slot_5_occupied:false;place=horizontal;blast=1.5
+acacia_shelf	facing:enum:Direction:north,south,west,east|powered:bool|side_chain:enum:SideChainPart:unconnected,right,center,left|waterlogged:bool	default=powered:false,waterlogged:false;place=horizontal;blast=3
+bamboo_shelf	facing:enum:Direction:north,south,west,east|powered:bool|side_chain:enum:SideChainPart:unconnected,right,center,left|waterlogged:bool	default=powered:false,waterlogged:false;place=horizontal;blast=3
+birch_shelf	facing:enum:Direction:north,south,west,east|powered:bool|side_chain:enum:SideChainPart:unconnected,right,center,left|waterlogged:bool	default=powered:false,waterlogged:false;place=horizontal;blast=3
+cherry_shelf	facing:enum:Direction:north,south,west,east|powered:bool|side_chain:enum:SideChainPart:unconnected,right,center,left|waterlogged:bool	default=powered:false,waterlogged:false;place=horizontal;blast=3
+crimson_shelf	facing:enum:Direction:north,south,west,east|powered:bool|side_chain:enum:SideChainPart:unconnected,right,center,left|waterlogged:bool	default=powered:false,waterlogged:false;place=horizontal;blast=3
+dark_oak_shelf	facing:enum:Direction:north,south,west,east|powered:bool|side_chain:enum:SideChainPart:unconnected,right,center,left|waterlogged:bool	default=powered:false,waterlogged:false;place=horizontal;blast=3
+jungle_shelf	facing:enum:Direction:north,south,west,east|powered:bool|side_chain:enum:SideChainPart:unconnected,right,center,left|waterlogged:bool	default=powered:false,waterlogged:false;place=horizontal;blast=3
+mangrove_shelf	facing:enum:Direction:north,south,west,east|powered:bool|side_chain:enum:SideChainPart:unconnected,right,center,left|waterlogged:bool	default=powered:false,waterlogged:false;place=horizontal;blast=3
+oak_shelf	facing:enum:Direction:north,south,west,east|powered:bool|side_chain:enum:SideChainPart:unconnected,right,center,left|waterlogged:bool	default=powered:false,waterlogged:false;place=horizontal;blast=3
+pale_oak_shelf	facing:enum:Direction:north,south,west,east|powered:bool|side_chain:enum:SideChainPart:unconnected,right,center,left|waterlogged:bool	default=powered:false,waterlogged:false;place=horizontal;blast=3
+spruce_shelf	facing:enum:Direction:north,south,west,east|powered:bool|side_chain:enum:SideChainPart:unconnected,right,center,left|waterlogged:bool	default=powered:false,waterlogged:false;place=horizontal;blast=3
+warped_shelf	facing:enum:Direction:north,south,west,east|powered:bool|side_chain:enum:SideChainPart:unconnected,right,center,left|waterlogged:bool	default=powered:false,waterlogged:false;place=horizontal;blast=3
+mossy_cobblestone		blast=6
+obsidian		blast=1200
+torch
+wall_torch	facing:enum:Direction:north,south,west,east
+fire	age:int:0:15|east:bool|north:bool|south:bool|up:bool|west:bool	default=east:false,north:false,south:false,up:false,west:false
+soul_fire
+spawner		occlude=false;blast=5
+creaking_heart	axis:enum:Axis:x,y,z|creaking_heart_state:enum:CreakingHeartState:uprooted,dormant,awake|natural:bool	default=axis:y,natural:false;place=pillar;blast=10
+oak_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=3
+chest	facing:enum:Direction:north,south,west,east|type:enum:ChestType:single,left,right|waterlogged:bool	default=waterlogged:false;place=horizontal;blast=2.5
+redstone_wire	east:enum:RedstoneSide:up,side,none|north:enum:RedstoneSide:up,side,none|power:int:0:15|south:enum:RedstoneSide:up,side,none|west:enum:RedstoneSide:up,side,none	default=east:none,north:none,south:none,west:none
+diamond_ore		blast=3
+deepslate_diamond_ore		blast=3
+diamond_block		blast=6
+crafting_table		blast=2.5
+wheat	age:int:0:7
+farmland	moisture:int:0:7	blast=0.6
+furnace	facing:enum:Direction:north,south,west,east|lit:bool	default=lit:false;place=horizontal;blast=3.5
+oak_sign	rotation:int:0:15|waterlogged:bool	default=rotation:8,waterlogged:false;blast=1
+spruce_sign	rotation:int:0:15|waterlogged:bool	default=rotation:8,waterlogged:false;blast=1
+birch_sign	rotation:int:0:15|waterlogged:bool	default=rotation:8,waterlogged:false;blast=1
+acacia_sign	rotation:int:0:15|waterlogged:bool	default=rotation:8,waterlogged:false;blast=1
+cherry_sign	rotation:int:0:15|waterlogged:bool	default=rotation:8,waterlogged:false;blast=1
+jungle_sign	rotation:int:0:15|waterlogged:bool	default=rotation:8,waterlogged:false;blast=1
+dark_oak_sign	rotation:int:0:15|waterlogged:bool	default=rotation:8,waterlogged:false;blast=1
+pale_oak_sign	rotation:int:0:15|waterlogged:bool	default=rotation:8,waterlogged:false;blast=1
+mangrove_sign	rotation:int:0:15|waterlogged:bool	default=rotation:8,waterlogged:false;blast=1
+bamboo_sign	rotation:int:0:15|waterlogged:bool	default=rotation:8,waterlogged:false;blast=1
+oak_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=3
+ladder	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;occlude=false;blast=0.4
+rail	shape:enum:RailShape:north_south,east_west,ascending_east,ascending_west,ascending_north,ascending_south,south_east,south_west,north_west,north_east|waterlogged:bool	default=waterlogged:false;blast=0.7
+cobblestone_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+oak_wall_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+spruce_wall_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+birch_wall_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+acacia_wall_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+cherry_wall_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+jungle_wall_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+dark_oak_wall_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+pale_oak_wall_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+mangrove_wall_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+bamboo_wall_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+oak_hanging_sign	attached:bool|rotation:int:0:15|waterlogged:bool	default=attached:false,rotation:8,waterlogged:false;blast=1
+spruce_hanging_sign	attached:bool|rotation:int:0:15|waterlogged:bool	default=attached:false,rotation:8,waterlogged:false;blast=1
+birch_hanging_sign	attached:bool|rotation:int:0:15|waterlogged:bool	default=attached:false,rotation:8,waterlogged:false;blast=1
+acacia_hanging_sign	attached:bool|rotation:int:0:15|waterlogged:bool	default=attached:false,rotation:8,waterlogged:false;blast=1
+cherry_hanging_sign	attached:bool|rotation:int:0:15|waterlogged:bool	default=attached:false,rotation:8,waterlogged:false;blast=1
+jungle_hanging_sign	attached:bool|rotation:int:0:15|waterlogged:bool	default=attached:false,rotation:8,waterlogged:false;blast=1
+dark_oak_hanging_sign	attached:bool|rotation:int:0:15|waterlogged:bool	default=attached:false,rotation:8,waterlogged:false;blast=1
+pale_oak_hanging_sign	attached:bool|rotation:int:0:15|waterlogged:bool	default=attached:false,rotation:8,waterlogged:false;blast=1
+crimson_hanging_sign	attached:bool|rotation:int:0:15|waterlogged:bool	default=attached:false,rotation:8,waterlogged:false;blast=1
+warped_hanging_sign	attached:bool|rotation:int:0:15|waterlogged:bool	default=attached:false,rotation:8,waterlogged:false;blast=1
+mangrove_hanging_sign	attached:bool|rotation:int:0:15|waterlogged:bool	default=attached:false,rotation:8,waterlogged:false;blast=1
+bamboo_hanging_sign	attached:bool|rotation:int:0:15|waterlogged:bool	default=attached:false,rotation:8,waterlogged:false;blast=1
+oak_wall_hanging_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+spruce_wall_hanging_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+birch_wall_hanging_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+acacia_wall_hanging_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+cherry_wall_hanging_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+jungle_wall_hanging_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+dark_oak_wall_hanging_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+pale_oak_wall_hanging_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+mangrove_wall_hanging_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+crimson_wall_hanging_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+warped_wall_hanging_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+bamboo_wall_hanging_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+lever	face:enum:AttachFace:floor,wall,ceiling|facing:enum:Direction:north,south,west,east|powered:bool	default=face:wall,powered:false;blast=0.5
+stone_pressure_plate	powered:bool	default=powered:false;blast=0.5
+iron_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=5
+oak_pressure_plate	powered:bool	default=powered:false;blast=0.5
+spruce_pressure_plate	powered:bool	default=powered:false;blast=0.5
+birch_pressure_plate	powered:bool	default=powered:false;blast=0.5
+jungle_pressure_plate	powered:bool	default=powered:false;blast=0.5
+acacia_pressure_plate	powered:bool	default=powered:false;blast=0.5
+cherry_pressure_plate	powered:bool	default=powered:false;blast=0.5
+dark_oak_pressure_plate	powered:bool	default=powered:false;blast=0.5
+pale_oak_pressure_plate	powered:bool	default=powered:false;blast=0.5
+mangrove_pressure_plate	powered:bool	default=powered:false;blast=0.5
+bamboo_pressure_plate	powered:bool	default=powered:false;blast=0.5
+redstone_ore	lit:bool	default=lit:false;blast=3
+deepslate_redstone_ore	lit:bool	default=lit:false;blast=3
+redstone_torch	lit:bool
+redstone_wall_torch	facing:enum:Direction:north,south,west,east|lit:bool
+stone_button	face:enum:AttachFace:floor,wall,ceiling|facing:enum:Direction:north,south,west,east|powered:bool	default=face:wall,powered:false;blast=0.5
+snow	layers:int:1:8	blast=0.1
+ice		occlude=false;conductor=false;blast=0.5
+snow_block		blast=0.2
+cactus	age:int:0:15	blast=0.4
+cactus_flower
+clay		blast=0.6
+sugar_cane	age:int:0:15
+jukebox	has_record:bool	default=has_record:false;blast=6
+oak_fence	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;blast=3
+netherrack		blast=0.4
+soul_sand		conductor=true;blast=0.5
+soul_soil		blast=0.5
+basalt	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=4.2
+polished_basalt	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=4.2
+soul_torch
+soul_wall_torch	facing:enum:Direction:north,south,west,east
+copper_torch
+copper_wall_torch	facing:enum:Direction:north,south,west,east
+glowstone		conductor=false;blast=0.3
+nether_portal	axis:enum:Axis:x,z
+carved_pumpkin	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1
+jack_o_lantern	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1
+cake	bites:int:0:6	blast=0.5
+repeater	delay:int:1:4|facing:enum:Direction:north,south,west,east|locked:bool|powered:bool	default=locked:false,powered:false
+white_stained_glass		occlude=false;conductor=false;blast=0.3
+orange_stained_glass		occlude=false;conductor=false;blast=0.3
+magenta_stained_glass		occlude=false;conductor=false;blast=0.3
+light_blue_stained_glass		occlude=false;conductor=false;blast=0.3
+yellow_stained_glass		occlude=false;conductor=false;blast=0.3
+lime_stained_glass		occlude=false;conductor=false;blast=0.3
+pink_stained_glass		occlude=false;conductor=false;blast=0.3
+gray_stained_glass		occlude=false;conductor=false;blast=0.3
+light_gray_stained_glass		occlude=false;conductor=false;blast=0.3
+cyan_stained_glass		occlude=false;conductor=false;blast=0.3
+purple_stained_glass		occlude=false;conductor=false;blast=0.3
+blue_stained_glass		occlude=false;conductor=false;blast=0.3
+brown_stained_glass		occlude=false;conductor=false;blast=0.3
+green_stained_glass		occlude=false;conductor=false;blast=0.3
+red_stained_glass		occlude=false;conductor=false;blast=0.3
+black_stained_glass		occlude=false;conductor=false;blast=0.3
+oak_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=3
+spruce_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=3
+birch_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=3
+jungle_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=3
+acacia_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=3
+cherry_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=3
+dark_oak_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=3
+pale_oak_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=3
+mangrove_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=3
+bamboo_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=3
+stone_bricks		blast=6
+mossy_stone_bricks		blast=6
+cracked_stone_bricks		blast=6
+chiseled_stone_bricks		blast=6
+packed_mud		blast=3
+mud_bricks		blast=3
+infested_stone
+infested_cobblestone
+infested_stone_bricks
+infested_mossy_stone_bricks
+infested_cracked_stone_bricks
+infested_chiseled_stone_bricks
+brown_mushroom_block	down:bool|east:bool|north:bool|south:bool|up:bool|west:bool	blast=0.2
+red_mushroom_block	down:bool|east:bool|north:bool|south:bool|up:bool|west:bool	blast=0.2
+mushroom_stem	down:bool|east:bool|north:bool|south:bool|up:bool|west:bool	blast=0.2
+iron_bars	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=6
+copper_bars	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=6
+exposed_copper_bars	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=6
+weathered_copper_bars	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=6
+oxidized_copper_bars	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=6
+waxed_copper_bars	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=6
+waxed_exposed_copper_bars	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=6
+waxed_weathered_copper_bars	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=6
+waxed_oxidized_copper_bars	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=6
+iron_chain	axis:enum:Axis:x,y,z|waterlogged:bool	default=axis:y,waterlogged:false;occlude=false;blast=6
+copper_chain	axis:enum:Axis:x,y,z|waterlogged:bool	default=axis:y,waterlogged:false;occlude=false;blast=6
+exposed_copper_chain	axis:enum:Axis:x,y,z|waterlogged:bool	default=axis:y,waterlogged:false;occlude=false;blast=6
+weathered_copper_chain	axis:enum:Axis:x,y,z|waterlogged:bool	default=axis:y,waterlogged:false;occlude=false;blast=6
+oxidized_copper_chain	axis:enum:Axis:x,y,z|waterlogged:bool	default=axis:y,waterlogged:false;occlude=false;blast=6
+waxed_copper_chain	axis:enum:Axis:x,y,z|waterlogged:bool	default=axis:y,waterlogged:false;occlude=false;blast=6
+waxed_exposed_copper_chain	axis:enum:Axis:x,y,z|waterlogged:bool	default=axis:y,waterlogged:false;occlude=false;blast=6
+waxed_weathered_copper_chain	axis:enum:Axis:x,y,z|waterlogged:bool	default=axis:y,waterlogged:false;occlude=false;blast=6
+waxed_oxidized_copper_chain	axis:enum:Axis:x,y,z|waterlogged:bool	default=axis:y,waterlogged:false;occlude=false;blast=6
+glass_pane	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=0.3
+pumpkin		blast=1
+melon		blast=1
+attached_pumpkin_stem	facing:enum:Direction:north,south,west,east
+attached_melon_stem	facing:enum:Direction:north,south,west,east
+pumpkin_stem	age:int:0:7
+melon_stem	age:int:0:7
+vine	east:bool|north:bool|south:bool|up:bool|west:bool	default=east:false,north:false,south:false,up:false,west:false;blast=0.2
+glow_lichen	down:bool|east:bool|north:bool|south:bool|up:bool|waterlogged:bool|west:bool	default=down:false,east:false,north:false,south:false,up:false,waterlogged:false,west:false;blast=0.2
+resin_clump	down:bool|east:bool|north:bool|south:bool|up:bool|waterlogged:bool|west:bool	default=down:false,east:false,north:false,south:false,up:false,waterlogged:false,west:false
+oak_fence_gate	facing:enum:Direction:north,south,west,east|in_wall:bool|open:bool|powered:bool	default=in_wall:false,open:false,powered:false;blast=3
+brick_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+stone_brick_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+mud_brick_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=3
+mycelium	snowy:bool	default=snowy:false;blast=0.6
+lily_pad		occlude=false
+resin_block
+resin_bricks		blast=6
+resin_brick_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+resin_brick_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+resin_brick_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+chiseled_resin_bricks		blast=6
+nether_bricks		blast=6
+nether_brick_fence	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;blast=6
+nether_brick_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+nether_wart	age:int:0:3
+enchanting_table		blast=1200
+brewing_stand	has_bottle_0:bool|has_bottle_1:bool|has_bottle_2:bool	default=has_bottle_0:false,has_bottle_1:false,has_bottle_2:false;occlude=false;blast=0.5
+cauldron		occlude=false;blast=2
+water_cauldron	level:int:1:3	blast=2
+lava_cauldron		blast=2
+powder_snow_cauldron	level:int:1:3	blast=2
+end_portal		blast=3600000
+end_portal_frame	eye:bool|facing:enum:Direction:north,south,west,east	default=eye:false;place=horizontal;blast=3600000
+end_stone		blast=9
+dragon_egg		occlude=false;blast=9
+redstone_lamp	lit:bool	default=lit:false;blast=0.3
+cocoa	age:int:0:2|facing:enum:Direction:north,south,west,east	occlude=false;blast=3
+sandstone_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=0.8
+emerald_ore		blast=3
+deepslate_emerald_ore		blast=3
+ender_chest	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;place=horizontal;blast=600
+tripwire_hook	attached:bool|facing:enum:Direction:north,south,west,east|powered:bool	default=attached:false,powered:false
+tripwire	attached:bool|disarmed:bool|east:bool|north:bool|powered:bool|south:bool|west:bool	default=attached:false,disarmed:false,east:false,north:false,powered:false,south:false,west:false
+emerald_block		blast=6
+spruce_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=3
+birch_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=3
+jungle_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=3
+command_block	conditional:bool|facing:enum:Direction:north,east,south,west,up,down	default=conditional:false;place=directional;blast=3600000
+beacon		occlude=false;conductor=false;blast=3
+cobblestone_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+mossy_cobblestone_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+flower_pot
+potted_torchflower
+potted_oak_sapling
+potted_spruce_sapling
+potted_birch_sapling
+potted_jungle_sapling
+potted_acacia_sapling
+potted_cherry_sapling
+potted_dark_oak_sapling
+potted_pale_oak_sapling
+potted_mangrove_propagule
+potted_fern
+potted_dandelion
+potted_golden_dandelion
+potted_poppy
+potted_blue_orchid
+potted_allium
+potted_azure_bluet
+potted_red_tulip
+potted_orange_tulip
+potted_white_tulip
+potted_pink_tulip
+potted_oxeye_daisy
+potted_cornflower
+potted_lily_of_the_valley
+potted_wither_rose
+potted_red_mushroom
+potted_brown_mushroom
+potted_dead_bush
+potted_cactus
+carrots	age:int:0:7
+potatoes	age:int:0:7
+oak_button	face:enum:AttachFace:floor,wall,ceiling|facing:enum:Direction:north,south,west,east|powered:bool	default=face:wall,powered:false;blast=0.5
+spruce_button	face:enum:AttachFace:floor,wall,ceiling|facing:enum:Direction:north,south,west,east|powered:bool	default=face:wall,powered:false;blast=0.5
+birch_button	face:enum:AttachFace:floor,wall,ceiling|facing:enum:Direction:north,south,west,east|powered:bool	default=face:wall,powered:false;blast=0.5
+jungle_button	face:enum:AttachFace:floor,wall,ceiling|facing:enum:Direction:north,south,west,east|powered:bool	default=face:wall,powered:false;blast=0.5
+acacia_button	face:enum:AttachFace:floor,wall,ceiling|facing:enum:Direction:north,south,west,east|powered:bool	default=face:wall,powered:false;blast=0.5
+cherry_button	face:enum:AttachFace:floor,wall,ceiling|facing:enum:Direction:north,south,west,east|powered:bool	default=face:wall,powered:false;blast=0.5
+dark_oak_button	face:enum:AttachFace:floor,wall,ceiling|facing:enum:Direction:north,south,west,east|powered:bool	default=face:wall,powered:false;blast=0.5
+pale_oak_button	face:enum:AttachFace:floor,wall,ceiling|facing:enum:Direction:north,south,west,east|powered:bool	default=face:wall,powered:false;blast=0.5
+mangrove_button	face:enum:AttachFace:floor,wall,ceiling|facing:enum:Direction:north,south,west,east|powered:bool	default=face:wall,powered:false;blast=0.5
+bamboo_button	face:enum:AttachFace:floor,wall,ceiling|facing:enum:Direction:north,south,west,east|powered:bool	default=face:wall,powered:false;blast=0.5
+skeleton_skull	powered:bool|rotation:int:0:15	occlude=false;blast=1
+skeleton_wall_skull	facing:enum:Direction:north,south,west,east|powered:bool	blast=1
+wither_skeleton_skull	powered:bool|rotation:int:0:15	occlude=false;blast=1
+wither_skeleton_wall_skull	facing:enum:Direction:north,south,west,east|powered:bool	blast=1
+zombie_head	powered:bool|rotation:int:0:15	occlude=false;blast=1
+zombie_wall_head	facing:enum:Direction:north,south,west,east|powered:bool	blast=1
+player_head	powered:bool|rotation:int:0:15	occlude=false;blast=1
+player_wall_head	facing:enum:Direction:north,south,west,east|powered:bool	blast=1
+creeper_head	powered:bool|rotation:int:0:15	occlude=false;blast=1
+creeper_wall_head	facing:enum:Direction:north,south,west,east|powered:bool	blast=1
+dragon_head	powered:bool|rotation:int:0:15	occlude=false;blast=1
+dragon_wall_head	facing:enum:Direction:north,south,west,east|powered:bool	blast=1
+piglin_head	powered:bool|rotation:int:0:15	occlude=false;blast=1
+piglin_wall_head	facing:enum:Direction:north,south,west,east|powered:bool	blast=1
+anvil	facing:enum:Direction:north,south,west,east	blast=1200
+chipped_anvil	facing:enum:Direction:north,south,west,east	blast=1200
+damaged_anvil	facing:enum:Direction:north,south,west,east	blast=1200
+trapped_chest	facing:enum:Direction:north,south,west,east|type:enum:ChestType:single,left,right|waterlogged:bool	default=waterlogged:false;place=horizontal;blast=2.5
+light_weighted_pressure_plate	power:int:0:15	blast=0.5
+heavy_weighted_pressure_plate	power:int:0:15	blast=0.5
+comparator	facing:enum:Direction:north,south,west,east|mode:enum:ComparatorMode:compare,subtract|powered:bool	default=powered:false;place=horizontal
+daylight_detector	inverted:bool|power:int:0:15	default=inverted:false;blast=0.2
+redstone_block		conductor=false;blast=6
+nether_quartz_ore		blast=3
+hopper	enabled:bool|facing:enum:Direction:down,north,south,west,east	occlude=false;blast=4.8
+quartz_block		blast=0.8
+chiseled_quartz_block		blast=0.8
+quartz_pillar	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=0.8
+quartz_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=0.8
+activator_rail	powered:bool|shape:enum:RailShape:north_south,east_west,ascending_east,ascending_west,ascending_north,ascending_south|waterlogged:bool	default=powered:false,waterlogged:false;blast=0.7
+dropper	facing:enum:Direction:north,east,south,west,up,down|triggered:bool	default=triggered:false;place=directional;blast=3.5
+white_terracotta		blast=4.2
+orange_terracotta		blast=4.2
+magenta_terracotta		blast=4.2
+light_blue_terracotta		blast=4.2
+yellow_terracotta		blast=4.2
+lime_terracotta		blast=4.2
+pink_terracotta		blast=4.2
+gray_terracotta		blast=4.2
+light_gray_terracotta		blast=4.2
+cyan_terracotta		blast=4.2
+purple_terracotta		blast=4.2
+blue_terracotta		blast=4.2
+brown_terracotta		blast=4.2
+green_terracotta		blast=4.2
+red_terracotta		blast=4.2
+black_terracotta		blast=4.2
+white_stained_glass_pane	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=0.3
+orange_stained_glass_pane	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=0.3
+magenta_stained_glass_pane	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=0.3
+light_blue_stained_glass_pane	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=0.3
+yellow_stained_glass_pane	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=0.3
+lime_stained_glass_pane	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=0.3
+pink_stained_glass_pane	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=0.3
+gray_stained_glass_pane	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=0.3
+light_gray_stained_glass_pane	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=0.3
+cyan_stained_glass_pane	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=0.3
+purple_stained_glass_pane	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=0.3
+blue_stained_glass_pane	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=0.3
+brown_stained_glass_pane	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=0.3
+green_stained_glass_pane	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=0.3
+red_stained_glass_pane	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=0.3
+black_stained_glass_pane	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;occlude=false;blast=0.3
+acacia_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=3
+cherry_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=3
+dark_oak_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=3
+pale_oak_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=3
+mangrove_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=3
+bamboo_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=3
+bamboo_mosaic_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=3
+slime_block		occlude=false
+barrier	waterlogged:bool	default=waterlogged:false;occlude=false;blast=3.6e+06
+light	level:int:0:15|waterlogged:bool	default=level:15,waterlogged:false;occlude=false;blast=3.6e+06
+iron_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=5
+prismarine		blast=6
+prismarine_bricks		blast=6
+dark_prismarine		blast=6
+prismarine_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+prismarine_brick_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+dark_prismarine_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+prismarine_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+prismarine_brick_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+dark_prismarine_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+sea_lantern		conductor=false;blast=0.3
+hay_block	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=0.5
+white_carpet		blast=0.1
+orange_carpet		blast=0.1
+magenta_carpet		blast=0.1
+light_blue_carpet		blast=0.1
+yellow_carpet		blast=0.1
+lime_carpet		blast=0.1
+pink_carpet		blast=0.1
+gray_carpet		blast=0.1
+light_gray_carpet		blast=0.1
+cyan_carpet		blast=0.1
+purple_carpet		blast=0.1
+blue_carpet		blast=0.1
+brown_carpet		blast=0.1
+green_carpet		blast=0.1
+red_carpet		blast=0.1
+black_carpet		blast=0.1
+terracotta		blast=4.2
+coal_block		blast=6
+packed_ice		blast=0.5
+sunflower	half:enum:DoubleBlockHalf:upper,lower	default=half:lower
+lilac	half:enum:DoubleBlockHalf:upper,lower	default=half:lower
+rose_bush	half:enum:DoubleBlockHalf:upper,lower	default=half:lower
+peony	half:enum:DoubleBlockHalf:upper,lower	default=half:lower
+tall_grass	half:enum:DoubleBlockHalf:upper,lower	default=half:lower
+large_fern	half:enum:DoubleBlockHalf:upper,lower	default=half:lower
+white_banner	rotation:int:0:15	default=rotation:8;blast=1
+orange_banner	rotation:int:0:15	default=rotation:8;blast=1
+magenta_banner	rotation:int:0:15	default=rotation:8;blast=1
+light_blue_banner	rotation:int:0:15	default=rotation:8;blast=1
+yellow_banner	rotation:int:0:15	default=rotation:8;blast=1
+lime_banner	rotation:int:0:15	default=rotation:8;blast=1
+pink_banner	rotation:int:0:15	default=rotation:8;blast=1
+gray_banner	rotation:int:0:15	default=rotation:8;blast=1
+light_gray_banner	rotation:int:0:15	default=rotation:8;blast=1
+cyan_banner	rotation:int:0:15	default=rotation:8;blast=1
+purple_banner	rotation:int:0:15	default=rotation:8;blast=1
+blue_banner	rotation:int:0:15	default=rotation:8;blast=1
+brown_banner	rotation:int:0:15	default=rotation:8;blast=1
+green_banner	rotation:int:0:15	default=rotation:8;blast=1
+red_banner	rotation:int:0:15	default=rotation:8;blast=1
+black_banner	rotation:int:0:15	default=rotation:8;blast=1
+white_wall_banner	facing:enum:Direction:north,south,west,east	blast=1
+orange_wall_banner	facing:enum:Direction:north,south,west,east	blast=1
+magenta_wall_banner	facing:enum:Direction:north,south,west,east	blast=1
+light_blue_wall_banner	facing:enum:Direction:north,south,west,east	blast=1
+yellow_wall_banner	facing:enum:Direction:north,south,west,east	blast=1
+lime_wall_banner	facing:enum:Direction:north,south,west,east	blast=1
+pink_wall_banner	facing:enum:Direction:north,south,west,east	blast=1
+gray_wall_banner	facing:enum:Direction:north,south,west,east	blast=1
+light_gray_wall_banner	facing:enum:Direction:north,south,west,east	blast=1
+cyan_wall_banner	facing:enum:Direction:north,south,west,east	blast=1
+purple_wall_banner	facing:enum:Direction:north,south,west,east	blast=1
+blue_wall_banner	facing:enum:Direction:north,south,west,east	blast=1
+brown_wall_banner	facing:enum:Direction:north,south,west,east	blast=1
+green_wall_banner	facing:enum:Direction:north,south,west,east	blast=1
+red_wall_banner	facing:enum:Direction:north,south,west,east	blast=1
+black_wall_banner	facing:enum:Direction:north,south,west,east	blast=1
+red_sandstone		blast=0.8
+chiseled_red_sandstone		blast=0.8
+cut_red_sandstone		blast=0.8
+red_sandstone_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=0.8
+oak_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=3
+spruce_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=3
+birch_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=3
+jungle_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=3
+acacia_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=3
+cherry_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=3
+dark_oak_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=3
+pale_oak_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=3
+mangrove_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=3
+bamboo_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=3
+bamboo_mosaic_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=3
+stone_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+smooth_stone_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+sandstone_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+cut_sandstone_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+petrified_oak_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+cobblestone_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+brick_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+stone_brick_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+mud_brick_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=3
+nether_brick_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+quartz_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+red_sandstone_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+cut_red_sandstone_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+purpur_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+smooth_stone		blast=6
+smooth_sandstone		blast=6
+smooth_quartz		blast=6
+smooth_red_sandstone		blast=6
+spruce_fence_gate	facing:enum:Direction:north,south,west,east|in_wall:bool|open:bool|powered:bool	default=in_wall:false,open:false,powered:false;blast=3
+birch_fence_gate	facing:enum:Direction:north,south,west,east|in_wall:bool|open:bool|powered:bool	default=in_wall:false,open:false,powered:false;blast=3
+jungle_fence_gate	facing:enum:Direction:north,south,west,east|in_wall:bool|open:bool|powered:bool	default=in_wall:false,open:false,powered:false;blast=3
+acacia_fence_gate	facing:enum:Direction:north,south,west,east|in_wall:bool|open:bool|powered:bool	default=in_wall:false,open:false,powered:false;blast=3
+cherry_fence_gate	facing:enum:Direction:north,south,west,east|in_wall:bool|open:bool|powered:bool	default=in_wall:false,open:false,powered:false;blast=3
+dark_oak_fence_gate	facing:enum:Direction:north,south,west,east|in_wall:bool|open:bool|powered:bool	default=in_wall:false,open:false,powered:false;blast=3
+pale_oak_fence_gate	facing:enum:Direction:north,south,west,east|in_wall:bool|open:bool|powered:bool	default=in_wall:false,open:false,powered:false;blast=3
+mangrove_fence_gate	facing:enum:Direction:north,south,west,east|in_wall:bool|open:bool|powered:bool	default=in_wall:false,open:false,powered:false;blast=3
+bamboo_fence_gate	facing:enum:Direction:north,south,west,east|in_wall:bool|open:bool|powered:bool	default=in_wall:false,open:false,powered:false;blast=3
+spruce_fence	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;blast=3
+birch_fence	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;blast=3
+jungle_fence	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;blast=3
+acacia_fence	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;blast=3
+cherry_fence	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;blast=3
+dark_oak_fence	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;blast=3
+pale_oak_fence	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;blast=3
+mangrove_fence	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;blast=3
+bamboo_fence	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;blast=3
+spruce_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=3
+birch_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=3
+jungle_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=3
+acacia_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=3
+cherry_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=3
+dark_oak_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=3
+pale_oak_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=3
+mangrove_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=3
+bamboo_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=3
+end_rod	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;occlude=false
+chorus_plant	down:bool|east:bool|north:bool|south:bool|up:bool|west:bool	default=down:false,east:false,north:false,south:false,up:false,west:false;occlude=false;blast=0.4
+chorus_flower	age:int:0:5	occlude=false;conductor=false;blast=0.4
+purpur_block		blast=6
+purpur_pillar	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=6
+purpur_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+end_stone_bricks		blast=9
+torchflower_crop	age:int:0:1
+pitcher_crop	age:int:0:4|half:enum:DoubleBlockHalf:upper,lower	default=half:lower
+pitcher_plant	half:enum:DoubleBlockHalf:upper,lower	default=half:lower
+beetroots	age:int:0:3
+dirt_path		blast=0.65
+end_gateway		blast=3600000
+repeating_command_block	conditional:bool|facing:enum:Direction:north,east,south,west,up,down	default=conditional:false;place=directional;blast=3600000
+chain_command_block	conditional:bool|facing:enum:Direction:north,east,south,west,up,down	default=conditional:false;place=directional;blast=3600000
+frosted_ice	age:int:0:3	occlude=false;conductor=false;blast=0.5
+magma_block		blast=0.5
+nether_wart_block		blast=1
+red_nether_bricks		blast=6
+bone_block	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+structure_void
+observer	facing:enum:Direction:north,east,south,west,up,down|powered:bool	default=facing:south,powered:false;place=looking;conductor=false;blast=3
+shulker_box	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;blast=2
+white_shulker_box	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;blast=2
+orange_shulker_box	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;blast=2
+magenta_shulker_box	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;blast=2
+light_blue_shulker_box	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;blast=2
+yellow_shulker_box	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;blast=2
+lime_shulker_box	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;blast=2
+pink_shulker_box	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;blast=2
+gray_shulker_box	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;blast=2
+light_gray_shulker_box	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;blast=2
+cyan_shulker_box	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;blast=2
+purple_shulker_box	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;blast=2
+blue_shulker_box	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;blast=2
+brown_shulker_box	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;blast=2
+green_shulker_box	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;blast=2
+red_shulker_box	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;blast=2
+black_shulker_box	facing:enum:Direction:north,east,south,west,up,down	default=facing:up;blast=2
+white_glazed_terracotta	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1.4
+orange_glazed_terracotta	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1.4
+magenta_glazed_terracotta	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1.4
+light_blue_glazed_terracotta	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1.4
+yellow_glazed_terracotta	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1.4
+lime_glazed_terracotta	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1.4
+pink_glazed_terracotta	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1.4
+gray_glazed_terracotta	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1.4
+light_gray_glazed_terracotta	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1.4
+cyan_glazed_terracotta	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1.4
+purple_glazed_terracotta	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1.4
+blue_glazed_terracotta	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1.4
+brown_glazed_terracotta	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1.4
+green_glazed_terracotta	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1.4
+red_glazed_terracotta	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1.4
+black_glazed_terracotta	facing:enum:Direction:north,south,west,east	place=horizontal;blast=1.4
+white_concrete		blast=1.8
+orange_concrete		blast=1.8
+magenta_concrete		blast=1.8
+light_blue_concrete		blast=1.8
+yellow_concrete		blast=1.8
+lime_concrete		blast=1.8
+pink_concrete		blast=1.8
+gray_concrete		blast=1.8
+light_gray_concrete		blast=1.8
+cyan_concrete		blast=1.8
+purple_concrete		blast=1.8
+blue_concrete		blast=1.8
+brown_concrete		blast=1.8
+green_concrete		blast=1.8
+red_concrete		blast=1.8
+black_concrete		blast=1.8
+white_concrete_powder		blast=0.5
+orange_concrete_powder		blast=0.5
+magenta_concrete_powder		blast=0.5
+light_blue_concrete_powder		blast=0.5
+yellow_concrete_powder		blast=0.5
+lime_concrete_powder		blast=0.5
+pink_concrete_powder		blast=0.5
+gray_concrete_powder		blast=0.5
+light_gray_concrete_powder		blast=0.5
+cyan_concrete_powder		blast=0.5
+purple_concrete_powder		blast=0.5
+blue_concrete_powder		blast=0.5
+brown_concrete_powder		blast=0.5
+green_concrete_powder		blast=0.5
+red_concrete_powder		blast=0.5
+black_concrete_powder		blast=0.5
+kelp	age:int:0:25
+kelp_plant
+dried_kelp_block		blast=2.5
+turtle_egg	eggs:int:1:4|hatch:int:0:2	occlude=false;blast=0.5
+sniffer_egg	hatch:int:0:2	occlude=false;blast=0.5
+dried_ghast	facing:enum:Direction:north,south,west,east|hydration:int:0:3|waterlogged:bool	default=waterlogged:false;place=horizontal;occlude=false
+dead_tube_coral_block		blast=6
+dead_brain_coral_block		blast=6
+dead_bubble_coral_block		blast=6
+dead_fire_coral_block		blast=6
+dead_horn_coral_block		blast=6
+tube_coral_block		blast=6
+brain_coral_block		blast=6
+bubble_coral_block		blast=6
+fire_coral_block		blast=6
+horn_coral_block		blast=6
+dead_tube_coral	waterlogged:bool
+dead_brain_coral	waterlogged:bool
+dead_bubble_coral	waterlogged:bool
+dead_fire_coral	waterlogged:bool
+dead_horn_coral	waterlogged:bool
+tube_coral	waterlogged:bool
+brain_coral	waterlogged:bool
+bubble_coral	waterlogged:bool
+fire_coral	waterlogged:bool
+horn_coral	waterlogged:bool
+dead_tube_coral_fan	waterlogged:bool
+dead_brain_coral_fan	waterlogged:bool
+dead_bubble_coral_fan	waterlogged:bool
+dead_fire_coral_fan	waterlogged:bool
+dead_horn_coral_fan	waterlogged:bool
+tube_coral_fan	waterlogged:bool
+brain_coral_fan	waterlogged:bool
+bubble_coral_fan	waterlogged:bool
+fire_coral_fan	waterlogged:bool
+horn_coral_fan	waterlogged:bool
+dead_tube_coral_wall_fan	facing:enum:Direction:north,south,west,east|waterlogged:bool
+dead_brain_coral_wall_fan	facing:enum:Direction:north,south,west,east|waterlogged:bool
+dead_bubble_coral_wall_fan	facing:enum:Direction:north,south,west,east|waterlogged:bool
+dead_fire_coral_wall_fan	facing:enum:Direction:north,south,west,east|waterlogged:bool
+dead_horn_coral_wall_fan	facing:enum:Direction:north,south,west,east|waterlogged:bool
+tube_coral_wall_fan	facing:enum:Direction:north,south,west,east|waterlogged:bool
+brain_coral_wall_fan	facing:enum:Direction:north,south,west,east|waterlogged:bool
+bubble_coral_wall_fan	facing:enum:Direction:north,south,west,east|waterlogged:bool
+fire_coral_wall_fan	facing:enum:Direction:north,south,west,east|waterlogged:bool
+horn_coral_wall_fan	facing:enum:Direction:north,south,west,east|waterlogged:bool
+sea_pickle	pickles:int:1:4|waterlogged:bool	occlude=false
+blue_ice		blast=2.8
+conduit	waterlogged:bool	occlude=false;blast=3
+bamboo_sapling		blast=1
+bamboo	age:int:0:1|leaves:enum:BambooLeaves:none,small,large|stage:int:0:1	occlude=false;blast=1
+potted_bamboo
+void_air
+cave_air
+bubble_column	drag:bool
+polished_granite_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+smooth_red_sandstone_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+mossy_stone_brick_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+polished_diorite_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+mossy_cobblestone_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+end_stone_brick_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=9
+stone_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+smooth_sandstone_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+smooth_quartz_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+granite_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+andesite_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+red_nether_brick_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+polished_andesite_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+diorite_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+polished_granite_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+smooth_red_sandstone_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+mossy_stone_brick_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+polished_diorite_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+mossy_cobblestone_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+end_stone_brick_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=9
+smooth_sandstone_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+smooth_quartz_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+granite_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+andesite_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+red_nether_brick_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+polished_andesite_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+diorite_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+brick_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+prismarine_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+red_sandstone_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=0.8
+mossy_stone_brick_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+granite_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+stone_brick_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+mud_brick_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=3
+nether_brick_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+andesite_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+red_nether_brick_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+sandstone_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=0.8
+end_stone_brick_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=9
+diorite_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+scaffolding	bottom:bool|distance:int:0:7|waterlogged:bool	default=bottom:false,distance:7,waterlogged:false
+loom	facing:enum:Direction:north,south,west,east	place=horizontal;blast=2.5
+barrel	facing:enum:Direction:north,east,south,west,up,down|open:bool	default=open:false;place=directional;blast=2.5
+smoker	facing:enum:Direction:north,south,west,east|lit:bool	default=lit:false;place=horizontal;blast=3.5
+blast_furnace	facing:enum:Direction:north,south,west,east|lit:bool	default=lit:false;place=horizontal;blast=3.5
+cartography_table		blast=2.5
+fletching_table		blast=2.5
+grindstone	face:enum:AttachFace:floor,wall,ceiling|facing:enum:Direction:north,south,west,east	default=face:wall;blast=6
+lectern	facing:enum:Direction:north,south,west,east|has_book:bool|powered:bool	default=has_book:false,powered:false;place=horizontal;blast=2.5
+smithing_table		blast=2.5
+stonecutter	facing:enum:Direction:north,south,west,east	place=horizontal;blast=3.5
+bell	attachment:enum:BellAttachType:floor,ceiling,single_wall,double_wall|facing:enum:Direction:north,south,west,east|powered:bool	default=powered:false;blast=5
+lantern	hanging:bool|waterlogged:bool	default=hanging:false,waterlogged:false;occlude=false;blast=3.5
+soul_lantern	hanging:bool|waterlogged:bool	default=hanging:false,waterlogged:false;occlude=false;blast=3.5
+copper_lantern	hanging:bool|waterlogged:bool	default=hanging:false,waterlogged:false;occlude=false;blast=3.5
+exposed_copper_lantern	hanging:bool|waterlogged:bool	default=hanging:false,waterlogged:false;occlude=false;blast=3.5
+weathered_copper_lantern	hanging:bool|waterlogged:bool	default=hanging:false,waterlogged:false;occlude=false;blast=3.5
+oxidized_copper_lantern	hanging:bool|waterlogged:bool	default=hanging:false,waterlogged:false;occlude=false;blast=3.5
+waxed_copper_lantern	hanging:bool|waterlogged:bool	default=hanging:false,waterlogged:false;occlude=false;blast=3.5
+waxed_exposed_copper_lantern	hanging:bool|waterlogged:bool	default=hanging:false,waterlogged:false;occlude=false;blast=3.5
+waxed_weathered_copper_lantern	hanging:bool|waterlogged:bool	default=hanging:false,waterlogged:false;occlude=false;blast=3.5
+waxed_oxidized_copper_lantern	hanging:bool|waterlogged:bool	default=hanging:false,waterlogged:false;occlude=false;blast=3.5
+campfire	facing:enum:Direction:north,south,west,east|lit:bool|signal_fire:bool|waterlogged:bool	default=signal_fire:false,waterlogged:false;occlude=false;blast=2
+soul_campfire	facing:enum:Direction:north,south,west,east|lit:bool|signal_fire:bool|waterlogged:bool	default=signal_fire:false,waterlogged:false;occlude=false;blast=2
+sweet_berry_bush	age:int:0:3
+warped_stem	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_warped_stem	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+warped_hyphae	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_warped_hyphae	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+warped_nylium		blast=0.4
+warped_fungus
+warped_wart_block		blast=1
+warped_roots
+nether_sprouts
+crimson_stem	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_crimson_stem	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+crimson_hyphae	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+stripped_crimson_hyphae	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=2
+crimson_nylium		blast=0.4
+crimson_fungus
+shroomlight		blast=1
+weeping_vines	age:int:0:25
+weeping_vines_plant
+twisting_vines	age:int:0:25
+twisting_vines_plant
+crimson_roots
+crimson_planks		blast=3
+warped_planks		blast=3
+crimson_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=3
+warped_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=3
+crimson_pressure_plate	powered:bool	default=powered:false;blast=0.5
+warped_pressure_plate	powered:bool	default=powered:false;blast=0.5
+crimson_fence	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;blast=3
+warped_fence	east:bool|north:bool|south:bool|waterlogged:bool|west:bool	default=east:false,north:false,south:false,waterlogged:false,west:false;blast=3
+crimson_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=3
+warped_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=3
+crimson_fence_gate	facing:enum:Direction:north,south,west,east|in_wall:bool|open:bool|powered:bool	default=in_wall:false,open:false,powered:false;blast=3
+warped_fence_gate	facing:enum:Direction:north,south,west,east|in_wall:bool|open:bool|powered:bool	default=in_wall:false,open:false,powered:false;blast=3
+crimson_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=3
+warped_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=3
+crimson_button	face:enum:AttachFace:floor,wall,ceiling|facing:enum:Direction:north,south,west,east|powered:bool	default=face:wall,powered:false;blast=0.5
+warped_button	face:enum:AttachFace:floor,wall,ceiling|facing:enum:Direction:north,south,west,east|powered:bool	default=face:wall,powered:false;blast=0.5
+crimson_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=3
+warped_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=3
+crimson_sign	rotation:int:0:15|waterlogged:bool	default=rotation:8,waterlogged:false;blast=1
+warped_sign	rotation:int:0:15|waterlogged:bool	default=rotation:8,waterlogged:false;blast=1
+crimson_wall_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+warped_wall_sign	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=1
+structure_block	mode:enum:StructureMode:save,load,corner,data	default=mode:load;blast=3600000
+jigsaw	orientation:enum:FrontAndTop:down_east,down_north,down_south,down_west,up_east,up_north,up_south,up_west,west_up,east_up,north_up,south_up	default=orientation:north_up;place=horizontal;blast=3600000
+test_block	mode:enum:TestBlockMode:start,log,fail,accept	blast=3600000
+test_instance_block		occlude=false;blast=3600000
+composter	level:int:0:8	blast=0.6
+target	power:int:0:15	blast=0.5
+bee_nest	facing:enum:Direction:north,south,west,east|honey_level:int:0:5	place=horizontal;blast=0.3
+beehive	facing:enum:Direction:north,south,west,east|honey_level:int:0:5	place=horizontal;blast=0.6
+honey_block		occlude=false
+honeycomb_block		blast=0.6
+netherite_block		blast=1200
+ancient_debris		blast=1200
+crying_obsidian		blast=1200
+respawn_anchor	charges:int:0:4	blast=1200
+potted_crimson_fungus
+potted_warped_fungus
+potted_crimson_roots
+potted_warped_roots
+lodestone		blast=3.5
+blackstone		blast=6
+blackstone_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+blackstone_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+blackstone_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+polished_blackstone		blast=6
+polished_blackstone_bricks		blast=6
+cracked_polished_blackstone_bricks		blast=6
+chiseled_polished_blackstone		blast=6
+polished_blackstone_brick_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+polished_blackstone_brick_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+polished_blackstone_brick_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+gilded_blackstone		blast=6
+polished_blackstone_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+polished_blackstone_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+polished_blackstone_pressure_plate	powered:bool	default=powered:false;blast=0.5
+polished_blackstone_button	face:enum:AttachFace:floor,wall,ceiling|facing:enum:Direction:north,south,west,east|powered:bool	default=face:wall,powered:false;blast=0.5
+polished_blackstone_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+chiseled_nether_bricks		blast=6
+cracked_nether_bricks		blast=6
+quartz_bricks		blast=0.8
+candle	candles:int:1:4|lit:bool|waterlogged:bool	default=lit:false,waterlogged:false;blast=0.1
+white_candle	candles:int:1:4|lit:bool|waterlogged:bool	default=lit:false,waterlogged:false;blast=0.1
+orange_candle	candles:int:1:4|lit:bool|waterlogged:bool	default=lit:false,waterlogged:false;blast=0.1
+magenta_candle	candles:int:1:4|lit:bool|waterlogged:bool	default=lit:false,waterlogged:false;blast=0.1
+light_blue_candle	candles:int:1:4|lit:bool|waterlogged:bool	default=lit:false,waterlogged:false;blast=0.1
+yellow_candle	candles:int:1:4|lit:bool|waterlogged:bool	default=lit:false,waterlogged:false;blast=0.1
+lime_candle	candles:int:1:4|lit:bool|waterlogged:bool	default=lit:false,waterlogged:false;blast=0.1
+pink_candle	candles:int:1:4|lit:bool|waterlogged:bool	default=lit:false,waterlogged:false;blast=0.1
+gray_candle	candles:int:1:4|lit:bool|waterlogged:bool	default=lit:false,waterlogged:false;blast=0.1
+light_gray_candle	candles:int:1:4|lit:bool|waterlogged:bool	default=lit:false,waterlogged:false;blast=0.1
+cyan_candle	candles:int:1:4|lit:bool|waterlogged:bool	default=lit:false,waterlogged:false;blast=0.1
+purple_candle	candles:int:1:4|lit:bool|waterlogged:bool	default=lit:false,waterlogged:false;blast=0.1
+blue_candle	candles:int:1:4|lit:bool|waterlogged:bool	default=lit:false,waterlogged:false;blast=0.1
+brown_candle	candles:int:1:4|lit:bool|waterlogged:bool	default=lit:false,waterlogged:false;blast=0.1
+green_candle	candles:int:1:4|lit:bool|waterlogged:bool	default=lit:false,waterlogged:false;blast=0.1
+red_candle	candles:int:1:4|lit:bool|waterlogged:bool	default=lit:false,waterlogged:false;blast=0.1
+black_candle	candles:int:1:4|lit:bool|waterlogged:bool	default=lit:false,waterlogged:false;blast=0.1
+candle_cake	lit:bool	default=lit:false;blast=0.5
+white_candle_cake	lit:bool	default=lit:false;blast=0.5
+orange_candle_cake	lit:bool	default=lit:false;blast=0.5
+magenta_candle_cake	lit:bool	default=lit:false;blast=0.5
+light_blue_candle_cake	lit:bool	default=lit:false;blast=0.5
+yellow_candle_cake	lit:bool	default=lit:false;blast=0.5
+lime_candle_cake	lit:bool	default=lit:false;blast=0.5
+pink_candle_cake	lit:bool	default=lit:false;blast=0.5
+gray_candle_cake	lit:bool	default=lit:false;blast=0.5
+light_gray_candle_cake	lit:bool	default=lit:false;blast=0.5
+cyan_candle_cake	lit:bool	default=lit:false;blast=0.5
+purple_candle_cake	lit:bool	default=lit:false;blast=0.5
+blue_candle_cake	lit:bool	default=lit:false;blast=0.5
+brown_candle_cake	lit:bool	default=lit:false;blast=0.5
+green_candle_cake	lit:bool	default=lit:false;blast=0.5
+red_candle_cake	lit:bool	default=lit:false;blast=0.5
+black_candle_cake	lit:bool	default=lit:false;blast=0.5
+amethyst_block		blast=1.5
+budding_amethyst		blast=1.5
+amethyst_cluster	facing:enum:Direction:north,east,south,west,up,down|waterlogged:bool	default=facing:up,waterlogged:false;occlude=false;blast=1.5
+large_amethyst_bud	facing:enum:Direction:north,east,south,west,up,down|waterlogged:bool	default=facing:up,waterlogged:false;blast=1.5
+medium_amethyst_bud	facing:enum:Direction:north,east,south,west,up,down|waterlogged:bool	default=facing:up,waterlogged:false;blast=1.5
+small_amethyst_bud	facing:enum:Direction:north,east,south,west,up,down|waterlogged:bool	default=facing:up,waterlogged:false;blast=1.5
+tuff		blast=6
+tuff_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+tuff_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+tuff_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+polished_tuff		blast=6
+polished_tuff_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+polished_tuff_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+polished_tuff_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+chiseled_tuff		blast=6
+tuff_bricks		blast=6
+tuff_brick_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+tuff_brick_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+tuff_brick_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+chiseled_tuff_bricks		blast=6
+sulfur		blast=6
+potent_sulfur	potent_sulfur_state:enum:PotentSulfurState:dry,wet,dormant,erupting,continuous	blast=6
+sulfur_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+sulfur_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+sulfur_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+polished_sulfur		blast=6
+polished_sulfur_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+polished_sulfur_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+polished_sulfur_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+sulfur_bricks		blast=6
+sulfur_brick_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+sulfur_brick_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+sulfur_brick_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+chiseled_sulfur		blast=6
+cinnabar		blast=6
+cinnabar_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+cinnabar_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+cinnabar_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+polished_cinnabar		blast=6
+polished_cinnabar_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+polished_cinnabar_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+polished_cinnabar_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+cinnabar_bricks		blast=6
+cinnabar_brick_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+cinnabar_brick_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+cinnabar_brick_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+chiseled_cinnabar		blast=6
+calcite		blast=0.75
+tinted_glass		occlude=false;conductor=false;blast=0.3
+powder_snow		occlude=false;blast=0.25
+sculk_sensor	power:int:0:15|sculk_sensor_phase:enum:SculkSensorPhase:inactive,active,cooldown|waterlogged:bool	default=waterlogged:false;blast=1.5
+calibrated_sculk_sensor	facing:enum:Direction:north,south,west,east|power:int:0:15|sculk_sensor_phase:enum:SculkSensorPhase:inactive,active,cooldown|waterlogged:bool	blast=1.5
+sculk		blast=0.2
+sculk_vein	down:bool|east:bool|north:bool|south:bool|up:bool|waterlogged:bool|west:bool	default=down:false,east:false,north:false,south:false,up:false,waterlogged:false,west:false;blast=0.2
+sculk_catalyst	bloom:bool	default=bloom:false;blast=3
+sculk_shrieker	can_summon:bool|shrieking:bool|waterlogged:bool	default=can_summon:false,shrieking:false,waterlogged:false;blast=3
+copper_block		blast=6
+exposed_copper		blast=6
+weathered_copper		blast=6
+oxidized_copper		blast=6
+waxed_copper_block		blast=6
+waxed_exposed_copper		blast=6
+waxed_weathered_copper		blast=6
+waxed_oxidized_copper		blast=6
+copper_ore		blast=3
+deepslate_copper_ore		blast=3
+cut_copper
+exposed_cut_copper
+weathered_cut_copper
+oxidized_cut_copper
+waxed_cut_copper
+waxed_exposed_cut_copper
+waxed_weathered_cut_copper
+waxed_oxidized_cut_copper
+chiseled_copper
+exposed_chiseled_copper
+weathered_chiseled_copper
+oxidized_chiseled_copper
+waxed_chiseled_copper
+waxed_exposed_chiseled_copper
+waxed_weathered_chiseled_copper
+waxed_oxidized_chiseled_copper
+cut_copper_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false
+exposed_cut_copper_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false
+weathered_cut_copper_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false
+oxidized_cut_copper_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false
+waxed_cut_copper_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false
+waxed_exposed_cut_copper_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false
+waxed_weathered_cut_copper_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false
+waxed_oxidized_cut_copper_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false
+cut_copper_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false
+exposed_cut_copper_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false
+weathered_cut_copper_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false
+oxidized_cut_copper_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false
+waxed_cut_copper_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false
+waxed_exposed_cut_copper_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false
+waxed_weathered_cut_copper_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false
+waxed_oxidized_cut_copper_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false
+copper_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=6
+exposed_copper_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=6
+weathered_copper_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=6
+oxidized_copper_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=6
+waxed_copper_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=6
+waxed_exposed_copper_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=6
+waxed_weathered_copper_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=6
+waxed_oxidized_copper_door	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|hinge:enum:DoorHingeSide:left,right|open:bool|powered:bool	default=half:lower,open:false,powered:false;occlude=false;blast=6
+copper_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=6
+exposed_copper_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=6
+weathered_copper_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=6
+oxidized_copper_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=6
+waxed_copper_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=6
+waxed_exposed_copper_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=6
+waxed_weathered_copper_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=6
+waxed_oxidized_copper_trapdoor	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|open:bool|powered:bool|waterlogged:bool	default=half:bottom,open:false,powered:false,waterlogged:false;place=horizontal;occlude=false;blast=6
+copper_grate	waterlogged:bool	default=waterlogged:false;occlude=false;conductor=false;blast=6
+exposed_copper_grate	waterlogged:bool	default=waterlogged:false;occlude=false;conductor=false;blast=6
+weathered_copper_grate	waterlogged:bool	default=waterlogged:false;occlude=false;conductor=false;blast=6
+oxidized_copper_grate	waterlogged:bool	default=waterlogged:false;occlude=false;conductor=false;blast=6
+waxed_copper_grate	waterlogged:bool	default=waterlogged:false;occlude=false;conductor=false;blast=6
+waxed_exposed_copper_grate	waterlogged:bool	default=waterlogged:false;occlude=false;conductor=false;blast=6
+waxed_weathered_copper_grate	waterlogged:bool	default=waterlogged:false;occlude=false;conductor=false;blast=6
+waxed_oxidized_copper_grate	waterlogged:bool	default=waterlogged:false;occlude=false;conductor=false;blast=6
+copper_bulb	lit:bool|powered:bool	default=lit:false,powered:false;conductor=false;blast=6
+exposed_copper_bulb	lit:bool|powered:bool	default=lit:false,powered:false;conductor=false;blast=6
+weathered_copper_bulb	lit:bool|powered:bool	default=lit:false,powered:false;conductor=false;blast=6
+oxidized_copper_bulb	lit:bool|powered:bool	default=lit:false,powered:false;conductor=false;blast=6
+waxed_copper_bulb	lit:bool|powered:bool	default=lit:false,powered:false;conductor=false;blast=6
+waxed_exposed_copper_bulb	lit:bool|powered:bool	default=lit:false,powered:false;conductor=false;blast=6
+waxed_weathered_copper_bulb	lit:bool|powered:bool	default=lit:false,powered:false;conductor=false;blast=6
+waxed_oxidized_copper_bulb	lit:bool|powered:bool	default=lit:false,powered:false;conductor=false;blast=6
+copper_chest	facing:enum:Direction:north,south,west,east|type:enum:ChestType:single,left,right|waterlogged:bool	default=waterlogged:false;blast=6
+exposed_copper_chest	facing:enum:Direction:north,south,west,east|type:enum:ChestType:single,left,right|waterlogged:bool	default=waterlogged:false;blast=6
+weathered_copper_chest	facing:enum:Direction:north,south,west,east|type:enum:ChestType:single,left,right|waterlogged:bool	default=waterlogged:false;blast=6
+oxidized_copper_chest	facing:enum:Direction:north,south,west,east|type:enum:ChestType:single,left,right|waterlogged:bool	default=waterlogged:false;blast=6
+waxed_copper_chest	facing:enum:Direction:north,south,west,east|type:enum:ChestType:single,left,right|waterlogged:bool	default=waterlogged:false;blast=6
+waxed_exposed_copper_chest	facing:enum:Direction:north,south,west,east|type:enum:ChestType:single,left,right|waterlogged:bool	default=waterlogged:false;blast=6
+waxed_weathered_copper_chest	facing:enum:Direction:north,south,west,east|type:enum:ChestType:single,left,right|waterlogged:bool	default=waterlogged:false;blast=6
+waxed_oxidized_copper_chest	facing:enum:Direction:north,south,west,east|type:enum:ChestType:single,left,right|waterlogged:bool	default=waterlogged:false;blast=6
+copper_golem_statue	copper_golem_pose:enum:Pose:standing,sitting,running,star|facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;place=horizontal;occlude=false;blast=6
+exposed_copper_golem_statue	copper_golem_pose:enum:Pose:standing,sitting,running,star|facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;place=horizontal;occlude=false;blast=6
+weathered_copper_golem_statue	copper_golem_pose:enum:Pose:standing,sitting,running,star|facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;place=horizontal;occlude=false;blast=6
+oxidized_copper_golem_statue	copper_golem_pose:enum:Pose:standing,sitting,running,star|facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;place=horizontal;occlude=false;blast=6
+waxed_copper_golem_statue	copper_golem_pose:enum:Pose:standing,sitting,running,star|facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;place=horizontal;occlude=false;blast=6
+waxed_exposed_copper_golem_statue	copper_golem_pose:enum:Pose:standing,sitting,running,star|facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;place=horizontal;occlude=false;blast=6
+waxed_weathered_copper_golem_statue	copper_golem_pose:enum:Pose:standing,sitting,running,star|facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;place=horizontal;occlude=false;blast=6
+waxed_oxidized_copper_golem_statue	copper_golem_pose:enum:Pose:standing,sitting,running,star|facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;place=horizontal;occlude=false;blast=6
+lightning_rod	facing:enum:Direction:north,east,south,west,up,down|powered:bool|waterlogged:bool	default=facing:up,powered:false,waterlogged:false;occlude=false;blast=6
+exposed_lightning_rod	facing:enum:Direction:north,east,south,west,up,down|powered:bool|waterlogged:bool	default=facing:up,powered:false,waterlogged:false;occlude=false;blast=6
+weathered_lightning_rod	facing:enum:Direction:north,east,south,west,up,down|powered:bool|waterlogged:bool	default=facing:up,powered:false,waterlogged:false;occlude=false;blast=6
+oxidized_lightning_rod	facing:enum:Direction:north,east,south,west,up,down|powered:bool|waterlogged:bool	default=facing:up,powered:false,waterlogged:false;occlude=false;blast=6
+waxed_lightning_rod	facing:enum:Direction:north,east,south,west,up,down|powered:bool|waterlogged:bool	default=facing:up,powered:false,waterlogged:false;occlude=false;blast=6
+waxed_exposed_lightning_rod	facing:enum:Direction:north,east,south,west,up,down|powered:bool|waterlogged:bool	default=facing:up,powered:false,waterlogged:false;occlude=false;blast=6
+waxed_weathered_lightning_rod	facing:enum:Direction:north,east,south,west,up,down|powered:bool|waterlogged:bool	default=facing:up,powered:false,waterlogged:false;occlude=false;blast=6
+waxed_oxidized_lightning_rod	facing:enum:Direction:north,east,south,west,up,down|powered:bool|waterlogged:bool	default=facing:up,powered:false,waterlogged:false;occlude=false;blast=6
+dripstone_block		blast=1
+pointed_dripstone	thickness:enum:SpeleothemThickness:tip_merge,tip,frustum,middle,base|vertical_direction:enum:Direction:up,down|waterlogged:bool	default=thickness:tip,waterlogged:false;occlude=false;blast=3
+sulfur_spike	thickness:enum:SpeleothemThickness:tip_merge,tip,frustum,middle,base|vertical_direction:enum:Direction:up,down|waterlogged:bool	default=thickness:tip,waterlogged:false;occlude=false;blast=3
+cave_vines	age:int:0:25|berries:bool	default=berries:false
+cave_vines_plant	berries:bool	default=berries:false
+spore_blossom
+azalea		occlude=false
+flowering_azalea		occlude=false
+moss_carpet		blast=0.1
+pink_petals	facing:enum:Direction:north,south,west,east|flower_amount:int:1:4
+wildflowers	facing:enum:Direction:north,south,west,east|flower_amount:int:1:4
+leaf_litter	facing:enum:Direction:north,south,west,east|segment_amount:int:1:4
+moss_block		blast=0.1
+big_dripleaf	facing:enum:Direction:north,south,west,east|tilt:enum:Tilt:none,unstable,partial,full|waterlogged:bool	default=waterlogged:false;place=horizontal;blast=0.1
+big_dripleaf_stem	facing:enum:Direction:north,south,west,east|waterlogged:bool	default=waterlogged:false;blast=0.1
+small_dripleaf	facing:enum:Direction:north,south,west,east|half:enum:DoubleBlockHalf:upper,lower|waterlogged:bool	default=half:lower,waterlogged:false;place=horizontal
+hanging_roots	waterlogged:bool	default=waterlogged:false
+rooted_dirt		blast=0.5
+mud		conductor=true;blast=0.5
+deepslate	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=6
+cobbled_deepslate		blast=6
+cobbled_deepslate_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+cobbled_deepslate_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+cobbled_deepslate_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+polished_deepslate		blast=6
+polished_deepslate_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+polished_deepslate_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+polished_deepslate_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+deepslate_tiles		blast=6
+deepslate_tile_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+deepslate_tile_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+deepslate_tile_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+deepslate_bricks		blast=6
+deepslate_brick_stairs	facing:enum:Direction:north,south,west,east|half:enum:Half:top,bottom|shape:enum:StairsShape:straight,inner_left,inner_right,outer_left,outer_right|waterlogged:bool	default=half:bottom,waterlogged:false;blast=6
+deepslate_brick_slab	type:enum:SlabType:top,bottom,double|waterlogged:bool	default=type:bottom,waterlogged:false;blast=6
+deepslate_brick_wall	east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|up:bool|waterlogged:bool|west:enum:WallSide:none,low,tall	default=waterlogged:false;blast=6
+chiseled_deepslate		blast=6
+cracked_deepslate_bricks		blast=6
+cracked_deepslate_tiles		blast=6
+infested_deepslate	axis:enum:Axis:x,y,z	default=axis:y;place=pillar
+smooth_basalt		blast=4.2
+raw_iron_block		blast=6
+raw_copper_block		blast=6
+raw_gold_block		blast=6
+potted_azalea_bush
+potted_flowering_azalea_bush
+ochre_froglight	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=0.3
+verdant_froglight	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=0.3
+pearlescent_froglight	axis:enum:Axis:x,y,z	default=axis:y;place=pillar;blast=0.3
+frogspawn		occlude=false
+reinforced_deepslate		blast=1200
+decorated_pot	cracked:bool|facing:enum:Direction:north,south,west,east|waterlogged:bool	default=cracked:false,waterlogged:false;occlude=false
+crafter	crafting:bool|orientation:enum:FrontAndTop:down_east,down_north,down_south,down_west,up_east,up_north,up_south,up_west,west_up,east_up,north_up,south_up|triggered:bool	default=crafting:false,orientation:north_up,triggered:false;place=horizontal;blast=3.5
+trial_spawner	ominous:bool|trial_spawner_state:enum:TrialSpawnerState:inactive,waiting_for_players,active,waiting_for_reward_ejection,ejecting_reward,cooldown	default=ominous:false;occlude=false;blast=50
+vault	facing:enum:Direction:north,south,west,east|ominous:bool|vault_state:enum:VaultState:inactive,active,unlocking,ejecting	default=ominous:false;place=horizontal;occlude=false;blast=50
+heavy_core	waterlogged:bool	default=waterlogged:false;blast=1200
+pale_moss_block		blast=0.1
+pale_moss_carpet	bottom:bool|east:enum:WallSide:none,low,tall|north:enum:WallSide:none,low,tall|south:enum:WallSide:none,low,tall|west:enum:WallSide:none,low,tall	occlude=false;blast=0.1
+pale_hanging_moss	tip:bool
+open_eyeblossom
+closed_eyeblossom
+potted_open_eyeblossom
+potted_closed_eyeblossom
+firefly_bush

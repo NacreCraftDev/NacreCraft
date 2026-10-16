@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\NacreCraft.Util\NacreCraft.Util.csproj" />
+    <ProjectReference Include="..\NacreCraft.Nbt\NacreCraft.Nbt.csproj" />
+    <ProjectReference Include="..\NacreCraft.Registry\NacreCraft.Registry.csproj" />
+    <ProjectReference Include="..\NacreCraft.DataFixer\NacreCraft.DataFixer.csproj" />
+    <ProjectReference Include="..\NacreCraft.Commands\NacreCraft.Commands.csproj" />
+    <ProjectReference Include="..\NacreCraft.Config\NacreCraft.Config.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="NacreCraft.Game" />
+    <InternalsVisibleTo Include="NacreCraft.Client" />
+    <InternalsVisibleTo Include="NacreCraft.Test" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\NacreCraft.Primitives\NacreCraft.Primitives.csproj" />
+    <ProjectReference Include="..\NacreCraft.Config\NacreCraft.Config.csproj" />
+    <ProjectReference Include="..\NacreCraft.Codec\NacreCraft.Codec.csproj" />
+    <ProjectReference Include="..\NacreCraft.Util\NacreCraft.Util.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

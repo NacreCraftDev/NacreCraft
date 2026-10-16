@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\NacreCraft.Primitives\NacreCraft.Primitives.csproj" />
+    <ProjectReference Include="..\NacreCraft.Config\NacreCraft.Config.csproj" />
+    <ProjectReference Include="..\NacreCraft.Util\NacreCraft.Util.csproj" />
+    <ProjectReference Include="..\NacreCraft.Nbt\NacreCraft.Nbt.csproj" />
+    <ProjectReference Include="..\NacreCraft.DataFixer\NacreCraft.DataFixer.csproj" />
+    <ProjectReference Include="..\NacreCraft.Registry\NacreCraft.Registry.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="K4os.Compression.LZ4" Version="1.3.8" />
+    <PackageReference Include="K4os.Compression.LZ4.Streams" Version="1.3.8" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

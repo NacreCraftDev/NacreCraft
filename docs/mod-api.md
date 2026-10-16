@@ -1,29 +1,29 @@
-# NetCraft-ModApi Reference
+# NacreCraft-ModApi Reference
 
-`NetCraft.ModApi` is the API surface NetCraft exposes to mods. It has two identities: for you it is an API library; for itself it is an ordinary mod (`id` is `netcraft-modapi`, shipping its own `ncmod.json` and injection probes).
+`NacreCraft.ModApi` is the API surface NacreCraft exposes to mods. It has two identities: for you it is an API library; for itself it is an ordinary mod (`id` is `nacrecraft-modapi`, shipping its own `ncmod.json` and injection probes).
 
 This file grows as the API grows. For architectural background, differences from Fabric, and how to write a mod, see [modding-guide.md](modding-guide.md).
 
-- Assembly: `NetCraft.ModApi.dll`
+- Assembly: `NacreCraft.ModApi.dll`
 
-- Dependencies: `NetCraft` (the main library), `NetCraft.Game`
+- Dependencies: `NacreCraft` (the main library), `NacreCraft.Game`
 
 The public surface is split into three namespaces:
 
 | Namespace | Contents | Notes |
 | --- | --- | --- |
-| `NetCraft.ModApi.Wrapper` | Event and subscription class `NcEvent<T>`, `Nc*` facades, `Nc*` object handles | Wrapper layer; kernel types appear only where the purity policy whitelists them |
-| `NetCraft.ModApi.Extension` | `[Inject]` / `[Mixin]` annotations | Extension points; rules bind to kernel class and method names |
-| `NetCraft.ModApi.Internal` | Injection probes | Do not reference directly |
+| `NacreCraft.ModApi.Wrapper` | Event and subscription class `NcEvent<T>`, `Nc*` facades, `Nc*` object handles | Wrapper layer; kernel types appear only where the purity policy whitelists them |
+| `NacreCraft.ModApi.Extension` | `[Inject]` / `[Mixin]` annotations | Extension points; rules bind to kernel class and method names |
+| `NacreCraft.ModApi.Internal` | Injection probes | Do not reference directly |
 
-The root namespace `NetCraft.ModApi` contains only the entry class `ModApiEntry`. `Wrapper` and `Extension` are two parallel routes; for how to choose, see [modding-guide.md 2.10](modding-guide.md#210-two-routes-wrapper-layer-and-extension-points).
+The root namespace `NacreCraft.ModApi` contains only the entry class `ModApiEntry`. `Wrapper` and `Extension` are two parallel routes; for how to choose, see [modding-guide.md 2.10](modding-guide.md#210-two-routes-wrapper-layer-and-extension-points).
 
 ***
 
 ## 1. Quick start
 
 ```csharp
-using NetCraft.ModApi.Wrapper;
+using NacreCraft.ModApi.Wrapper;
 
 public sealed class MyModEntry
 {
@@ -53,7 +53,7 @@ In `ncmod.json`, point `entry` at this class and leave `hooks` empty — the eve
 
 ## 2. Events
 
-All events live under `NetCraft.ModApi.Wrapper`; after `using NetCraft.ModApi.Wrapper;` they are available.
+All events live under `NacreCraft.ModApi.Wrapper`; after `using NacreCraft.ModApi.Wrapper;` they are available.
 
 ### 2.1 Summary table
 
@@ -95,7 +95,7 @@ IDisposable Subscribe(Action<T> handler)
 
 - Dispatch takes a snapshot of the callback list, so subscribing or unregistering from inside a callback does not affect the current dispatch.
 
-- **Handler exceptions are isolated**: a throwing callback is logged (`NetCraft-ModApi event handler exception`) and dispatch continues with the remaining handlers. A mod can never take down the kernel thread it is called on, nor suppress other mods' callbacks.
+- **Handler exceptions are isolated**: a throwing callback is logged (`NacreCraft-ModApi event handler exception`) and dispatch continues with the remaining handlers. A mod can never take down the kernel thread it is called on, nor suppress other mods' callbacks.
 
 - Without unregistering it stays effective forever; mods provide no unload mechanism, so manual unregistration is usually unnecessary.
 
@@ -315,8 +315,8 @@ There is a built-in `/ncmapi`, requiring permission level 2:
 
 ```
 /ncmapi
-Commands registered via NetCraft-ModApi: 2 total
-/ncmapi  list commands registered via NetCraft-ModApi
+Commands registered via NacreCraft-ModApi: 2 total
+/ncmapi  list commands registered via NacreCraft-ModApi
   /ncmapi
 /tpall  teleport all players to the executor
   /tpall
@@ -330,7 +330,7 @@ Usage lines are computed on the fly from the command tree's node structure: lite
 
 ## 4. Server facades
 
-The facades in this chapter all live under `NetCraft.ModApi.Wrapper`; after `using NetCraft.ModApi.Wrapper;` they are available.
+The facades in this chapter all live under `NacreCraft.ModApi.Wrapper`; after `using NacreCraft.ModApi.Wrapper;` they are available.
 
 Facades are `Nc*` static classes that gather capabilities scattered across the kernel into a few entry points. The kernel instance is captured by a probe when the main loop starts; when `NcServer.IsAvailable` is false everything below throws — use them only inside event callbacks, not from `Init`.
 
@@ -360,7 +360,7 @@ The remaining capabilities are also wrapped as handles:
 | `NcWhiteList` / `NcOpList` | whitelist / ops | `Count`, `Names`, `Contains`, `Add`, `Remove` (ops take a permission level and expose it) |
 | `NcBanList` / `NcIpBanList` | player / IP bans | `IsBanned`, `Ban(profile, reason?)`, `Unban` (IP bans are addressed by IP string) |
 
-Which kernel types may appear unwrapped on the public surface is governed by the wrapper purity policy — see [the ModApi README](https://github.com/NetCraft-Dev/NetCraft.ModApi#wrapper-purity-policy) (whitelisted / wrapped / internal). In short: brigadier, the `Primitives` value types, `ItemStack` and `GameProfile` are frozen by contract; everything else reaches mods through an `Nc*` handle. `NcAccess` ([4.3](#43-private-member-access)) is the deliberate hole in that wall.
+Which kernel types may appear unwrapped on the public surface is governed by the wrapper purity policy — see [the ModApi README](https://github.com/NacreCraft-Dev/NacreCraft.ModApi#wrapper-purity-policy) (whitelisted / wrapped / internal). In short: brigadier, the `Primitives` value types, `ItemStack` and `GameProfile` are frozen by contract; everything else reaches mods through an `Nc*` handle. `NcAccess` ([4.3](#43-private-member-access)) is the deliberate hole in that wall.
 
 ### 4.1 Registries
 
@@ -397,13 +397,13 @@ if (NcRecipes.IsAvailable)
 `NcAccess` is the escape hatch for kernel members the facades do not reach. It resolves a member by name, compiles a delegate for it on first use and caches the handle, so repeated calls cost no reflection binding.
 
 ```csharp
-using NetCraft.ModApi.Wrapper;
+using NacreCraft.ModApi.Wrapper;
 
 //a handle goes in, the kernel object comes out
 var raw = NcAccess.Unwrap(player);                     //NcPlayer → ServerPlayer
 
 //resolve a member once, then use it as often as you like
-var type = NcAccess.FindType("NetCraft.Game.Server.PlayerList")!;
+var type = NcAccess.FindType("NacreCraft.Game.Server.PlayerList")!;
 var field = NcAccess.Field(type, "players");
 var online = field!.Get(raw);
 
@@ -444,11 +444,11 @@ You do not need this section to write mods, but it may help when debugging.
 | `Internal.LevelProbe.OnChunkXxxAssigned(object, object)` | CallSite ×3 | chunk events, hooked at the assignment sites of `ServerChunkCache`'s three callback properties; a wrapper delegate is layered on before handing control back to the kernel |
 | `Internal.BlockProbe.OnXxx(...)`                         | CallSite ×3 | block events; breaking and drops hook `ServerBlockUpdates`, state changes hook the interface method on `IBlockUpdateSink` |
 
-`SignalProbe`'s signature takes only `string`, and the parameters of `CommandProbe`, `PlayerProbe`, and `LevelProbe` are declared as `object` — this is deliberate: during assembly `Lead.Hook` resolves the replacement method's signature, and once a kernel type appears in it, resolving it pulls up the kernel assembly early and injection misses its window. Kernel types appear only inside method bodies, by which time the code is already running.
+`SignalProbe`'s signature takes only `string`, and the parameters of `CommandProbe`, `PlayerProbe`, and `LevelProbe` are declared as `object` — this is deliberate: during assembly `NacreCraft.Hook` resolves the replacement method's signature, and once a kernel type appears in it, resolving it pulls up the kernel assembly early and injection misses its window. Kernel types appear only inside method bodies, by which time the code is already running.
 
 The only things that cannot be `object` in a signature are value-type parameters and return values: `object` is a reference on the stack while `float`/`bool` are values, and a mismatch is invalid IL. So `PlayerProbe.OnHurtPlayer` keeps `float` for the damage amount, and `OnRemovePlayer` and `OnHurtPlayer` keep `bool` return values.
 
-`BlockProbe` is an extension of this constraint: block position and state are the two value types `BlockPos`/`BlockState`, which can only be written into the signature as themselves. These two types come from `NetCraft.Primitives` and `NetCraft.Registry`, neither of which is on the injection list, so resolving them during assembly does not pull up the assemblies to be rewritten early.
+`BlockProbe` is an extension of this constraint: block position and state are the two value types `BlockPos`/`BlockState`, which can only be written into the signature as themselves. These two types come from `NacreCraft.Primitives` and `NacreCraft.Registry`, neither of which is on the injection list, so resolving them during assembly does not pull up the assemblies to be rewritten early.
 
 ### 5.2 Hook point list
 
@@ -456,7 +456,7 @@ ModApi's `ncmod.json` contains twenty-five rules, matching the table in 2.1 one-
 
 The four lifecycle phases come from three hook shapes: `Starting` is a Mark on `DedicatedServer::InitServer` (the first statement of boot), `Started` and `Stopping` are Marks on `MinecraftServer::Run` and `DedicatedServer::Stop` entries, and `Stopped` needs no rule of its own — `ServerProbe.OnServerRun` wraps the single call to `Run`, publishes `Stopped` when it returns, and only then lets the captured server instance go.
 
-`CommandManager::Execute` has two overloads that share one rule. `Lead.Hook`'s CallSite matches call sites by "type + method name", not by parameter list, and both overloads take two parameters, so the probe can take `object` for the first parameter and dispatch by the real type.
+`CommandManager::Execute` has two overloads that share one rule. `NacreCraft.Hook`'s CallSite matches call sites by "type + method name", not by parameter list, and both overloads take two parameters, so the probe can take `object` for the first parameter and dispatch by the real type.
 
 The two `PacketProcessor` rules are complementary: play-phase packets go through `ScheduleIfPossible` into the main-thread queue, while handshake and status phases go through `HandleNow` for immediate handling; any given packet passes through only one of them. Hooking only the former misses the handshake and status phases — which happen to be the easiest to probe with scripts, so during debugging this is easily misread as "the rule did not take effect".
 
@@ -488,7 +488,7 @@ Two infrastructure pieces landed with the wrapper purity policy: handler excepti
 
 Hooking the block cell on `SetBlock` does not work: it has two default parameters, `notifyNeighbors` and `strict`, so compiled call sites take anywhere from 4 to 6 parameters, and since CallSite matches by "type + method name" without looking at the parameter list, one replacement method cannot handle all three stack shapes. Instead it hooks two places: state sync hooks `IBlockUpdateSink::BlockChanged` (the only interface call in `ServerLevel.SetBlock`, covering every change with client sync), and breaking and drops hook `ServerBlockUpdates`' own methods.
 
-The entities cell is troublesome because `Entity` is defined in `NetCraft.Registry`, which is not on the injection list, so call sites that target it cannot be rewritten. `ClientLevel::AddEntity` is in the client assembly and is doable; a death event first requires resolving whether `Registry` can be rewritten.
+The entities cell is troublesome because `Entity` is defined in `NacreCraft.Registry`, which is not on the injection list, so call sites that target it cannot be rewritten. `ClientLevel::AddEntity` is in the client assembly and is doable; a death event first requires resolving whether `Registry` can be rewritten.
 
 For the network cell, `HandleChat` has long existed and `NetworkEvents.PacketReceived` provides a unified entry point, so per-`HandleXxx` hooks are much less valuable; only scenarios needing fine-grained filtering by packet type are worth adding.
 
@@ -498,4 +498,4 @@ All of the remaining ones need object references (entity instances, etc.), so th
 
 The interface-surface list (`__modapi_api.txt`, produced by `__scan_mod_api.py --api`) was also reviewed: entries qualified as capability entry points were gathered into the chapter 4 facades by domain, and the rest that are not exposed fall into three categories — protocol and packet handling (`Network.Protocol.*`), rendering and models (`Client.Render.*`), and terrain generation and density functions (`LevelGen.*`). These are kernel internals; using them directly would tie mods to implementation details, so a stable interface should first be opened in the kernel.
 
-On the server side there are two more things not wrapped as facades: the `ReloadableServerResources` instance hangs off `DedicatedServer`, and since ModApi does not reference `NetCraft.Server`, wrapping it requires first opening a property on the kernel base class; `ChunkSender` and `ServerWorldBorderListener` are internal flows with no use case for mods.
+On the server side there are two more things not wrapped as facades: the `ReloadableServerResources` instance hangs off `DedicatedServer`, and since ModApi does not reference `NacreCraft.Server`, wrapping it requires first opening a property on the kernel base class; `ChunkSender` and `ServerWorldBorderListener` are internal flows with no use case for mods.

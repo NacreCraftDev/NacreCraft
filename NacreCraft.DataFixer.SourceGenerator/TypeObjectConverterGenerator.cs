@@ -1,0 +1,212 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System.Collections.Immutable;
+using System.Linq;
+using System.Text;
+
+namespace NacreCraft.DataFixer.SourceGenerator;
+
+//Scan concrete classes inheriting NacreCraft.DataFixer.Types.Type<A> and generate TypeObjectConverterFactory
+//Align with Java type erasure semantics where Type<A> is equivalent to Type<Object>, providing the AsObjectType conversion entry
+//Currently a minimal viable version that only generates the default conversion; dedicated cases will be added later
+[Generator]
+public class TypeObjectConverterGenerator : IIncrementalGenerator
+{
+    public void Initialize(IncrementalGeneratorInitializationContext context)
+    {
+        //Scan all ClassDeclarationSyntax and filter concrete classes inheriting Type<A>
+        var subclasses = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                predicate: (node, _) => node is ClassDeclarationSyntax,
+                transform: (ctx, _) => ExtractSubclassInfo(ctx))
+            .Where(info => info != null)
+            .Select((info, _) => info!)
+            .Collect();
+
+        //Generate TypeObjectConverterFactory
+        context.RegisterSourceOutput(subclasses, (spc, infos) =>
+        {
+            GenerateFactory(spc, infos);
+        });
+    }
+
+    //Extract info on concrete classes inheriting Type<A>
+    private static SubclassInfo? ExtractSubclassInfo(GeneratorSyntaxContext ctx)
+    {
+        var classDecl = (ClassDeclarationSyntax)ctx.Node;
+        var symbol = ctx.SemanticModel.GetDeclaredSymbol(classDecl) as INamedTypeSymbol;
+        if (symbol == null) return null;
+        if (symbol.IsAbstract) return null;
+        if (symbol.TypeKind != TypeKind.Class) return null;
+
+        //Walk up BaseType to check whether it directly or indirectly inherits Type<A>
+        var baseType = symbol.BaseType;
+        while (baseType != null)
+        {
+            if (IsTypeA(baseType))
+            {
+                return CreateSubclassInfo(symbol, baseType);
+            }
+            baseType = baseType.BaseType;
+        }
+        return null;
+    }
+
+    //Check whether symbol is NacreCraft.DataFixer.Types.Type<A>
+    private static bool IsTypeA(INamedTypeSymbol symbol)
+    {
+        return symbol.Name == "Type"
+            && symbol.ContainingNamespace?.ToDisplayString() == "NacreCraft.DataFixer.Types"
+            && symbol.Arity == 1
+            && symbol.TypeKind == TypeKind.Class;
+    }
+
+    //Create subclass info
+    private static SubclassInfo CreateSubclassInfo(INamedTypeSymbol symbol, INamedTypeSymbol baseType)
+    {
+        //Fully qualified name format including containing types and namespace
+        var fullName = symbol.ToDisplayString(SymbolDisplayFormat);
+        var containingType = symbol.ContainingType?.ToDisplayString(SymbolDisplayFormat) ?? "";
+        //DisplayString of X in base Type<X>, used to tell whether A corresponds to the subclass's type parameter
+        var baseArgDisplay = baseType.TypeArguments.Length == 1
+            ? baseType.TypeArguments[0].ToDisplayString(SymbolDisplayFormat)
+            : "";
+
+        var fields = symbol.GetMembers()
+            .OfType<IFieldSymbol>()
+            .Where(f => !f.IsStatic && !f.IsConst)
+            .Select(f => new FieldSpec(f.Name, f.Type.ToDisplayString(SymbolDisplayFormat)))
+            .ToImmutableArray();
+        var ctors = symbol.Constructors
+            .Where(c => c.DeclaredAccessibility == Accessibility.Public)
+            .Select(c => new CtorSpec(
+                c.Parameters.Select(p => p.Type.ToDisplayString(SymbolDisplayFormat)).ToImmutableArray(),
+                c.Parameters.Select(p => p.Name).ToImmutableArray()))
+            .ToImmutableArray();
+
+        return new SubclassInfo(
+            fullName,
+            symbol.Name,
+            symbol.Arity,
+            containingType,
+            baseArgDisplay,
+            IsDirectSubclass(symbol, baseType),
+            fields,
+            ctors);
+    }
+
+    //Check whether the subclass directly inherits Type<its first type parameter>
+    //A directly inheriting subclass can be matched in AsObjectType<A>'s switch with subclass<X>
+    private static bool IsDirectSubclass(INamedTypeSymbol symbol, INamedTypeSymbol baseType)
+    {
+        if (symbol.Arity != 1) return false;
+        if (baseType.TypeArguments.Length != 1) return false;
+        var firstParam = symbol.TypeParameters[0];
+        var baseArg = baseType.TypeArguments[0];
+        //X in base Type<X> must be the subclass's first type parameter
+        return SymbolEqualityComparer.Default.Equals(baseArg, firstParam);
+    }
+
+    //Generate TypeObjectConverterFactory code
+    private static void GenerateFactory(SourceProductionContext spc, ImmutableArray<SubclassInfo> infos)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("namespace NacreCraft.DataFixer.Types;");
+        sb.AppendLine();
+        sb.AppendLine("using System;");
+        sb.AppendLine("using System.Collections.Generic;");
+        sb.AppendLine("using NacreCraft.DataFixer.Types.Templates;");
+        sb.AppendLine();
+        sb.AppendLine("//Discovered " + infos.Length + " concrete Type<A> subclasses");
+        sb.AppendLine("//A subclass directly inheriting Type<its first type parameter> can generate a switch case");
+        sb.AppendLine("//Indirect inheritance such as ListType<A>:Type<List<A>> needs special handling");
+        foreach (var info in infos.OrderBy(i => i.FullName))
+        {
+            var marker = info.IsDirectSubclass ? "[direct]" : "[indirect]";
+            sb.AppendLine("//" + marker + " " + info.FullName + " arity=" + info.Arity + " base=" + info.BaseArgumentDisplay);
+            foreach (var field in info.Fields)
+            {
+                sb.AppendLine("//  field " + field.Name + ": " + field.Type);
+            }
+            foreach (var ctor in info.Constructors)
+            {
+                sb.AppendLine("//  ctor(" + string.Join(", ", ctor.ParamTypes) + ")");
+            }
+        }
+        sb.AppendLine();
+        sb.AppendLine("public static class TypeObjectConverterFactory");
+        sb.AppendLine("{");
+        sb.AppendLine("    //AsObjectType converts Type<A> to Type<object>");
+        sb.AppendLine("    //When A is object and type directly inherits Type<object>, the original instance is returned as is");
+        sb.AppendLine("    //Otherwise wrap with TypeObjectWrapper to align with Java type erasure semantics");
+        sb.AppendLine("    public static Type<object> AsObjectType<A>(Type<A> type)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (type == null) return null!;");
+        sb.AppendLine("        if (type is Type<object> direct) return direct;");
+        sb.AppendLine("        return new TypeObjectWrapper(type);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    //AsObjectTypeUnsafe uses Unsafe.As to bypass runtime type checks");
+        sb.AppendLine("    //A value type A may access-violate because PrimitiveType<int>'s MethodTable has no Type<object> virtual method slot");
+        sb.AppendLine("    public static Type<object> AsObjectTypeUnsafe<A>(Type<A> type)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (type == null) return null!;");
+        sb.AppendLine("        return System.Runtime.CompilerServices.Unsafe.As<Type<A>, Type<object>>(ref type);");
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+
+        spc.AddSource("TypeObjectConverterFactory.g.cs", sb.ToString());
+    }
+
+    //SymbolDisplayFormat produces fully qualified names including containing types and namespace
+    private static readonly SymbolDisplayFormat SymbolDisplayFormat = new SymbolDisplayFormat(
+        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+        genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+        miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
+
+    //Subclass info; netstandard2.0 lacks IsExternalInit so a plain class is used instead of record
+    private sealed class SubclassInfo
+    {
+        public string FullName { get; }
+        public string ShortName { get; }
+        public int Arity { get; }
+        public string ContainingType { get; }
+        public string BaseArgumentDisplay { get; }
+        public bool IsDirectSubclass { get; }
+        public ImmutableArray<FieldSpec> Fields { get; }
+        public ImmutableArray<CtorSpec> Constructors { get; }
+
+        public SubclassInfo(string fullName, string shortName, int arity, string containingType,
+            string baseArgumentDisplay, bool isDirectSubclass,
+            ImmutableArray<FieldSpec> fields, ImmutableArray<CtorSpec> constructors)
+        {
+            FullName = fullName;
+            ShortName = shortName;
+            Arity = arity;
+            ContainingType = containingType;
+            BaseArgumentDisplay = baseArgumentDisplay;
+            IsDirectSubclass = isDirectSubclass;
+            Fields = fields;
+            Constructors = constructors;
+        }
+    }
+
+    private sealed class FieldSpec
+    {
+        public string Name { get; }
+        public string Type { get; }
+        public FieldSpec(string name, string type) { Name = name; Type = type; }
+    }
+
+    private sealed class CtorSpec
+    {
+        public ImmutableArray<string> ParamTypes { get; }
+        public ImmutableArray<string> ParamNames { get; }
+        public CtorSpec(ImmutableArray<string> paramTypes, ImmutableArray<string> paramNames)
+        {
+            ParamTypes = paramTypes;
+            ParamNames = paramNames;
+        }
+    }
+}

@@ -1,0 +1,26 @@
+using NacreCraft.Codec;
+
+namespace NacreCraft.Registry.Environment;
+
+//AmbientParticle ambient particle settings, maps to vanilla AmbientParticle
+public sealed class AmbientParticle
+{
+    public static readonly Codec<AmbientParticle> Codec = RecordCodecBuilder.Of2(
+        ParticleIdCodec.Instance.FieldOf("particle").ForGetter((AmbientParticle v) => v.Particle),
+        AttributeValueCodecs.UnitFloat.FieldOf("probability").ForGetter((AmbientParticle v) => v.Probability),
+        (particle, probability) => new AmbientParticle(particle, probability));
+
+    //This repository has no particle type registry data, so particles use a weak Identifier reference
+    public Identifier Particle { get; }
+
+    public float Probability { get; }
+
+    public AmbientParticle(Identifier particle, float probability)
+    {
+        Particle = particle;
+        Probability = probability;
+    }
+
+    public static IReadOnlyList<AmbientParticle> Of(Identifier particle, float probability)
+        => new[] { new AmbientParticle(particle, probability) };
+}

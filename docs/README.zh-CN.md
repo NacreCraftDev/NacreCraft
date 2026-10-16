@@ -1,10 +1,10 @@
-# NetCraft
+# NacreCraft
 
 用 C# / .NET 10 从零重写的 Minecraft 26.2。
 
 > 本文件是仓库根 [README.md](../README.md) 的中文版，如中英文描述不一致，以英文版为准。
 
-NetCraft 不是移植。这里没有逐行翻译原版 Java，也没有反编译产物。各子系统按 C# 惯用法写（`readonly struct`、`Span<T>`、源生成器、`AssemblyLoadContext`），但对外的行为保持一致：同样的 NBT 字节、同样的注册表 id、同样的区块文件、同样的网络包布局、同样的 DFU 升级路径。
+NacreCraft 不是移植。这里没有逐行翻译原版 Java，也没有反编译产物。各子系统按 C# 惯用法写（`readonly struct`、`Span<T>`、源生成器、`AssemblyLoadContext`），但对外的行为保持一致：同样的 NBT 字节、同样的注册表 id、同样的区块文件、同样的网络包布局、同样的 DFU 升级路径。
 
 ## 能力
 
@@ -44,31 +44,31 @@ NetCraft 不是移植。这里没有逐行翻译原版 Java，也没有反编译
 
 | 层 | 模块 | 职责 |
 |---|---|---|
-| 0 | `NetCraft.Primitives` | `ChunkPos`、`BlockPos`、`SectionPos`、`Vec3i`、`Direction`、体素形状 |
-| 0 | `NetCraft.Config` | `SharedConstants`、`Fixes`、`Optimizations`、`DebugFlags` |
-| 1 | `NetCraft.Util` | 日志、`CrashReport`、`BitSet`、`Mth`、执行器、`Xoroshiro128++`、`Profiler` |
-| 1 | `NetCraft.Nbt` | 13 种 tag、`NbtOps`、SNBT 解析器 |
-| 1 | `NetCraft.Codec` | `Codec` / `MapCodec` / `DynamicOps`、`RecordCodecBuilder` |
-| 1 | `NetCraft.DataFixer` | DFU 各阶段、高阶类型模拟、Profunctor optics |
-| 2 | `NetCraft.Storage` | MCA、`PalettedContainer`、`IOWorker`、`ChunkSource`、调度刻 |
-| 2 | `NetCraft.Registry` | `Identifier`、`ResourceKey<T>`、`Holder<T>` |
-| 3 | `NetCraft.Network` | 连接状态机、编解码 |
-| 3 | `NetCraft.Commands` | Brigadier 移植 |
-| 3 | `NetCraft.Network.Chat` | 文本组件 |
-| 4 | `NetCraft.Resources` | 资源包框架 |
-| 4 | `NetCraft.Gpu` | Vulkan、提交/渲染两阶段拆分 |
-| — | `NetCraft` | 内核入口，把各子 DLL 作为资源内嵌 |
-| — | `NetCraft.Game` | 客户端与服务端的共享游戏代码 |
-| — | `NetCraft.Client` | 客户端运行时与客户端侧协议监听器 |
-| — | `NetCraft.Server` | 服务端运行时 |
-| — | `NetCraft.ModLoader` | 运行时模组加载与注入 |
-| — | `NetCraft.Loader` | 命令行启动器、jar 资源提取 |
-| — | `NetCraft.TPGA` | 认证/代理服务，与内核无关 |
-| — | `NetCraft.DataFixer.SourceGenerator` | DFU 的 Roslyn 源生成器 |
+| 0 | `NacreCraft.Primitives` | `ChunkPos`、`BlockPos`、`SectionPos`、`Vec3i`、`Direction`、体素形状 |
+| 0 | `NacreCraft.Config` | `SharedConstants`、`Fixes`、`Optimizations`、`DebugFlags` |
+| 1 | `NacreCraft.Util` | 日志、`CrashReport`、`BitSet`、`Mth`、执行器、`Xoroshiro128++`、`Profiler` |
+| 1 | `NacreCraft.Nbt` | 13 种 tag、`NbtOps`、SNBT 解析器 |
+| 1 | `NacreCraft.Codec` | `Codec` / `MapCodec` / `DynamicOps`、`RecordCodecBuilder` |
+| 1 | `NacreCraft.DataFixer` | DFU 各阶段、高阶类型模拟、Profunctor optics |
+| 2 | `NacreCraft.Storage` | MCA、`PalettedContainer`、`IOWorker`、`ChunkSource`、调度刻 |
+| 2 | `NacreCraft.Registry` | `Identifier`、`ResourceKey<T>`、`Holder<T>` |
+| 3 | `NacreCraft.Network` | 连接状态机、编解码 |
+| 3 | `NacreCraft.Commands` | Brigadier 移植 |
+| 3 | `NacreCraft.Network.Chat` | 文本组件 |
+| 4 | `NacreCraft.Resources` | 资源包框架 |
+| 4 | `NacreCraft.Gpu` | Vulkan、提交/渲染两阶段拆分 |
+| — | `NacreCraft` | 内核入口，把各子 DLL 作为资源内嵌 |
+| — | `NacreCraft.Game` | 客户端与服务端的共享游戏代码 |
+| — | `NacreCraft.Client` | 客户端运行时与客户端侧协议监听器 |
+| — | `NacreCraft.Server` | 服务端运行时 |
+| — | `NacreCraft.ModLoader` | 运行时模组加载与注入 |
+| — | `NacreCraft.Loader` | 命令行启动器、jar 资源提取 |
+| — | `NacreCraft.TPGA` | 认证/代理服务，与内核无关 |
+| — | `NacreCraft.DataFixer.SourceGenerator` | DFU 的 Roslyn 源生成器 |
 
 ## 构建
 
-需要 .NET 10 SDK。解决方案是 `NetCraft.slnx`。`build.ps1` 包住整套流程，同时会把 `webui` 这个 React 前端编译进 `NetCraft.TPGA/wwwroot`。
+需要 .NET 10 SDK。解决方案是 `NacreCraft.slnx`。`build.ps1` 包住整套流程，同时会把 `webui` 这个 React 前端编译进 `NacreCraft.TPGA/wwwroot`。
 
 ```powershell
 ./build.ps1                      # webui + Debug
@@ -81,9 +81,9 @@ NetCraft 不是移植。这里没有逐行翻译原版 Java，也没有反编译
 
 | 仓库 | 内容 |
 |---|---|
-| **NetCraft**（本仓库） | 内核、业务层、GPU、客户端/服务端、加载器、TPGA |
-| [NetCraft.ModApi](https://github.com/NetCraft-Dev/NetCraft.ModApi) | 模组 API 表面，连同它编译所依赖的内核引用程序集 |
-| [NetCraft.DevTools](https://github.com/NetCraft-Dev/NetCraft.DevTools) | `ncm` 命令行工具与 `dotnet new ncm` 项目模板 |
+| **NacreCraft**（本仓库） | 内核、业务层、GPU、客户端/服务端、加载器、TPGA |
+| [NacreCraft.ModApi](https://github.com/NacreCraft-Dev/NacreCraft.ModApi) | 模组 API 表面，连同它编译所依赖的内核引用程序集 |
+| [NacreCraft.DevTools](https://github.com/NacreCraft-Dev/NacreCraft.DevTools) | `ncm` 命令行工具与 `dotnet new ncm` 项目模板 |
 
 客户端、服务端与加载器的构建产物另行发布。
 
@@ -94,7 +94,7 @@ NetCraft 不是移植。这里没有逐行翻译原版 Java，也没有反编译
 - `docs/server-console.md` —— 服务端控制台的两种模式与命令
 - `docs/README.zh-CN.md` —— 本文件
 - `CHANGELOG.md` —— 发布说明
-- `NetCraft.*/README.md` —— 各模块说明
+- `NacreCraft.*/README.md` —— 各模块说明
 
 ## 许可
 

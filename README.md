@@ -1,8 +1,8 @@
-# NetCraft
+# NacreCraft
 
 A from-scratch reimplementation of Minecraft 26.2 in C# / .NET 10.
 
-NetCraft is not a port. Nothing here is translated line by line from the original Java, and nothing is decompiled. Each subsystem is written against C# idioms — `readonly struct`, `Span<T>`, source generators, `AssemblyLoadContext` — while keeping observable behavior identical: the same NBT bytes, the same registry ids, the same chunk files, the same packet layouts, the same DFU upgrade paths.
+NacreCraft is not a port. Nothing here is translated line by line from the original Java, and nothing is decompiled. Each subsystem is written against C# idioms — `readonly struct`, `Span<T>`, source generators, `AssemblyLoadContext` — while keeping observable behavior identical: the same NBT bytes, the same registry ids, the same chunk files, the same packet layouts, the same DFU upgrade paths.
 
 ## Capabilities
 
@@ -42,36 +42,36 @@ Layers are dependency tiers — layer 0 depends on nothing, layer 4 sits on top 
 
 | Layer | Module | Role |
 |---|---|---|
-| 0 | `NetCraft.Primitives` | `ChunkPos`, `BlockPos`, `SectionPos`, `Vec3i`, `Direction`, voxel shapes |
-| 0 | `NetCraft.Config` | `SharedConstants`, `Fixes`, `Optimizations`, `DebugFlags` |
-| 1 | `NetCraft.Util` | Logging, `CrashReport`, `BitSet`, `Mth`, executors, `Xoroshiro128++`, `Profiler` |
-| 1 | `NetCraft.Nbt` | 13 tags, `NbtOps`, SNBT parser |
-| 1 | `NetCraft.Codec` | `Codec` / `MapCodec` / `DynamicOps`, `RecordCodecBuilder` |
-| 1 | `NetCraft.DataFixer` | DFU stages, higher-kinded simulation, Profunctor optics |
-| 2 | `NetCraft.Storage` | MCA, `PalettedContainer`, `IOWorker`, `ChunkSource`, scheduled ticks |
-| 2 | `NetCraft.Registry` | `Identifier`, `ResourceKey<T>`, `Holder<T>` |
-| 3 | `NetCraft.Network` | Connection state machines, codecs |
-| 3 | `NetCraft.Commands` | Brigadier port |
-| 3 | `NetCraft.Network.Chat` | Text components |
-| 4 | `NetCraft.Resources` | Resource pack framework |
-| 4 | `NetCraft.Gpu` | Vulkan, submission/render phase separation |
-| — | `NetCraft` | Kernel entry, embeds the sub-DLLs as resources |
-| — | `NetCraft.Game` | Shared client/server gameplay code |
-| — | `NetCraft.Client` | Client runtime and client-side protocol listeners |
-| — | `NetCraft.Server` | Dedicated server runtime |
-| — | `NetCraft.ModLoader` | Runtime mod loading and injection |
-| — | `NetCraft.Loader` | CLI launcher, jar asset extraction |
-| — | `NetCraft.TPGA` | Auth/proxy service, independent of the kernel |
-| — | `NetCraft.DataFixer.SourceGenerator` | Roslyn source generator for DFU |
+| 0 | `NacreCraft.Primitives` | `ChunkPos`, `BlockPos`, `SectionPos`, `Vec3i`, `Direction`, voxel shapes |
+| 0 | `NacreCraft.Config` | `SharedConstants`, `Fixes`, `Optimizations`, `DebugFlags` |
+| 1 | `NacreCraft.Util` | Logging, `CrashReport`, `BitSet`, `Mth`, executors, `Xoroshiro128++`, `Profiler` |
+| 1 | `NacreCraft.Nbt` | 13 tags, `NbtOps`, SNBT parser |
+| 1 | `NacreCraft.Codec` | `Codec` / `MapCodec` / `DynamicOps`, `RecordCodecBuilder` |
+| 1 | `NacreCraft.DataFixer` | DFU stages, higher-kinded simulation, Profunctor optics |
+| 2 | `NacreCraft.Storage` | MCA, `PalettedContainer`, `IOWorker`, `ChunkSource`, scheduled ticks |
+| 2 | `NacreCraft.Registry` | `Identifier`, `ResourceKey<T>`, `Holder<T>` |
+| 3 | `NacreCraft.Network` | Connection state machines, codecs |
+| 3 | `NacreCraft.Commands` | Brigadier port |
+| 3 | `NacreCraft.Network.Chat` | Text components |
+| 4 | `NacreCraft.Resources` | Resource pack framework |
+| 4 | `NacreCraft.Gpu` | Vulkan, submission/render phase separation |
+| — | `NacreCraft` | Kernel entry, embeds the sub-DLLs as resources |
+| — | `NacreCraft.Game` | Shared client/server gameplay code |
+| — | `NacreCraft.Client` | Client runtime and client-side protocol listeners |
+| — | `NacreCraft.Server` | Dedicated server runtime |
+| — | `NacreCraft.ModLoader` | Runtime mod loading and injection |
+| — | `NacreCraft.Loader` | CLI launcher, jar asset extraction |
+| — | `NacreCraft.TPGA` | Auth/proxy service, independent of the kernel |
+| — | `NacreCraft.DataFixer.SourceGenerator` | Roslyn source generator for DFU |
 
 
 ## Repositories
 
 | Repository | What it holds |
 |---|---|
-| **NetCraft** (this one) | Kernel, game layer, GPU, client/server, loader, TPGA |
-| [NetCraft.ModApi](https://github.com/NetCraft-Dev/NetCraft.ModApi) | The mod API surface, together with the kernel reference assemblies it builds against |
-| [NetCraft.DevTools](https://github.com/NetCraft-Dev/NetCraft.DevTools) | The `ncm` CLI and the `dotnet new ncm` project template |
+| **NacreCraft** (this one) | Kernel, game layer, GPU, client/server, loader, TPGA |
+| [NacreCraft.ModApi](https://github.com/NacreCraft-Dev/NacreCraft.ModApi) | The mod API surface, together with the kernel reference assemblies it builds against |
+| [NacreCraft.DevTools](https://github.com/NacreCraft-Dev/NacreCraft.DevTools) | The `ncm` CLI and the `dotnet new ncm` project template |
 
 Client, server and loader builds are published separately.
 
@@ -82,7 +82,7 @@ Client, server and loader builds are published separately.
 - `docs/server-console.md` — server console modes and commands
 - `docs/README.zh-CN.md` — this README in Chinese
 - `CHANGELOG.md` — release notes
-- `NetCraft.*/README.md` — per-module description
+- `NacreCraft.*/README.md` — per-module description
 
 ## License
 

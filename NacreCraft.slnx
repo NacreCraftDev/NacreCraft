@@ -1,0 +1,23 @@
+<Solution>
+  <Project Path="NacreCraft.Commands/NacreCraft.Commands.csproj" />
+  <Project Path="NacreCraft.Config/NacreCraft.Config.csproj" />
+  <Project Path="NacreCraft.Codec/NacreCraft.Codec.csproj" />
+  <Project Path="NacreCraft.DataFixer/NacreCraft.DataFixer.csproj" />
+  <Project Path="NacreCraft.DataFixer.SourceGenerator/NacreCraft.DataFixer.SourceGenerator.csproj" />
+  <Project Path="NacreCraft.Client/NacreCraft.Client.csproj" />
+  <Project Path="NacreCraft.Game/NacreCraft.Game.csproj" />
+  <Project Path="NacreCraft.Server/NacreCraft.Server.csproj" />
+  <Project Path="NacreCraft.ServerExe/NacreCraft.ServerExe.csproj" />
+  <Project Path="NacreCraft.ClientExe/NacreCraft.ClientExe.csproj" />
+  <Project Path="NacreCraft.Nbt/NacreCraft.Nbt.csproj" />
+  <Project Path="NacreCraft.Network/NacreCraft.Network.csproj" />
+  <Project Path="NacreCraft.ModLoader/NacreCraft.ModLoader.csproj" />
+  <Project Path="NacreCraft.Hook/NacreCraft.Hook.csproj" />
+  <Project Path="NacreCraft.Primitives/NacreCraft.Primitives.csproj" />
+  <Project Path="NacreCraft.Registry/NacreCraft.Registry.csproj" />
+  <Project Path="NacreCraft.Resources/NacreCraft.Resources.csproj" />
+  <Project Path="NacreCraft.Storage/NacreCraft.Storage.csproj" />
+  <Project Path="NacreCraft.Util/NacreCraft.Util.csproj" />
+  <Project Path="NacreCraft/NacreCraft.csproj" />
+  <Project Path="NacreCraft.Loader/NacreCraft.Loader.csproj" />
+</Solution>

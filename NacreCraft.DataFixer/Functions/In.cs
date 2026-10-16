@@ -1,0 +1,33 @@
+namespace NacreCraft.DataFixer.Functions;
+
+using System;
+using NacreCraft.Codec;
+using NacreCraft.DataFixer;
+using T = NacreCraft.DataFixer.Types;
+using NacreCraft.DataFixer.Types.Templates;
+
+//In recursive point incoming function maps to vanilla com.mojang.datafixers.functions.In
+//folds the unfold result back into RecursivePointType
+public sealed class In<A> : PointFree<Func<A, A>>
+{
+    private readonly RecursivePoint.RecursivePointType<A> _type;
+
+    public In(RecursivePoint.RecursivePointType<A> type)
+    {
+        _type = type;
+    }
+
+    //type returns the unfold->type function type, maps to DSL.func(type.unfold(), type)
+    public override T.Type<Func<A, A>> Type()
+        => DSL.Func(_type.Unfold(), _type);
+
+    public override string ToString(int level) => "In[" + _type + "]";
+
+    public override bool Equals(object? obj)
+        => obj is In<A> other && Equals(_type, other._type);
+
+    public override int GetHashCode() => _type?.GetHashCode() ?? 0;
+
+    public override Func<DynamicOps<object>, Func<A, A>> Eval()
+        => _ => x => x;
+}

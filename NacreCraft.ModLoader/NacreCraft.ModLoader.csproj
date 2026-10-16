@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NacreCraft\NacreCraft.csproj" />
+    <ProjectReference Include="..\NacreCraft.Hook\NacreCraft.Hook.csproj" />
+    <PackageReference Include="Mono.Cecil" Version="0.11.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="logo_net.png" LogicalName="logo_net.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="NacreCraft.Test" />
+  </ItemGroup>
+
+</Project>

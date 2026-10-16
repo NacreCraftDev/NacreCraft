@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:gui="using:NacreCraft.Server.Gui"
+             x:Class="NacreCraft.Server.Gui.ServerLogPanel">
+
+  <Grid RowDefinitions="Auto,10,*,10,Auto">
+    <TextBlock Classes="cardTitle" Text="LOG AND CHAT" />
+
+    <Border Grid.Row="2" CornerRadius="4"
+            Background="{DynamicResource ConsoleBackground}"
+            BorderBrush="{DynamicResource CardBorder}" BorderThickness="1">
+      <!--Logs do not wrap; overflow is viewed via the horizontal scrollbar, and without Auto long lines are simply cut off-->
+      <!--Uses a ListBox rather than a StackPanel because it virtualizes, keeping the layout of a thousand lines down to the few dozen visible ones-->
+      <!--Row content is filled by OnRowPrepared from the fragments in LogRow; no binding because TextBlock.Inlines cannot be bound-->
+      <ListBox x:Name="LogLines" Classes="plain" Padding="8,6"
+               ScrollViewer.VerticalScrollBarVisibility="Auto"
+               ScrollViewer.HorizontalScrollBarVisibility="Auto"
+               ContainerPrepared="OnRowPrepared">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="gui:LogRow">
+            <!--Fragments are pushed into Inlines via an attached property rather than filled by hand in ContainerPrepared
+                the control produced by ItemTemplate is not ListBoxItem.Content; it hangs under a ContentPresenter-->
+            <TextBlock Classes="logLine" gui:LogRowSpans.Spans="{Binding Spans}" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Border>
+
+    <Border Grid.Row="4" CornerRadius="4" Padding="8,6"
+            Background="{DynamicResource ConsoleBackground}"
+            BorderBrush="{DynamicResource CardBorder}" BorderThickness="1">
+      <Grid ColumnDefinitions="Auto,8,*">
+        <TextBlock Text="&#x203A;" FontSize="14" VerticalAlignment="Center"
+                   Foreground="{DynamicResource Accent}" />
+        <TextBox x:Name="CommandInput" Grid.Column="2" Classes="command" />
+      </Grid>
+    </Border>
+
+  </Grid>
+
+</UserControl>

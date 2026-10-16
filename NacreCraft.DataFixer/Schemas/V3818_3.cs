@@ -1,0 +1,50 @@
+namespace NacreCraft.DataFixer.Schemas;
+
+using System;
+using System.Collections.Generic;
+using NacreCraft.DataFixer.Fixes;
+using NacreCraft.DataFixer.Types.Templates;
+
+//V3818_3 maps to vanilla net.minecraft.util.datafix.schemas.V3818_3
+//registers the 1.20.5 data component template DATA_COMPONENTS covering 13 component types
+//later V4059/V4307 inherit and override the components method to extend the component set
+public class V3818_3 : NamespacedSchema
+{
+    public V3818_3(int versionKey, Schema? parent) : base(versionKey, parent) { }
+
+    //components builds a Map of 13 data component templates for DATA_COMPONENTS registration
+    //static method so V4059/V4307 can inherit, reuse, and extend with remove/put
+    public static Dictionary<string, Func<TypeTemplate>> Components(Schema schema)
+    {
+        var map = new Dictionary<string, Func<TypeTemplate>>();
+        map["minecraft:bees"] = () => DSL.List(DSL.OptionalFields("entity_data", References.EntityTree.In(schema)));
+        map["minecraft:block_entity_data"] = () => References.BlockEntity.In(schema);
+        map["minecraft:bundle_contents"] = () => DSL.List(References.ItemStack.In(schema));
+        map["minecraft:can_break"] = () => DSL.OptionalFields("predicates",
+            DSL.List(DSL.OptionalFields(FixConstants.StructureTemplateBlocks,
+                DSL.Or(References.BlockName.In(schema), DSL.List(References.BlockName.In(schema))))));
+        map["minecraft:can_place_on"] = () => DSL.OptionalFields("predicates",
+            DSL.List(DSL.OptionalFields(FixConstants.StructureTemplateBlocks,
+                DSL.Or(References.BlockName.In(schema), DSL.List(References.BlockName.In(schema))))));
+        map["minecraft:charged_projectiles"] = () => DSL.List(References.ItemStack.In(schema));
+        map["minecraft:container"] = () => DSL.List(DSL.OptionalFields(FixConstants.DecoratedPotBlockEntityItem, References.ItemStack.In(schema)));
+        map["minecraft:entity_data"] = () => References.EntityTree.In(schema);
+        map["minecraft:pot_decorations"] = () => DSL.List(References.ItemName.In(schema));
+        map["minecraft:food"] = () => DSL.OptionalFields(FixConstants.FoodUsingConvertsTo, References.ItemStack.In(schema));
+        map["minecraft:custom_name"] = () => References.TextComponent.In(schema);
+        map["minecraft:item_name"] = () => References.TextComponent.In(schema);
+        map["minecraft:lore"] = () => DSL.List(References.TextComponent.In(schema));
+        map["minecraft:written_book_content"] = () => DSL.OptionalFields(FixConstants.WrittenBookPages,
+            DSL.List(DSL.Or(
+                DSL.OptionalFields(FixConstants.WrittenBookRaw, References.TextComponent.In(schema),
+                    FixConstants.WrittenBookFiltered, References.TextComponent.In(schema)),
+                References.TextComponent.In(schema))));
+        return map;
+    }
+
+    public override void RegisterTypes(Schema schema, Dictionary<string, Func<TypeTemplate>> entityTypes, Dictionary<string, Func<TypeTemplate>> blockEntityTypes)
+    {
+        base.RegisterTypes(schema, entityTypes, blockEntityTypes);
+        schema.RegisterType(true, References.DataComponents, () => DSL.OptionalFieldsLazy(Components(schema)));
+    }
+}

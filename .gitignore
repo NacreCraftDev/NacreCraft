@@ -38,9 +38,9 @@ Thumbs.db
 *.exe
 *.pdb
 *.pdb.lock
-NetCraft.TPGA/wwwroot/
-NetCraft.Loader/assets/
-NetCraft.Loader/server.properties
+NacreCraft.TPGA/wwwroot/
+NacreCraft.Loader/assets/
+NacreCraft.Loader/server.properties
 
 *.nettrace
 *.nettrace.*
@@ -62,13 +62,13 @@ BenchmarkDotNet.Artifacts/
 *.tmp
 *.bak
 updata.ps1
-NetCraft.Test/
-NetCraft.Test1/
-NetCraft.Test2/
-NetCraft.Test3/
-NetCraft.TestMode/
-NetCraft.TestCrash/
-NetCraft.ClientHarness/
-NetCraft.Experimental/
+NacreCraft.Test/
+NacreCraft.Test1/
+NacreCraft.Test2/
+NacreCraft.Test3/
+NacreCraft.TestMode/
+NacreCraft.TestCrash/
+NacreCraft.ClientHarness/
+NacreCraft.Experimental/
 .pslocal/
 .psctx.json

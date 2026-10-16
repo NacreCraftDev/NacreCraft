@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ApplicationIcon>..\icon.ico</ApplicationIcon>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NacreCraft\NacreCraft.csproj" />
+    <ProjectReference Include="..\NacreCraft.ModLoader\NacreCraft.ModLoader.csproj" />
+    <ProjectReference Include="..\NacreCraft.Server\NacreCraft.Server.csproj" />
+  </ItemGroup>
+
+  <Import Project="..\NacreCraft.KernelDeploy.targets" />
+
+  <Target Name="KillRunningServer" BeforeTargets="BeforeBuild" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="taskkill /F /IM NacreCraft.ServerExe.exe /T"
+          Condition="$([MSBuild]::IsOSPlatform('Windows'))"
+          ContinueOnError="true"
+          StandardOutputImportance="low" StandardErrorImportance="low" />
+    <Exec Command="pkill -f NacreCraft.ServerExe"
+          Condition="!$([MSBuild]::IsOSPlatform('Windows'))"
+          ContinueOnError="true"
+          StandardOutputImportance="low" StandardErrorImportance="low" />
+  </Target>
+
+</Project>

@@ -1,0 +1,83 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>true</IsPackable>
+    <PackageId>NacreCraft</PackageId>
+    <Description>C#/.NET 10 reimplementation of Minecraft 26.2 - main aggregation library</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NacreCraft.Registry\NacreCraft.Registry.csproj">
+      <OutputItemType>ReferencePath</OutputItemType>
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\NacreCraft.Storage\NacreCraft.Storage.csproj">
+      <OutputItemType>ReferencePath</OutputItemType>
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\NacreCraft.Resources\NacreCraft.Resources.csproj">
+      <OutputItemType>ReferencePath</OutputItemType>
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\NacreCraft.Network\NacreCraft.Network.csproj">
+      <OutputItemType>ReferencePath</OutputItemType>
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\NacreCraft.Commands\NacreCraft.Commands.csproj">
+      <OutputItemType>ReferencePath</OutputItemType>
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\NacreCraft.Primitives\bin\$(Configuration)\net10.0\NacreCraft.Primitives.dll">
+      <LogicalName>NacreCraft.Embedded.NacreCraft.Primitives.dll</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\NacreCraft.Config\bin\$(Configuration)\net10.0\NacreCraft.Config.dll">
+      <LogicalName>NacreCraft.Embedded.NacreCraft.Config.dll</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\NacreCraft.Nbt\bin\$(Configuration)\net10.0\NacreCraft.Nbt.dll">
+      <LogicalName>NacreCraft.Embedded.NacreCraft.Nbt.dll</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\NacreCraft.Util\bin\$(Configuration)\net10.0\NacreCraft.Util.dll">
+      <LogicalName>NacreCraft.Embedded.NacreCraft.Util.dll</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\NacreCraft.Registry\bin\$(Configuration)\net10.0\NacreCraft.Registry.dll">
+      <LogicalName>NacreCraft.Embedded.NacreCraft.Registry.dll</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\NacreCraft.Storage\bin\$(Configuration)\net10.0\NacreCraft.Storage.dll">
+      <LogicalName>NacreCraft.Embedded.NacreCraft.Storage.dll</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\NacreCraft.Resources\bin\$(Configuration)\net10.0\NacreCraft.Resources.dll">
+      <LogicalName>NacreCraft.Embedded.NacreCraft.Resources.dll</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\NacreCraft.Network\bin\$(Configuration)\net10.0\NacreCraft.Network.dll">
+      <LogicalName>NacreCraft.Embedded.NacreCraft.Network.dll</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\NacreCraft.Commands\bin\$(Configuration)\net10.0\NacreCraft.Commands.dll">
+      <LogicalName>NacreCraft.Embedded.NacreCraft.Commands.dll</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Lang\*.json" LogicalName="assets/nacrecraft/lang/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <Target Name="CleanRedundantSubLibraries" AfterTargets="Build">
+    <ItemGroup>
+      <RedundantSubLibraries Include="$(OutputPath)NacreCraft.*.dll" Exclude="$(OutputPath)NacreCraft.dll" />
+    </ItemGroup>
+    <Delete Files="@(RedundantSubLibraries)" />
+    <Message Text="[CleanRedundantSubLibraries] Removed redundant sub-library dlls: %(RedundantSubLibraries.Filename)" Importance="high" />
+  </Target>
+
+</Project>

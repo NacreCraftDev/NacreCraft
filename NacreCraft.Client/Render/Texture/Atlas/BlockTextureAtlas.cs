@@ -1,0 +1,122 @@
+using NacreCraft.Client.Blaze3d.Systems;
+using NacreCraft.Client.Blaze3d.Buffers;
+using NacreCraft.Client.Blaze3d.Textures;
+using NacreCraft.Client.Blaze3d.Shaders;
+using NacreCraft.Client.Blaze3d.Pipeline;
+using NacreCraft.Client.Blaze3d.Vertex;
+using NacreCraft.Client.Blaze3d.Vulkan;
+using NacreCraft.Client.Blaze3d.Platform;
+using NacreCraft.Client.Blaze3d.Font;
+using NacreCraft.Client.Blaze3d.Resource;
+using NacreCraft.Client.Blaze3d.Audio;
+using NacreCraft.Client.Blaze3d.Framegraph;
+using NacreCraft.Client.Blaze3d.Preprocessor;
+using NacreCraft.Client.Blaze3d.Util;
+using NacreCraft.Client.Render;
+using NacreCraft.Client.Render.Model;
+using NacreCraft.Client.Render.Texture;
+using NacreCraft.Client.Render.Texture.Atlas;
+using NacreCraft.Client.Render.Item;
+using NacreCraft.Client.Render.Entity;
+using NacreCraft.Client.Render.Entity.State;
+using NacreCraft.Client.Render.State.Gui;
+using NacreCraft.Client.Gui;
+using NacreCraft.Client.Gui.Render;
+using NacreCraft.Client.Gui.Render.State;
+using NacreCraft.Client.Gui.Render.Pip;
+using NacreCraft.Client.Gui.Navigation;
+using NacreCraft.Client.Gui.Layouts;
+using NacreCraft.Client.Gui.Font;
+using NacreCraft.Client.Gui.Font.Providers;
+using NacreCraft.Client.Gui.Font.Glyphs;
+using NacreCraft.Client.Model;
+using NacreCraft.Client.Model.Geom;
+using NacreCraft.Client.Resources.Metadata.Gui;
+using NacreCraft.Client.Blaze3d;
+namespace NacreCraft.Client.Render.Texture.Atlas;
+
+//ITextureAtlas texture atlas query interface for BlockModelBaker to decouple from GpuDevice
+//BlockTextureAtlas implements it for production; tests can use a stub
+public interface ITextureAtlas
+{
+    //GetSprite looks up a sprite by name, returns null if not found
+    TextureAtlasSprite? GetSprite(string name);
+}
+
+//BlockTextureAtlas block texture atlas, maps to vanilla TextureAtlas
+//Takes a sprite list (name+pixels), stitches it into a GpuTexture with TextureStitcher and provides name→TextureAtlasSprite lookup
+//The GPU layer only does stitching+upload+UV lookup and does not scan assets (scanning is done by the Game layer's BlockTextureCollector)
+//nearest sampler keeps the pixel style from blurring block texture edges
+//Animated frames are unsupported and to be added later
+public sealed class BlockTextureAtlas : ITextureAtlas, IDisposable
+{
+    private readonly GpuDevice _device;
+    private readonly int _maxAtlasSize;
+    private GpuTexture? _atlasImage;
+    private GpuSampler? _sampler;
+    private readonly Dictionary<string, TextureAtlasSprite> _sprites = new();
+
+    //AtlasImage the stitched and uploaded atlas texture; null means not yet Built
+    public GpuTexture? AtlasImage => _atlasImage;
+    //Sampler atlas sampler with nearest filtering
+    public GpuSampler? Sampler => _sampler;
+    //Width/Height atlas size
+    public int Width { get; private set; }
+    public int Height { get; private set; }
+
+    public BlockTextureAtlas(GpuDevice device, int maxAtlasSize = 1024)
+    {
+        _device = device;
+        _maxAtlasSize = maxAtlasSize;
+    }
+
+    //Build stitches the sprite list and uploads to a GpuTexture
+    //Calling it again Disposes the old atlas and rebuilds
+    //Returns false when it does not fit within maxAtlasSize
+    public bool Build(IReadOnlyList<TextureStitcher.SpriteInput> sprites)
+    {
+        DisposeAtlas();
+        var stitcher = new TextureStitcher(_maxAtlasSize);
+        if (!stitcher.Stitch(sprites))
+            return false;
+        Width = stitcher.AtlasWidth;
+        Height = stitcher.AtlasHeight;
+        //Creates the atlas texture; ColorAttachment is not needed, only SampledImage
+        _atlasImage = _device.CreateTexture(null, GpuTexture.UsageTextureBinding, GpuFormat.Rgba8Unorm, Width, Height, 1, 1);
+        //Nearest sampling preserves the pixel style and does not repeat addresses to avoid bleeding
+        _sampler = _device.CreateSampler(AddressMode.ClampToEdge, AddressMode.ClampToEdge, FilterMode.Nearest, FilterMode.Nearest, 1, null);
+        //Clears everything first, then uploads each sprite region-wise
+        //Clearing avoids garbage data in uncovered regions
+        var zero = new byte[Width * Height * 4];
+        _atlasImage.Upload(zero);
+        foreach (var placed in stitcher.Placed)
+        {
+            if (placed.Pixels is null) continue;
+            _atlasImage.UploadRegion(placed.AtlasX, placed.AtlasY, placed.Width, placed.Height, placed.Pixels);
+            var sprite = new TextureAtlasSprite(placed.Name, placed.AtlasX, placed.AtlasY,
+                placed.Width, placed.Height, Width, Height, placed.Pixels);
+            _sprites[placed.Name] = sprite;
+        }
+        return true;
+    }
+
+    //GetSprite looks up a sprite by name, returns null if not found
+    //name format minecraft:block/stone
+    public TextureAtlasSprite? GetSprite(string name)
+        => _sprites.TryGetValue(name, out var s) ? s : null;
+
+    private void DisposeAtlas()
+    {
+        _atlasImage?.Dispose();
+        _sampler?.Dispose();
+        _atlasImage = null;
+        _sampler = null;
+        _sprites.Clear();
+    }
+
+    public void Dispose()
+    {
+        DisposeAtlas();
+        GC.SuppressFinalize(this);
+    }
+}

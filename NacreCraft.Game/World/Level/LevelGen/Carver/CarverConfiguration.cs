@@ -1,0 +1,192 @@
+using NacreCraft.Codec;
+using NacreCraft.Game.World.Level.Block;
+using NacreCraft.Registry;
+using NacreCraft.Registry.State;
+
+namespace NacreCraft.Game.World.Level.LevelGen.Carver;
+
+//CarverDebugSettings carver debug settings, maps to vanilla CarverDebugSettings
+//When debug is on, carved air/water/lava/barrier is swapped for eye-catching blocks; DEFAULT matches vanilla (button, candle, orange stained glass)
+public sealed class CarverDebugSettings
+{
+    //DEFAULT vanilla default debug settings; falls back to air when the block registry is not populated, avoiding exceptions in static init
+    public static readonly CarverDebugSettings DEFAULT = new(
+        false,
+        StateOf("acacia_button"),
+        StateOf("candle"),
+        StateOf("orange_stained_glass"),
+        StateOf("glass"));
+
+    public static readonly Codec<CarverDebugSettings> Codec =
+        RecordCodecBuilder.Of5<CarverDebugSettings, bool, BlockState, BlockState, BlockState, BlockState>(
+            Codecs.Bool.OptionalFieldOf("debug_mode", false).ForGetter<CarverDebugSettings, bool>(s => s.DebugMode),
+            BlockStateCodec.Instance.OptionalFieldOf("air_state", DEFAULT.AirState)
+                .ForGetter<CarverDebugSettings, BlockState>(s => s.AirState),
+            BlockStateCodec.Instance.OptionalFieldOf("water_state", DEFAULT.AirState)
+                .ForGetter<CarverDebugSettings, BlockState>(s => s.WaterState),
+            BlockStateCodec.Instance.OptionalFieldOf("lava_state", DEFAULT.AirState)
+                .ForGetter<CarverDebugSettings, BlockState>(s => s.LavaState),
+            BlockStateCodec.Instance.OptionalFieldOf("barrier_state", DEFAULT.AirState)
+                .ForGetter<CarverDebugSettings, BlockState>(s => s.BarrierState),
+            (debugMode, airState, waterState, lavaState, barrierState) =>
+                new CarverDebugSettings(debugMode, airState, waterState, lavaState, barrierState));
+
+    public bool DebugMode { get; }
+    public BlockState AirState { get; }
+    public BlockState WaterState { get; }
+    public BlockState LavaState { get; }
+    public BlockState BarrierState { get; }
+
+    public CarverDebugSettings(bool debugMode, BlockState airState, BlockState waterState, BlockState lavaState,
+        BlockState barrierState)
+    {
+        DebugMode = debugMode;
+        AirState = airState;
+        WaterState = waterState;
+        LavaState = lavaState;
+        BarrierState = barrierState;
+    }
+
+    //StateOf default block state by registry name; falls back to air when the block is missing
+    private static BlockState StateOf(string path)
+        => BuiltInRegistries.BLOCK.GetValue(Identifier.WithDefaultNamespace(path))?.DefaultBlockState
+            ?? Blocks.AIR.DefaultBlockState;
+}
+
+//CarverConfiguration carver configuration base, maps to vanilla CarverConfiguration
+//Vanilla extends ProbabilityFeatureConfiguration; the feature system is not ported yet, so Probability sits here directly
+public class CarverConfiguration
+{
+    public static readonly Codec<CarverConfiguration> Codec =
+        RecordCodecBuilder.Of6<CarverConfiguration, float, HeightProvider, FloatProvider, VerticalAnchor, CarverDebugSettings, HolderSet<NacreCraft.Registry.Block>>(
+            Codecs.Float.FieldOf("probability").ForGetter<CarverConfiguration, float>(c => c.Probability),
+            HeightProvider.Codec.FieldOf("y").ForGetter<CarverConfiguration, HeightProvider>(c => c.Y),
+            FloatProviders.Codec.FieldOf("yScale").ForGetter<CarverConfiguration, FloatProvider>(c => c.YScale),
+            VerticalAnchor.Codec.FieldOf("lava_level").ForGetter<CarverConfiguration, VerticalAnchor>(c => c.LavaLevel),
+            CarverDebugSettings.Codec.OptionalFieldOf("debug_settings", CarverDebugSettings.DEFAULT)
+                .ForGetter<CarverConfiguration, CarverDebugSettings>(c => c.DebugSettings),
+            HolderSetCodecs.BlockSet.FieldOf("replaceable")
+                .ForGetter<CarverConfiguration, HolderSet<NacreCraft.Registry.Block>>(c => c.Replaceable),
+            (probability, y, yScale, lavaLevel, debugSettings, replaceable) =>
+                new CarverConfiguration(probability, y, yScale, lavaLevel, debugSettings, replaceable));
+
+    public float Probability { get; }
+    public HeightProvider Y { get; }
+    public FloatProvider YScale { get; }
+    public VerticalAnchor LavaLevel { get; }
+    public CarverDebugSettings DebugSettings { get; }
+    public HolderSet<NacreCraft.Registry.Block> Replaceable { get; }
+
+    public CarverConfiguration(float probability, HeightProvider y, FloatProvider yScale, VerticalAnchor lavaLevel,
+        CarverDebugSettings debugSettings, HolderSet<NacreCraft.Registry.Block> replaceable)
+    {
+        Probability = probability;
+        Y = y;
+        YScale = yScale;
+        LavaLevel = lavaLevel;
+        DebugSettings = debugSettings;
+        Replaceable = replaceable;
+    }
+}
+
+//CaveCarverConfiguration cave carver configuration, maps to vanilla CaveCarverConfiguration
+public sealed class CaveCarverConfiguration : CarverConfiguration
+{
+    public static readonly Codec<CaveCarverConfiguration> Codec =
+        RecordCodecBuilder.Of4<CaveCarverConfiguration, CarverConfiguration, FloatProvider, FloatProvider, FloatProvider>(
+            new FieldCodec<CaveCarverConfiguration, CarverConfiguration>(CarverConfiguration.Codec,
+                c => (CarverConfiguration)c),
+            FloatProviders.Codec.FieldOf("horizontal_radius_multiplier")
+                .ForGetter<CaveCarverConfiguration, FloatProvider>(c => c.HorizontalRadiusMultiplier),
+            FloatProviders.Codec.FieldOf("vertical_radius_multiplier")
+                .ForGetter<CaveCarverConfiguration, FloatProvider>(c => c.VerticalRadiusMultiplier),
+            FloatProviders.Codec.FieldOf("floor_level").ForGetter<CaveCarverConfiguration, FloatProvider>(c => c.FloorLevel),
+            (baseConfig, horizontalRadiusMultiplier, verticalRadiusMultiplier, floorLevel) =>
+                new CaveCarverConfiguration(baseConfig, horizontalRadiusMultiplier, verticalRadiusMultiplier, floorLevel));
+
+    public FloatProvider HorizontalRadiusMultiplier { get; }
+    public FloatProvider VerticalRadiusMultiplier { get; }
+    public FloatProvider FloorLevel { get; }
+
+    public CaveCarverConfiguration(CarverConfiguration baseConfig, FloatProvider horizontalRadiusMultiplier,
+        FloatProvider verticalRadiusMultiplier, FloatProvider floorLevel)
+        : base(baseConfig.Probability, baseConfig.Y, baseConfig.YScale, baseConfig.LavaLevel, baseConfig.DebugSettings,
+            baseConfig.Replaceable)
+    {
+        HorizontalRadiusMultiplier = horizontalRadiusMultiplier;
+        VerticalRadiusMultiplier = verticalRadiusMultiplier;
+        FloorLevel = floorLevel;
+    }
+
+    public CaveCarverConfiguration(float probability, HeightProvider y, FloatProvider yScale, VerticalAnchor lavaLevel,
+        HolderSet<NacreCraft.Registry.Block> replaceable, FloatProvider horizontalRadiusMultiplier,
+        FloatProvider verticalRadiusMultiplier, FloatProvider floorLevel)
+        : this(new CarverConfiguration(probability, y, yScale, lavaLevel, CarverDebugSettings.DEFAULT, replaceable),
+            horizontalRadiusMultiplier, verticalRadiusMultiplier, floorLevel)
+    {
+    }
+}
+
+//CanyonCarverConfiguration canyon carver configuration, maps to vanilla CanyonCarverConfiguration
+public sealed class CanyonCarverConfiguration : CarverConfiguration
+{
+    public static readonly Codec<CanyonCarverConfiguration> Codec =
+        RecordCodecBuilder.Of3<CanyonCarverConfiguration, CarverConfiguration, FloatProvider, CanyonShapeConfiguration>(
+            new FieldCodec<CanyonCarverConfiguration, CarverConfiguration>(CarverConfiguration.Codec,
+                c => (CarverConfiguration)c),
+            FloatProviders.Codec.FieldOf("vertical_rotation")
+                .ForGetter<CanyonCarverConfiguration, FloatProvider>(c => c.VerticalRotation),
+            CanyonShapeConfiguration.Codec.FieldOf("shape")
+                .ForGetter<CanyonCarverConfiguration, CanyonShapeConfiguration>(c => c.Shape),
+            (baseConfig, verticalRotation, shape) => new CanyonCarverConfiguration(baseConfig, verticalRotation, shape));
+
+    public FloatProvider VerticalRotation { get; }
+    public CanyonShapeConfiguration Shape { get; }
+
+    public CanyonCarverConfiguration(CarverConfiguration baseConfig, FloatProvider verticalRotation,
+        CanyonShapeConfiguration shape)
+        : base(baseConfig.Probability, baseConfig.Y, baseConfig.YScale, baseConfig.LavaLevel, baseConfig.DebugSettings,
+            baseConfig.Replaceable)
+    {
+        VerticalRotation = verticalRotation;
+        Shape = shape;
+    }
+}
+
+//CanyonShapeConfiguration canyon shape configuration, maps to vanilla CanyonShapeConfiguration
+public sealed class CanyonShapeConfiguration
+{
+    public static readonly Codec<CanyonShapeConfiguration> Codec =
+        RecordCodecBuilder.Of6<CanyonShapeConfiguration, FloatProvider, FloatProvider, int, FloatProvider, float, float>(
+            FloatProviders.Codec.FieldOf("distance_factor")
+                .ForGetter<CanyonShapeConfiguration, FloatProvider>(s => s.DistanceFactor),
+            FloatProviders.Codec.FieldOf("thickness").ForGetter<CanyonShapeConfiguration, FloatProvider>(s => s.Thickness),
+            Codecs.Int.FieldOf("width_smoothness").ForGetter<CanyonShapeConfiguration, int>(s => s.WidthSmoothness),
+            FloatProviders.Codec.FieldOf("horizontal_radius_factor")
+                .ForGetter<CanyonShapeConfiguration, FloatProvider>(s => s.HorizontalRadiusFactor),
+            Codecs.Float.FieldOf("vertical_radius_default_factor")
+                .ForGetter<CanyonShapeConfiguration, float>(s => s.VerticalRadiusDefaultFactor),
+            Codecs.Float.FieldOf("vertical_radius_center_factor")
+                .ForGetter<CanyonShapeConfiguration, float>(s => s.VerticalRadiusCenterFactor),
+            (distanceFactor, thickness, widthSmoothness, horizontalRadiusFactor, verticalRadiusDefaultFactor,
+                verticalRadiusCenterFactor) => new CanyonShapeConfiguration(distanceFactor, thickness, widthSmoothness,
+                horizontalRadiusFactor, verticalRadiusDefaultFactor, verticalRadiusCenterFactor));
+
+    public FloatProvider DistanceFactor { get; }
+    public FloatProvider Thickness { get; }
+    public int WidthSmoothness { get; }
+    public FloatProvider HorizontalRadiusFactor { get; }
+    public float VerticalRadiusDefaultFactor { get; }
+    public float VerticalRadiusCenterFactor { get; }
+
+    public CanyonShapeConfiguration(FloatProvider distanceFactor, FloatProvider thickness, int widthSmoothness,
+        FloatProvider horizontalRadiusFactor, float verticalRadiusDefaultFactor, float verticalRadiusCenterFactor)
+    {
+        DistanceFactor = distanceFactor;
+        Thickness = thickness;
+        WidthSmoothness = widthSmoothness;
+        HorizontalRadiusFactor = horizontalRadiusFactor;
+        VerticalRadiusDefaultFactor = verticalRadiusDefaultFactor;
+        VerticalRadiusCenterFactor = verticalRadiusCenterFactor;
+    }
+}

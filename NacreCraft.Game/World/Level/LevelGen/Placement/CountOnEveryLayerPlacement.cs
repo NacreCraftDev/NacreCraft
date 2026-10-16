@@ -1,0 +1,89 @@
+using NacreCraft.Codec;
+using NacreCraft.Game.World.Level.Block;
+using NacreCraft.Primitives;
+using NacreCraft.Registry;
+using NacreCraft.Registry.State;
+using NacreCraft.Util.Random;
+
+namespace NacreCraft.Game.World.Level.LevelGen.Placement;
+
+//CountOnEveryLayerPlacement per-layer count placement, maps to vanilla CountOnEveryLayerPlacement
+//Walks down from the surface layer by layer looking for placeable ground, scattering count points per layer until one layer fails entirely
+public sealed class CountOnEveryLayerPlacement : PlacementModifier
+{
+    public static readonly Codec<CountOnEveryLayerPlacement> Codec =
+        new SingleFieldPlacementCodec<CountOnEveryLayerPlacement, IntProvider>(
+            IntProviders.NonNegativeCodec.FieldOf("count"),
+            count => new CountOnEveryLayerPlacement(count),
+            placement => placement.CountProvider);
+
+    //CountProvider points scattered per layer; the property name avoids the vanilla field name count
+    public IntProvider CountProvider { get; }
+
+    private CountOnEveryLayerPlacement(IntProvider count) => CountProvider = count;
+
+    //Of construction entry, maps to vanilla of
+    public static CountOnEveryLayerPlacement Of(IntProvider count) => new(count);
+
+    public static CountOnEveryLayerPlacement Of(int count) => new(ConstantInt.Of(count));
+
+    public override IEnumerable<BlockPos> GetPositions(PlacementContext context, RandomSource random, BlockPos origin)
+    {
+        var positions = new List<BlockPos>();
+        var layer = 0;
+        bool foundAny;
+        do
+        {
+            foundAny = false;
+            var count = CountProvider.Sample(random);
+            for (var i = 0; i < count; i++)
+            {
+                var x = random.NextInt(16) + origin.X;
+                var z = random.NextInt(16) + origin.Z;
+                var startY = context.Level.GetHeight(Heightmap.Types.MotionBlocking, x, z);
+                var y = FindOnGroundYPosition(context, x, startY, z, layer);
+                if (y != int.MaxValue)
+                {
+                    positions.Add(new BlockPos(x, y, z));
+                    foundAny = true;
+                }
+            }
+            layer++;
+        } while (foundAny);
+        return positions;
+    }
+
+    //FindOnGroundYPosition search down from the surface for the cell above the layer-th solid ground, maps to vanilla findOnGroundYPosition
+    private static int FindOnGroundYPosition(PlacementContext context, int xStart, int yStart, int zStart, int layerToPlaceOn)
+    {
+        var currentLayer = 0;
+        var currentBlock = context.Level.GetBlockState(xStart, yStart, zStart);
+        for (var y = yStart; y >= context.GetMinGenY() + 1; y--)
+        {
+            var belowBlock = context.Level.GetBlockState(xStart, y - 1, zStart);
+            if (!IsEmpty(belowBlock) && IsEmpty(currentBlock) && belowBlock.Owner != Blocks.BEDROCK)
+            {
+                if (currentLayer == layerToPlaceOn) return y;
+                currentLayer++;
+            }
+            currentBlock = belowBlock;
+        }
+        return int.MaxValue;
+    }
+
+    //IsEmpty empty fluid check, maps to vanilla isEmpty
+    private static bool IsEmpty(BlockState state)
+        => state.Owner == Blocks.AIR || state.Owner == Blocks.WATER || state.Owner == Blocks.LAVA;
+
+    public override PlacementModifierType Type => CountOnEveryLayerPlacementType.Instance;
+}
+
+//CountOnEveryLayerPlacementType, maps to vanilla PlacementModifierType.COUNT_ON_EVERY_LAYER
+public sealed class CountOnEveryLayerPlacementType : PlacementModifierType<CountOnEveryLayerPlacement>
+{
+    public static readonly CountOnEveryLayerPlacementType Instance = Register(
+        Identifier.WithDefaultNamespace("count_on_every_layer"), new CountOnEveryLayerPlacementType());
+
+    private CountOnEveryLayerPlacementType()
+        : base(Identifier.WithDefaultNamespace("count_on_every_layer"), CountOnEveryLayerPlacement.Codec) { }
+}

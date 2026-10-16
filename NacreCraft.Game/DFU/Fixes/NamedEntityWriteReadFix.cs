@@ -1,0 +1,50 @@
+using NacreCraft.Codec;
+using NacreCraft.DataFixer.Schemas;
+using T = NacreCraft.DataFixer.Types;
+
+namespace NacreCraft.Game.DFU.Fixes;
+
+using NacreCraft.DataFixer.Fixes;
+
+using NacreCraft.DataFixer;
+
+//Named entity write-read fix parent, maps to vanilla net.minecraft.util.datafix.fixes.NamedEntityWriteReadFix
+//Matches a specific entity by entityName then applies the subclass's fix via write+fix+read
+public abstract class NamedEntityWriteReadFix : DataFix
+{
+    private readonly string _name;
+    private readonly string _entityName;
+    private readonly DSL.ITypeReference _type;
+
+    protected abstract Dynamic<object> Fix(Dynamic<object> input);
+
+    public NamedEntityWriteReadFix(Schema outputSchema, bool changesType, string name, DSL.ITypeReference type, string entityName)
+        : base(outputSchema, changesType)
+    {
+        _name = name;
+        _type = type;
+        _entityName = entityName;
+    }
+
+    protected override TypeRewriteRule MakeRule()
+    {
+        var inputEntityType = GetInputSchema().GetType(_type);
+        var inputEntityChoiceType = GetInputSchema().GetChoiceType(_type, _entityName);
+        var outputEntityType = GetOutputSchema().GetType(_type);
+        var entityF = DSL.NamedChoice(_entityName, inputEntityChoiceType);
+        var patchedEntityType = ExtraDataFixUtils.PatchSubType(inputEntityType, inputEntityType, outputEntityType);
+        return FixInternal(inputEntityType, outputEntityType, patchedEntityType, entityF);
+    }
+
+    //fixInternal builds the rule from inputType and outputType and patchedType and choiceFinder
+    private TypeRewriteRule FixInternal(
+        T.Type<object> inputEntityType, T.Type<object> outputEntityType, T.Type<object> patchedEntityType,
+        OpticFinder<object> choiceFinder)
+        => FixTypeEverywhereTyped(_name, inputEntityType, outputEntityType, typed =>
+        {
+            if (!typed.GetOptional(choiceFinder).IsPresent)
+                return ExtraDataFixUtils.Cast<object, object>(outputEntityType, typed);
+            var fakeTyped = ExtraDataFixUtils.Cast<object, object>(patchedEntityType, typed);
+            return DataFixUtils.WriteAndReadTypedOrThrow<object, object>(fakeTyped, outputEntityType, d => Fix(d));
+        });
+}
