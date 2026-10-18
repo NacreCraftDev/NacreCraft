@@ -59,15 +59,15 @@ public sealed class PauseScreen : Screen
     {
         var cx = GuiWidth / 2;
         var cy = GuiHeight / 2;
-        //If the dirt background tile texture fails to load, textureId=0 falls back to a gray placeholder without blocking the menu
-        var dirtId = Minecraft.GpuApp?.RegisterTexture(Identifier.WithDefaultNamespace("textures/block/dirt.png")) ?? 0;
+        //In-world menus use the inworld variant of the vanilla 32x32 menu background, which is already darkened
+        var dirtId = Minecraft.GpuApp?.RegisterTexture(Identifier.WithDefaultNamespace("textures/gui/inworld_menu_background.png")) ?? 0;
         _dirtBg = new GuiImage
         {
             TextureId = dirtId,
-            TextureWidth = 16,
-            TextureHeight = 16,
+            TextureWidth = 32,
+            TextureHeight = 32,
             Tile = true,
-            Tint = GuiColor.FromRgb(64, 64, 64),
+            Tint = GuiColor.White,
             X = 0,
             Y = 0,
             Width = GuiWidth,

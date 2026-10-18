@@ -72,7 +72,7 @@ public abstract class ProjectileItemBase : Item, ProjectileItem
     //Use spawns the projectile 0.1 blocks below the eyes and shoots it along the view direction; consumption and syncing are left to the caller
     public virtual void Use(PersistentServerLevel level, ServerPlayer player, ItemStack stack)
     {
-        var position = new Vec3(player.Position.X, player.Position.Y + ServerPlayer.EyeHeight - 0.1,
+        var position = new Vec3(player.Position.X, player.Position.Y + player.EyeHeight - 0.1,
             player.Position.Z);
         var projectile = AsProjectile(position, stack);
         projectile.SetOwner(player.Uuid);

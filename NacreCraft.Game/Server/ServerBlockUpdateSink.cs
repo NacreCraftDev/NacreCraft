@@ -47,18 +47,28 @@ public sealed class ServerBlockUpdateSink : IBlockUpdateSink
 
     //FlushBlockUpdates sends the accumulated block changes to clients, maps to vanilla ChunkHolder.broadcastChanges
     //On broadcast the current state at the position is read; a cell changed multiple times in one tick sends only the last
+    //Changes are merged by section as vanilla does, so a burst of thousands of cells costs one packet per section touched
     public void FlushBlockUpdates()
     {
         if (_pendingBlockUpdates.Count == 0) return;
+        var sections = new Dictionary<SectionPos, List<long>>();
         foreach (var pos in _pendingBlockUpdates)
         {
             var state = _level.GetBlockState(pos);
             if (state is not { } current) continue;
-            //The dispatch sequence is the first-hand basis for debugging client behavior; without it there is only guesswork
-            Log.Debug($"[Send] block update {pos} -> {current.Owner.Id}");
-            _players.BroadcastAll(new ClientboundBlockUpdatePacket(pos, current.Id));
+            var section = SectionPos.Of(pos);
+            if (!sections.TryGetValue(section, out var packed))
+                sections[section] = packed = new List<long>();
+            //Each entry is (state id << 12) | the in-section offset, consistent with ClientboundSectionBlocksUpdatePacket
+            packed.Add(((long)current.Id << 12) | (ushort)SectionPos.SectionRelativePos(pos));
         }
         _pendingBlockUpdates.Clear();
+        foreach (var (section, packed) in sections)
+        {
+            //The dispatch sequence is the first-hand basis for debugging client behavior; without it there is only guesswork
+            Log.Debug($"[Send] section blocks update {section.X} {section.Y} {section.Z} count={packed.Count}");
+            _players.BroadcastAll(new ClientboundSectionBlocksUpdatePacket(section, packed.ToArray()));
+        }
     }
 
     //LevelEvent broadcasts a world event, maps to vanilla Level.levelEvent

@@ -133,7 +133,9 @@ public sealed class GuiResourceManager : IDisposable
     //RegisterTexture loads a PNG from a stream, registers it as a texture and returns a textureId
     //cacheKey must identify the bytes uniquely, which for pack content is the resource identifier
     //A second call with the same key returns the cached id directly; a read or decode failure returns 0
-    public int RegisterTexture(Stream stream, string cacheKey)
+    //nearest picks the sampling pair: GUI sprites come from the vanilla GUI atlas, which is NEAREST for both min and
+    //mag; a plain texture uses the AbstractTexture default of NEAREST minification with LINEAR magnification
+    public int RegisterTexture(Stream stream, string cacheKey, bool nearest = false)
     {
         if (_textureCache.TryGetValue(cacheKey, out var cached)) return cached;
         byte[] bytes;
@@ -157,7 +159,9 @@ public sealed class GuiResourceManager : IDisposable
         }
         var img = _device.CreateTexture(null, GpuTexture.UsageTextureBinding, GpuFormat.Rgba8Unorm, result.Width, result.Height, 1, 1);
         img.Upload(result.Data);
-        var sampler = _device.CreateSampler(AddressMode.ClampToEdge, AddressMode.ClampToEdge, FilterMode.Linear, FilterMode.Linear, 1, null);
+        var minFilter = FilterMode.Nearest;
+        var magFilter = nearest ? FilterMode.Nearest : FilterMode.Linear;
+        var sampler = _device.CreateSampler(AddressMode.ClampToEdge, AddressMode.ClampToEdge, minFilter, magFilter, 1, null);
         var texture = TextureSetup.SingleTexture(img, sampler);
         var id = _nextTextureId++;
         _textures[id] = texture;
@@ -187,11 +191,13 @@ public sealed class GuiResourceManager : IDisposable
 
     //RegisterFontTexture registers a dynamic glyph atlas texture and returns a TextureSetup
     //Used by F7 when GlyphStitcher creates a FontTexture to register the atlas GpuTexture and get a TextureSetup
-    //The sampler reuses LinearFilter+RepeatAddress=false, consistent with FontAtlas
+    //Nearest sampling matches vanilla: FontTexture builds its sampler with FilterMode.NEAREST and GlyphRenderState
+    //builds its texture setup with getClampToEdge(FilterMode.NEAREST). Linear sampling smears the 1-bit glyph bitmaps
+    //once guiScale magnifies them by a non-integer factor
     //The descriptorSet is lazily created and cached by ResolveDescriptorSet
     public TextureSetup RegisterFontTexture(GpuTexture image)
     {
-        var sampler = _device.CreateSampler(AddressMode.ClampToEdge, AddressMode.ClampToEdge, FilterMode.Linear, FilterMode.Linear, 1, null);
+        var sampler = _device.CreateSampler(AddressMode.ClampToEdge, AddressMode.ClampToEdge, FilterMode.Nearest, FilterMode.Nearest, 1, null);
         var texture = TextureSetup.SingleTexture(image, sampler);
         return texture;
     }

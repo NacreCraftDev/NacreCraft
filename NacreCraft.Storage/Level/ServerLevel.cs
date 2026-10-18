@@ -15,8 +15,14 @@ namespace NacreCraft.Storage;
 //ServerLevel, server level abstract class, maps to vanilla net.minecraft.world.level.ServerLevel
 //Holds the dimension identifier and the level data access entry point; the block update chain also lives here as the single entry point for all world changes
 //Implements ILevelReader, exposing the set of reads the predicate layer needs to the Registry side
-public abstract class ServerLevel : ILevelReader
+public abstract class ServerLevel : ILevelReader, NacreCraft.Registry.IEntityInsideHost
 {
+    //HorizontalLimit, the horizontal world bound, the vanilla ±30,000,000 block limit
+    private const int HorizontalLimit = 30000000;
+
+    //VerticalLimit, the vertical bound an entity may be placed in, the vanilla ±20,000,000 limit
+    private const int VerticalLimit = 20000000;
+
     //Built lazily; it cannot be built during construction before the instance is ready
     private INeighborUpdater? _neighborUpdater;
 
@@ -242,6 +248,13 @@ public abstract class ServerLevel : ILevelReader
     public virtual bool IsLoaded(BlockPos pos)
         => pos.Y >= MinBuildHeight && pos.Y < MaxBuildHeight
             && GetLoadedChunk(new ChunkPos(pos.X >> 4, pos.Z >> 4)) is not null;
+
+    //IsInSpawnableBounds whether the position is inside the bounds an entity may be placed in, maps to vanilla Level.isInSpawnableBounds
+    //Vanilla rejects teleports landing outside them; the vertical limit is wider than the build height but still finite
+    public static bool IsInSpawnableBounds(BlockPos pos)
+        => pos.Y >= -VerticalLimit && pos.Y < VerticalLimit
+            && pos.X >= -HorizontalLimit && pos.Z >= -HorizontalLimit
+            && pos.X < HorizontalLimit && pos.Z < HorizontalLimit;
 
     //GetFluidState: the fluid state at the position, giving empty fluid when the block state is unavailable, maps to vanilla getFluidState
     public virtual FluidState GetFluidState(BlockPos pos)
@@ -586,48 +599,40 @@ public abstract class ServerLevel : ILevelReader
         return behaviour.IsSignalSource ? GetDirectSignal(pos, direction) : 0;
     }
 
-    //ExtraEntityBoxes, bounding boxes from outside the entity manager; players are not in the entity manager and are injected by the Game layer
-    public Func<IEnumerable<AABB>>? ExtraEntityBoxes { get; set; }
+    //CheckInsideBlocks dispatches the entity-inside-block callback for the blocks this entity now covers, maps to vanilla Entity.checkInsideBlocks
+    //Reached from the entity's own movement, so it runs once per move rather than once per level tick
+    public void CheckInsideBlocks(NacreCraft.Registry.Entity entity)
+        => CheckInsideBlocks(entity.BoundingBox, entity);
 
-    //EntityBoxes, all bounding boxes taking part in the entity-inside test; subclasses wire in the entity manager's entities
-    protected virtual IEnumerable<AABB> EntityBoxes()
-        => ExtraEntityBoxes?.Invoke() ?? Enumerable.Empty<AABB>();
-
-    //DispatchEntityInside dispatches the entity-inside-block callback, maps to vanilla Entity.checkInsideBlocks
-    //Called after each entity move per tick, dispatching to each block covered by a slightly shrunk bounding box
-    //Block reads use the non-loading variant: this runs every tick and must not incidentally pull up an unloaded neighboring chunk
-    public void DispatchEntityInside()
+    //CheckInsideBlocks overload for a caller with no entity to hand over: the player boxes the game layer injects
+    //Block reads use the non-loading variant: this runs per movement and must not incidentally pull up an unloaded neighboring chunk
+    public void CheckInsideBlocks(AABB box, NacreCraft.Registry.Entity? entity)
     {
-        foreach (var box in EntityBoxes())
-        {
-            var shrunk = box.Deflate(1.0E-3);
-            var minX = Mth.Floor(shrunk.Min.X);
-            var maxX = Mth.Floor(shrunk.Max.X);
-            var minY = Mth.Floor(shrunk.Min.Y);
-            var maxY = Mth.Floor(shrunk.Max.Y);
-            var minZ = Mth.Floor(shrunk.Min.Z);
-            var maxZ = Mth.Floor(shrunk.Max.Z);
-            for (var x = minX; x <= maxX; x++)
-                for (var y = minY; y <= maxY; y++)
-                    for (var z = minZ; z <= maxZ; z++)
-                    {
-                        var pos = new BlockPos(x, y, z);
-                        var state = GetBlockStateIfLoaded(pos);
-                        if (state?.Owner is IEntityInsideBehaviour behaviour)
-                            behaviour.OnEntityInside(this, pos, state.Value);
-                    }
-        }
+        var shrunk = box.Deflate(1.0E-3);
+        //The box can sit far outside the world, and the saturating cast would then leave a bound where incrementing wraps
+        //Nothing beyond these limits holds a block, so the ranges stop there; a box fully outside gives an empty loop
+        var minX = Math.Max(Mth.Floor(shrunk.Min.X), -HorizontalLimit);
+        var maxX = Math.Min(Mth.Floor(shrunk.Max.X), HorizontalLimit - 1);
+        var minY = Math.Max(Mth.Floor(shrunk.Min.Y), MinBuildHeight);
+        var maxY = Math.Min(Mth.Floor(shrunk.Max.Y), MaxBuildHeight - 1);
+        var minZ = Math.Max(Mth.Floor(shrunk.Min.Z), -HorizontalLimit);
+        var maxZ = Math.Min(Mth.Floor(shrunk.Max.Z), HorizontalLimit - 1);
+        for (var x = minX; x <= maxX; x++)
+            for (var y = minY; y <= maxY; y++)
+                for (var z = minZ; z <= maxZ; z++)
+                {
+                    var pos = new BlockPos(x, y, z);
+                    var state = GetBlockStateIfLoaded(pos);
+                    if (state?.Owner is IEntityInsideBehaviour behaviour)
+                        behaviour.OnEntityInside(this, pos, state.Value, entity);
+                }
     }
 
     //CountEntitiesInBox counts entities in the box, used by pressure plates for signal strength, maps to the counting use of vanilla getEntitiesOfClass
-    //Players are counted separately through ExtraEntityBoxes; level entities are left to subclasses
+    //Players sit in the entity manager like any other entity, so there is no longer a separate player pass here
     public int CountEntitiesInBox(AABB box)
     {
-        var count = 0;
-        if (ExtraEntityBoxes is not null)
-            foreach (var playerBox in ExtraEntityBoxes())
-                if (box.Intersects(playerBox)) count++;
-        return count + CountLevelEntitiesInBox(box);
+        return CountLevelEntitiesInBox(box);
     }
 
     //CountLevelEntitiesInBox counts entities in the level entity manager; 0 for levels without one

@@ -187,6 +187,9 @@ public abstract class MinecraftServer
     //Running whether it is in the main loop
     public bool Running => _running;
 
+    //Stopping whether a shutdown was requested, which stays set when the loop never started
+    public bool Stopping => _shutdownCts.IsCancellationRequested;
+
     //TickCount accumulated Tick count, for diagnostics
     public long TickCount => _tickCount;
 

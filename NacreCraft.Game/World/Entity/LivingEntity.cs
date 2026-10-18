@@ -67,18 +67,26 @@ public abstract class LivingEntity : NacreCraft.Registry.Entity, IEquipmentHolde
     //HasEffect whether the effect is active, maps to vanilla hasEffect
     public bool HasEffect(Holder<NacreCraft.Registry.MobEffect> effect) => Effects.Get(effect) is not null;
 
-    //AddEffect adds or overwrites an effect, maps to the core of vanilla addEffect
-    public bool AddEffect(MobEffectInstance effect)
+    //AddEffect adds an effect, maps to the core of vanilla addEffect
+    //An effect already present is only replaced when the new one is stronger, or equally strong and longer lasting;
+    //a weaker or shorter one is refused, which is what MobEffectInstance.update decides in vanilla
+    public virtual bool AddEffect(MobEffectInstance effect)
     {
+        if (Effects.Get(effect.Effect) is { } existing)
+        {
+            if (effect.Amplifier < existing.Amplifier) return false;
+            if (effect.Amplifier == existing.Amplifier && effect.Duration < existing.Duration) return false;
+        }
+
         Effects.Add(effect.Effect, effect);
         return true;
     }
 
     //RemoveEffect removes one effect, maps to vanilla removeEffect
-    public bool RemoveEffect(Holder<NacreCraft.Registry.MobEffect> effect) => Effects.Remove(effect);
+    public virtual bool RemoveEffect(Holder<NacreCraft.Registry.MobEffect> effect) => Effects.Remove(effect);
 
     //RemoveAllEffects clears every effect and reports whether anything was removed, maps to vanilla removeAllEffects
-    public bool RemoveAllEffects()
+    public virtual bool RemoveAllEffects()
     {
         if (Effects.Map.Count == 0) return false;
         Effects.Clear();
@@ -86,7 +94,7 @@ public abstract class LivingEntity : NacreCraft.Registry.Entity, IEquipmentHolde
     }
 
     //TickEffects ages the active effects and drops the expired ones, maps to the effect part of vanilla tickEffects
-    public void TickEffects()
+    public virtual void TickEffects()
     {
         if (Effects.Map.Count == 0) return;
         List<Holder<NacreCraft.Registry.MobEffect>>? expired = null;
@@ -219,11 +227,12 @@ public abstract class LivingEntity : NacreCraft.Registry.Entity, IEquipmentHolde
     //Health current health, default 20 matching the vanilla MAX_HEALTH default
     public float Health { get; private set; } = 20f;
 
-    //MaxHealth maximum health, overridden by subclasses as needed
-    public float MaxHealth { get; protected set; } = 20f;
+    //MaxHealth maximum health read from the attribute rather than stored, maps to vanilla getMaxHealth
+    //Going through the attribute is what lets a health modifier actually raise the ceiling instead of only the number shown
+    public float MaxHealth => (float)GetAttributeValue(NacreCraft.Registry.EntityAttribute.Attributes.MaxHealth);
 
     //InvulnerableTime remaining invulnerability ticks after being hurt, maps to vanilla invulnerableTime
-    public int InvulnerableTime { get; private set; }
+    public int InvulnerableTime { get; protected set; }
 
     //IsDeadOrDying whether health dropped to zero, maps to vanilla isDeadOrDying
     public bool IsDeadOrDying => Health <= 0f;

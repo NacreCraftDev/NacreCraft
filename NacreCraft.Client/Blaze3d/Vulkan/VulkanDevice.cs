@@ -241,15 +241,17 @@ public sealed unsafe class VulkanDevice : GpuDeviceBackend
         return (buffer, memory);
     }
 
-    //RunOneTimeCommand submits a one-time command buffer and waits for completion
+    //RunOneTimeCommand submits a one-time command buffer and, unless told otherwise, waits for completion
+    //The wait is what lets a caller free the resources the command read; a caller that defers that free by a frame can
+    //skip it and keep the render thread moving
     //Used for image layout transitions and buffer copies
-    public void RunOneTimeCommand(Action<CommandBuffer> record)
+    public void RunOneTimeCommand(Action<CommandBuffer> record, bool waitForCompletion = true)
     {
         //Diagnostic: this submit shares the graphics queue and the command pool with the render thread's frame
         //submit, so a stall inside it only shows up as an enter without a matching leave
         var diag = Interlocked.Increment(ref _oneTimeDiag) <= 12;
         if (diag)
-            Log.Info($"one-time command enter thread={Environment.CurrentManagedThreadId}");
+            Log.Debug($"one-time command enter thread={Environment.CurrentManagedThreadId}");
         var allocInfo = new CommandBufferAllocateInfo
         {
             SType = StructureType.CommandBufferAllocateInfo,
@@ -277,12 +279,16 @@ public sealed unsafe class VulkanDevice : GpuDeviceBackend
         };
         lock (QueueLock)
         {
-            _vk.QueueSubmit(_graphicsQueue, 1, &submitInfo, default);
-            _vk.QueueWaitIdle(_graphicsQueue);
+            var result = _vk.QueueSubmit(_graphicsQueue, 1, &submitInfo, default);
+            //The caller is usually in the middle of setting up a resource, so the result code is what tells device loss
+            //apart from running out of memory
+            if (result != Result.Success)
+                Log.Debug($"one-time command QueueSubmit failed: {result}");
+            if (waitForCompletion) _vk.QueueWaitIdle(_graphicsQueue);
         }
         _vk.FreeCommandBuffers(_device, _commandPool, 1, &cmd);
         if (diag)
-            Log.Info($"one-time command leave thread={Environment.CurrentManagedThreadId}");
+            Log.Debug($"one-time command leave thread={Environment.CurrentManagedThreadId}");
     }
     //WaitIdle waits for all device queues to idle
     public void WaitIdle()

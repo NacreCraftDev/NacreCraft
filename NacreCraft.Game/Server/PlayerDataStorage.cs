@@ -69,30 +69,18 @@ public sealed class PlayerDataStorage
     {
         var tag = new CompoundTag();
         tag.PutInt("DataVersion", SharedConstants.WorldDataVersion);
-        //Pos is a double list, Rotation a float list, aligned with vanilla Entity save
-        tag.Put("Pos", new ListTag
-        {
-            new DoubleTag(player.Position.X),
-            new DoubleTag(player.Position.Y),
-            new DoubleTag(player.Position.Z),
-        });
-        tag.Put("Rotation", new ListTag
-        {
-            new FloatTag(player.Yaw),
-            new FloatTag(player.Pitch),
-        });
-        tag.PutFloat("Health", player.Health);
-        //Attributes share the same field name and structure as the entity save; only changed attributes are written
-        player.Attributes.WriteTo(tag);
+        //The entity half comes from the shared implementation, which already writes Pos, Rotation, UUID, Motion, OnGround
+        //and Tags, plus Health and attributes through the living layer; maps to vanilla PlayerList.save calling
+        //player.saveWithoutId, so none of those may be written again below or the two copies would drift
+        player.SaveWithoutId(tag);
         //The ability state must carry flying, so creative-toggled flight is still there on rejoin, maps to the abilities of vanilla Player.addAdditionalSaveData
         player.Abilities.WriteTo(tag);
         tag.PutInt("playerGameType", player.GameType.Id);
         tag.PutString("Dimension", OverworldDimension);
         tag.PutInt("SelectedItemSlot", player.Inventory.SelectedSlot);
         tag.PutInt("XpLevel", player.XpLevel);
-        tag.PutFloat("XpP", player.XpProgress);
+        tag.PutFloat("XpP", player.XpP);
         tag.PutInt("XpTotal", player.XpTotal);
-        tag.PutIntArray("UUID", UuidToIntArray(player.Profile.Id));
         tag.Put("Inventory", InventoryToTag(player.Inventory));
         return tag;
     }
@@ -100,19 +88,12 @@ public sealed class PlayerDataStorage
     //Apply restores state from player NBT; missing fields keep default values
     public static void Apply(CompoundTag tag, ServerPlayer player)
     {
-        var pos = tag.GetList("Pos");
-        if (pos is { Count: 3 })
-            player.Position = new Vec3(
-                pos.GetDouble(0)!.Value, pos.GetDouble(1)!.Value, pos.GetDouble(2)!.Value);
-        var rotation = tag.GetList("Rotation");
-        if (rotation is { Count: 2 })
-        {
-            player.Yaw = rotation.GetFloat(0)!.Value;
-            player.Pitch = rotation.GetFloat(1)!.Value;
-        }
-        //Read attributes back first; the max health must be computed from the restored attributes
-        player.Attributes.ReadFrom(tag);
-        player.Health = tag.Contains("Health") ? tag.GetFloatValue("Health") : player.MaxHealth;
+        //The entity half is read back by the shared implementation, which restores position, rotation, motion, on-ground,
+        //health and attributes on the way; maps to vanilla PlayerList.load calling player.load
+        player.Load(tag);
+        //The uuid in the save is not trusted: a player's identity is its profile, and saves written before the two layers
+        //shared a serializer stored the int array in the .NET layout instead of the big endian one the entity save uses
+        player.Uuid = player.Profile.Id;
         //Read abilities back first, then recompute once by the saved game type
         //Order matches vanilla: Player reads abilities first, ServerPlayer sets gameMode after
         //The creative derivation branch does not touch flying, so the player's toggled flight state is kept
@@ -123,7 +104,7 @@ public sealed class PlayerDataStorage
         player.GameType = savedGameType ?? player.GameType;
         player.Inventory.SelectedSlot = tag.GetIntValue("SelectedItemSlot");
         player.XpLevel = tag.GetIntValue("XpLevel");
-        player.XpProgress = tag.GetFloatValue("XpP");
+        player.XpP = tag.GetFloatValue("XpP");
         player.XpTotal = tag.GetIntValue("XpTotal");
         ApplyInventory(tag.GetList("Inventory"), player.Inventory);
     }
@@ -171,17 +152,4 @@ public sealed class PlayerDataStorage
         }
     }
 
-    //UuidToIntArray splits the UUID into 4 ints, aligned with the IntArray structure of vanilla UUIDUtil
-    //The byte order uses .NET Guid's memory layout, different from the Java version; local reads/writes are self-consistent, but reading a vanilla save needs conversion
-    private static int[] UuidToIntArray(Guid uuid)
-    {
-        var bytes = uuid.ToByteArray();
-        return new[]
-        {
-            BitConverter.ToInt32(bytes, 0),
-            BitConverter.ToInt32(bytes, 4),
-            BitConverter.ToInt32(bytes, 8),
-            BitConverter.ToInt32(bytes, 12),
-        };
-    }
 }

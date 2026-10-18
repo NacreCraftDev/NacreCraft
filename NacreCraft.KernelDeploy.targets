@@ -23,6 +23,44 @@
           Condition="'$(OS)' != 'Windows_NT' And Exists('$(OutputPath)$(AssemblyName).deps.json')" />
   </Target>
 
+  <!--
+    Publish builds its file list from the references rather than reusing the build output, so the split done after Build
+    does not survive: every NacreCraft.*.dll lands in the publish root again and no kernel folder is created. The same
+    split has to run once more against the publish directory, otherwise a published server starts without its kernel.
+  -->
+  <Target Name="DeployKernelAssembliesToPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <KernelKeepAssembly Include="$(KernelKeepAssemblies)" />
+      <PublishedKernelAssembly Include="$(PublishDir)NacreCraft.*.dll"
+                               Exclude="@(KernelKeepAssembly->'$(PublishDir)%(Identity).dll')" />
+    </ItemGroup>
+    <MakeDir Directories="$(PublishDir)$(KernelDirectoryName)" Condition="'@(PublishedKernelAssembly)' != ''" />
+    <Copy SourceFiles="@(PublishedKernelAssembly)"
+          DestinationFolder="$(PublishDir)$(KernelDirectoryName)"
+          SkipUnchangedFiles="true"
+          Condition="'@(PublishedKernelAssembly)' != ''" />
+    <Delete Files="@(PublishedKernelAssembly)" Condition="'@(PublishedKernelAssembly)' != ''" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)NacreCraft.StripKernelDeps.ps1&quot; -DepsPath &quot;$(PublishDir)$(AssemblyName).deps.json&quot; -Keep &quot;$(KernelKeepAssemblies)&quot;"
+          Condition="'$(OS)' == 'Windows_NT' And Exists('$(PublishDir)$(AssemblyName).deps.json')" />
+    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildThisFileDirectory)NacreCraft.StripKernelDeps.ps1&quot; -DepsPath &quot;$(PublishDir)$(AssemblyName).deps.json&quot; -Keep &quot;$(KernelKeepAssemblies)&quot;"
+          Condition="'$(OS)' != 'Windows_NT' And Exists('$(PublishDir)$(AssemblyName).deps.json')" />
+  </Target>
+
+  <!--
+    The native layer is a Rust artifact outside the NuGet graph, so publish never collects it. Copy the build output when
+    it exists; NativeStackGuard looks for it under runtimes/<rid>/native.
+  -->
+  <Target Name="DeployNativeLayerToPublish" AfterTargets="Publish" Condition="'$(RuntimeIdentifier)' != ''">
+    <ItemGroup>
+      <PublishedNativeLayer Include="$(MSBuildThisFileDirectory)NacreCraft.Native\out\$(RuntimeIdentifier)\nacrecraft_native.*" />
+      <PublishedNativeLayer Include="$(MSBuildThisFileDirectory)NacreCraft.Native\out\$(RuntimeIdentifier)\libnacrecraft_native.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PublishedNativeLayer)"
+          DestinationFolder="$(PublishDir)runtimes\$(RuntimeIdentifier)\native"
+          SkipUnchangedFiles="true"
+          Condition="'@(PublishedNativeLayer)' != ''" />
+  </Target>
+
   <Target Name="CleanKernelAssemblies" AfterTargets="Clean">
     <RemoveDir Directories="$(OutputPath)$(KernelDirectoryName)" />
   </Target>

@@ -110,6 +110,44 @@ public sealed partial class HookEngine
         return this;
     }
 
+    //SearchPathVariable extra directories the rewriter may look in for a referenced assembly, separated by the platform's
+    //path separator
+    //The kernel holds only NacreCraft's own assemblies, while a third-party package lives with the runtime instead. Naming
+    //that place here keeps rewriting independent of whatever layout the launcher chose
+    public const string SearchPathVariable = "NC_ASSEMBLY_SEARCH_PATH";
+
+    //CreateResolver builds the resolver for one rewrite
+    //Cecil resolves references again while writing metadata, parameter defaults among them, so a dependency missing from
+    //every search directory fails the write even though reading the module succeeded
+    //The final pass adds the location of every assembly already in the process: that is the one source of truth which does
+    //not depend on a path convention, and it costs nothing because those assemblies are loaded anyway
+    private static DefaultAssemblyResolver CreateResolver(string? assemblyPath)
+    {
+        var resolver = new DefaultAssemblyResolver();
+        if (assemblyPath is not null)
+            resolver.AddSearchDirectory(Path.GetDirectoryName(Path.GetFullPath(assemblyPath))!);
+
+        resolver.AddSearchDirectory(Directory.GetCurrentDirectory());
+        resolver.AddSearchDirectory(AppContext.BaseDirectory);
+        resolver.AddSearchDirectory(Path.Combine(AppContext.BaseDirectory, "kernel"));
+
+        //Named by the launcher or by hand: several directories separated by the platform's separator
+        var named = Environment.GetEnvironmentVariable(SearchPathVariable);
+        if (!string.IsNullOrWhiteSpace(named))
+        {
+            foreach (var directory in named.Split(Path.PathSeparator,
+                         StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                resolver.AddSearchDirectory(directory);
+        }
+
+        foreach (var loaded in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            if (loaded.IsDynamic || loaded.Location.Length == 0) continue;
+            resolver.AddSearchDirectory(Path.GetDirectoryName(loaded.Location)!);
+        }
+        return resolver;
+    }
+
     public byte[] Rewrite(string assemblyPath)
     {
         Seal();
@@ -119,7 +157,8 @@ public sealed partial class HookEngine
         {
             ReadingMode = ReadingMode.Immediate,
             ReadWrite = false,
-            InMemory = true
+            InMemory = true,
+            AssemblyResolver = CreateResolver(assemblyPath)
         };
 
         using var asm = AssemblyDefinition.ReadAssembly(assemblyPath, readerParams);
@@ -140,7 +179,9 @@ public sealed partial class HookEngine
         {
             ReadingMode = ReadingMode.Immediate,
             ReadWrite = false,
-            InMemory = true
+            InMemory = true,
+            //No path to go by here, so the target's own directory is the one source this cannot add
+            AssemblyResolver = CreateResolver(null)
         };
 
         using var asm = AssemblyDefinition.ReadAssembly(input, readerParams);
@@ -584,17 +625,30 @@ public sealed partial class HookEngine
                 presentMethods.Add(methodKey);
                 if (noOptimizeTargets.Contains(methodKey))
                     MarkNotOptimized(method);
+                //A method body holds exactly one replacement, so the rules aimed at it are ordered and only the highest
+                //lands; the rest are told they lost instead of vanishing. Probes and marks stack: each brings its own pair
+                //of calls, so all of them run and the priority only decides the order they are inserted in.
                 if (rs.MethodBody.TryGetValue(methodKey, out var bodyRules) && bodyRules.Count > 0)
                 {
-                    ReplaceMethodBody(method, module, bodyRules[0]);
+                    var ordered = OrderRules(bodyRules);
+                    ReplaceMethodBody(method, module, ordered[0]);
+                    //The rest of the replacements lost, and anything hanging off the original body lost with them: a probe
+                    //or a mark attaches to instructions that no longer exist once the body has been swapped out
+                    for (var index = 1; index < ordered.Count; index++)
+                        RecordOutcome(ordered[index], HookOutcomeKind.ConflictLost,
+                            $"lost to {ordered[0].SourceMod ?? "unknown"} on the same method body");
+                    ReportDisplaced(rs.Probe, methodKey, ordered[0]);
+                    ReportDisplaced(rs.Mark, methodKey, ordered[0]);
                 }
-                else if (rs.Probe.TryGetValue(methodKey, out var probeRules) && probeRules.Count > 0)
+                else
                 {
-                    InstrumentMethod(method, module, probeRules[0]);
-                }
-                else if (rs.Mark.TryGetValue(methodKey, out var markRules) && markRules.Count > 0)
-                {
-                    MarkMethod(method, module, markRules[0]);
+                    if (rs.Probe.TryGetValue(methodKey, out var probeRules) && probeRules.Count > 0)
+                        foreach (var rule in OrderRules(probeRules))
+                            InstrumentMethod(method, module, rule);
+
+                    if (rs.Mark.TryGetValue(methodKey, out var markRules) && markRules.Count > 0)
+                        foreach (var rule in OrderRules(markRules))
+                            MarkMethod(method, module, rule);
                 }
             }
 
@@ -651,6 +705,28 @@ public sealed partial class HookEngine
         }
     }
 
+    //OrderRules orders the rules aimed at one host: higher priority first, then by source mod so the outcome does not
+    //depend on the order the mods happened to be scanned in
+    private static List<HookRule> OrderRules(List<HookRule> rules)
+    {
+        var ordered = new List<HookRule>(rules);
+        ordered.Sort((left, right) =>
+        {
+            var byPriority = right.Priority.CompareTo(left.Priority);
+            return byPriority != 0 ? byPriority : string.CompareOrdinal(left.SourceMod ?? "", right.SourceMod ?? "");
+        });
+        return ordered;
+    }
+
+    //ReportDisplaced records rules of another kind that can no longer attach, because the body they hang off was replaced
+    private void ReportDisplaced(Dictionary<string, List<HookRule>> table, string methodKey, HookRule winner)
+    {
+        if (!table.TryGetValue(methodKey, out var rules)) return;
+        foreach (var rule in rules)
+            RecordOutcome(rule, HookOutcomeKind.ConflictLost,
+                $"lost to the method body replacement from {winner.SourceMod ?? "unknown"}");
+    }
+
     private void ReplaceMethodBody(MethodDefinition method, ModuleDefinition module, HookRule rule)
     {
         if (method.Body == null)
@@ -658,6 +734,13 @@ public sealed partial class HookEngine
             RecordOutcome(rule, HookOutcomeKind.HostNotRewritable, "the target has no method body");
             return;
         }
+
+        //The replacement is resolved before anything is torn down. A rule naming a type the module does not carry must
+        //leave the host as it was; resolving after the body is emptied would leave the host with no ret, and the JIT
+        //rejects that as an invalid program, taking the whole process down on the first call
+        var replacementRef = ResolveMethodBodyReplacement(rule, module, method);
+        if (replacementRef == null)
+            return;
 
         var il = method.Body.GetILProcessor();
 
@@ -676,10 +759,6 @@ public sealed partial class HookEngine
             else
                 il.Append(il.Create(OpCodes.Ldarg_S, GetParameter(method, i)));
         }
-
-        var replacementRef = ResolveMethodBodyReplacement(rule, module, method);
-        if (replacementRef == null)
-            return;
 
         il.Append(il.Create(OpCodes.Call, replacementRef));
         il.Append(il.Create(OpCodes.Ret));

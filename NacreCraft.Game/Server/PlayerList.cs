@@ -68,6 +68,9 @@ public sealed class PlayerList
             player.ViewDistanceChunks = _server.Settings.ViewDistance;
             _players.Add(player);
         }
+        //The player is an entity now, so it enters the level's entity manager; the level's lookups, collision and range
+        //queries then see it directly instead of the game layer merging player boxes in by hand
+        if (player.Level is PersistentServerLevel joinLevel) joinLevel.EntityManager.AddEntity(player);
         Log.Info(restored
             ? $"Player joined (save restored) {profile.Name} entityId={player.EntityId} online {PlayerCount}/{MaxPlayers}"
             : $"Player joined {profile.Name} entityId={player.EntityId} online {PlayerCount}/{MaxPlayers}");
@@ -326,7 +329,9 @@ public sealed class PlayerList
         //The hurt sound is played to everyone at the player's position, maps to vanilla LivingEntity.playHurtSound
         ServerSounds.PlaySound(this, SoundEvents.PlayerHurt, SoundSource.Players,
             target.Position.X, target.Position.Y, target.Position.Z, 1f, 1f);
-        if (target.IsDeadOrDying) RespawnPlayer(target, attacker);
+        //The killing blow is only recorded here: the announcement is raised by the level's death callback, which is the one
+        //place every death path passes through. Announcing it here as well would report a fall or a command death twice over
+        if (target.IsDeadOrDying) target.LastAttacker = attacker;
         return true;
     }
 
@@ -337,9 +342,10 @@ public sealed class PlayerList
         player.Connection.Send(new ClientboundSetHealthPacket(player.Health, 20, 5f));
     }
 
-    //RespawnPlayer handles player death: broadcasts the death message then resets to full health at the spawn point
-    //Vanilla goes through ClientboundPlayerCombatKill plus a client respawn handshake; this project's client has no death screen so it resets directly
-    private void RespawnPlayer(ServerPlayer player, ServerPlayer? attacker)
+    //AnnounceDeath reports a death: the message and the sound, nothing else
+    //The client draws its own death screen from the zero health and asks to respawn, which arrives as a client command;
+    //resetting here as well would put the player back on their feet before they ever saw that screen
+    public void AnnounceDeath(ServerPlayer player, ServerPlayer? attacker)
     {
         BroadcastSystemMessage(
             attacker is null
@@ -351,17 +357,40 @@ public sealed class PlayerList
         //The death sound is played before the reset, using the death position, maps to vanilla LivingEntity.playDeathSound
         ServerSounds.PlaySound(this, SoundEvents.PlayerDeath, SoundSource.Players,
             player.Position.X, player.Position.Y, player.Position.Z, 1f, 1f);
+    }
+
+    //Respawn puts a dead player back on their feet at full health, at their own respawn point or the world spawn
+    //Separate from the death announcement because a client-requested respawn must not repeat the message and the sound
+    public void Respawn(ServerPlayer player)
+    {
         player.Velocity = Vec3.Zero;
         //Respawn full health is taken from the attribute, maps to vanilla setHealth(getMaxHealth())
         player.SetHealth(player.MaxHealth);
         //With a personal respawn point it returns there, otherwise to the world spawn, maps to vanilla ServerPlayer's respawnPosition
         player.Position = player.RespawnPos ?? _server.SpawnPos;
-        SyncHealth(player);
         if (!player.Connection.IsConnected) return;
+        //The client leaves its death screen on this packet, not on the restored health, maps to the respawn packet vanilla
+        //sends before the new position; keeping all data matches the state this server keeps across a respawn
+        var key = LevelKeyOf(player.Level);
+        var spawnInfo = new CommonPlayerSpawnInfo(
+            WorldPresets.Get(key.Identifier)?.TypeId ?? Identifier.WithDefaultNamespace("overworld"),
+            key,
+            _server.WorldSeed,
+            player.GameType,
+            null,
+            false, false, false, null, null, 0);
+        player.Connection.Send(new ClientboundRespawnPacket(spawnInfo, ClientboundRespawnPacket.KeepAllData));
+        SyncHealth(player);
         //The position reset goes through PlayerPosition; the client replies accept_teleportation to correct local prediction
         player.Connection.Send(new ClientboundPlayerPositionPacket(
             player.Position.X, player.Position.Y, player.Position.Z, player.Yaw, player.Pitch, 0, 0));
     }
+
+    //LevelKeyOf maps a level back to its dimension key; these three are the dimensions this server opens
+    private static ResourceKey<Level> LevelKeyOf(ServerLevel level)
+        => level.Dimension == LevelKeys.NETHER.Identifier ? LevelKeys.NETHER
+            : level.Dimension == LevelKeys.END.Identifier ? LevelKeys.END
+            : LevelKeys.OVERWORLD;
 
     //RemovePlayer removes a player and returns whether it succeeded
     //After removal it broadcasts the leave message, maps to multiplayer.player.left in vanilla removePlayerFromWorld
@@ -371,6 +400,8 @@ public sealed class PlayerList
         lock (_lock) removed = _players.Remove(player);
         if (removed)
         {
+            //Leave the level's entity manager with the player list, so nothing keeps tracking an entity whose connection is gone
+            if (player.Level is PersistentServerLevel leftLevel) leftLevel.EntityManager.RemoveEntity(player);
             //Broadcast the entity removal first; other clients' models are removed by this packet
             //Must happen before ForgetPlayer; ForgetPlayer clears the observation records and PruneStale can no longer send this packet
             BroadcastAll(new ClientboundRemoveEntitiesPacket(new[] { player.EntityId }));

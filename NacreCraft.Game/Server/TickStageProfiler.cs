@@ -124,7 +124,6 @@ public enum TickStage
     RandomTick,
     BlockEvents,
     Light,
-    EntityInside,
     BlockEntities,
     Players,
     DebugPlayers,

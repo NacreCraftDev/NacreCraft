@@ -328,8 +328,9 @@ public sealed unsafe class VulkanCommandEncoder : CommandEncoderBackend
         submitInfo.PCommandBuffers = &cmd;
         lock (_gpuDevice.QueueLock)
         {
-            if (_vk.QueueSubmit(_graphicsQueue, 1, &submitInfo, fence) != Result.Success)
-                throw new InvalidOperationException("QueueSubmit failed");
+            var result = _vk.QueueSubmit(_graphicsQueue, 1, &submitInfo, fence);
+            if (result != Result.Success)
+                throw new InvalidOperationException($"QueueSubmit failed: {result}");
             _vk.WaitForFences(_device, 1, &fence, Vk.True, ulong.MaxValue);
             _vk.ResetFences(_device, 1, &fence);
         }
@@ -356,8 +357,9 @@ public sealed unsafe class VulkanCommandEncoder : CommandEncoderBackend
         submitInfo.PCommandBuffers = &cmd;
         lock (_gpuDevice.QueueLock)
         {
-            if (_vk.QueueSubmit(_graphicsQueue, 1, &submitInfo, fence) != Result.Success)
-                throw new InvalidOperationException("QueueSubmit failed");
+            var result = _vk.QueueSubmit(_graphicsQueue, 1, &submitInfo, fence);
+            if (result != Result.Success)
+                throw new InvalidOperationException($"QueueSubmit failed: {result}");
         }
         _pendingSubmit = true;
         _pendingStagingBuffers.AddRange(_stagingBuffers);

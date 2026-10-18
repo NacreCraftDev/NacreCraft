@@ -82,7 +82,7 @@ public sealed class ModelPart
         if (_cubes.Count == 0 && _children.Count == 0) return;
         poseStack.PushPose();
         TranslateAndRotate(poseStack);
-        if (!SkipDraw) Compile(poseStack.Pose(), poseStack.Normal(), builder, lightCoords, overlayCoords, color);
+        if (!SkipDraw) Compile(poseStack.Copy(), poseStack.Normal(), builder, lightCoords, overlayCoords, color);
         foreach (var child in _children.Values)
             child.Render(poseStack, builder, lightCoords, overlayCoords, color);
         poseStack.PopPose();

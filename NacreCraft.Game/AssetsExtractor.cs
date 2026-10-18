@@ -32,6 +32,9 @@ public static class AssetsExtractor
             if (IsDirNonEmpty(AppPaths.AssetsDir))
             {
                 Log.Info($"assets directory already exists, skipping jar extraction {AppPaths.AssetsDir}");
+                //The pack root metadata is pulled on its own: assets/ being in place does not mean the built-in pack
+                //has its pack.mcmeta, and without that file the pack declares no languages at all
+                TryExtractRootMetadata(jarPath, AppPaths.BaseDirectory);
                 any = true;
             }
             else if (TryExtractJar(jarPath, AppPaths.AssetsDir, AppPaths.DataDir, AppPaths.BaseDirectory))
@@ -100,11 +103,8 @@ public static class AssetsExtractor
             foreach (var entry in archive.Entries)
             {
                 if (string.IsNullOrEmpty(entry.Name)) continue;
-                var fullName = entry.FullName;
                 //Some jars (decompiled packages) prefix entries with resources/; strip it before matching pack.mcmeta/assets/data
-                var entryPath = fullName.StartsWith("resources/", StringComparison.OrdinalIgnoreCase)
-                    ? fullName.Substring("resources/".Length)
-                    : fullName;
+                var entryPath = NormalizeEntryPath(entry.FullName);
                 //The root pack.mcmeta is copied next to assets/data in rootDir for FolderPackResources to read
                 //Falls back to assetsDir when rootDir is null, for backward compatibility
                 if (entryPath.Equals("pack.mcmeta", StringComparison.OrdinalIgnoreCase))
@@ -141,6 +141,47 @@ public static class AssetsExtractor
             return false;
         }
     }
+
+    //TryExtractRootMetadata copies only the root pack.mcmeta out of the jar
+    //It runs on its own because a later startup skips the whole extraction once assets/ is in place, which used to
+    //leave the built-in pack without its metadata and therefore without a single language to offer
+    //Returns false without throwing when the metadata is already there, the jar is missing, or the entry is absent
+    public static bool TryExtractRootMetadata(string jarPath, string rootDir)
+    {
+        var dest = Path.Combine(rootDir, "pack.mcmeta");
+        if (File.Exists(dest)) return false;
+        if (!File.Exists(jarPath))
+        {
+            Log.Warning($"jar file not found {jarPath}");
+            return false;
+        }
+        try
+        {
+            using var archive = ZipFile.OpenRead(jarPath);
+            foreach (var entry in archive.Entries)
+            {
+                if (string.IsNullOrEmpty(entry.Name)) continue;
+                if (!NormalizeEntryPath(entry.FullName).Equals("pack.mcmeta", StringComparison.OrdinalIgnoreCase)) continue;
+                Directory.CreateDirectory(rootDir);
+                entry.ExtractToFile(dest, overwrite: true);
+                Log.Info($"root pack.mcmeta extracted to {dest}");
+                return true;
+            }
+            Log.Info($"jar carries no root pack.mcmeta {jarPath}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning($"root pack.mcmeta extraction failed {jarPath} {ex.Message}");
+            return false;
+        }
+    }
+
+    //NormalizeEntryPath strips the resources/ prefix some jars (decompiled packages) carry
+    private static string NormalizeEntryPath(string fullName)
+        => fullName.StartsWith("resources/", StringComparison.OrdinalIgnoreCase)
+            ? fullName.Substring("resources/".Length)
+            : fullName;
 
     //ExtractEntry releases a zip entry into the target directory, preserving the relative substructure
     private static void ExtractEntry(System.IO.Compression.ZipArchiveEntry entry, string targetDir, string relPath)

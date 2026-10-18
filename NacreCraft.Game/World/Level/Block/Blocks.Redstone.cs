@@ -242,7 +242,9 @@ public static partial class Blocks
         }
 
         //OnEntityInside re-evaluates immediately when an entity touches it, maps to vanilla entityInside
-        public override void OnEntityInside(ServerLevel level, BlockPos pos, BlockState state)
+        //The stepping entity is not used here: the press test counts everything overlapping the button, the same shape query vanilla runs
+        public override void OnEntityInside(ServerLevel level, BlockPos pos, BlockState state,
+            NacreCraft.Registry.Entity? entity)
         {
             if (!state.GetValue(BlockStateProperties.Powered)) CheckPressed(level, pos, state);
         }
@@ -539,7 +541,9 @@ public static partial class Blocks
         }
 
         //OnEntityInside recomputes when an entity steps on it, no recompute needed when already pressed, maps to vanilla entityInside
-        public override void OnEntityInside(ServerLevel level, BlockPos pos, BlockState state)
+        //The stepping entity is not used here: the signal strength comes from the entities overlapping the plate, the same shape query vanilla runs
+        public override void OnEntityInside(ServerLevel level, BlockPos pos, BlockState state,
+            NacreCraft.Registry.Entity? entity)
         {
             var signal = GetSignalForState(state);
             if (signal == 0) CheckPressed(level, pos, state, signal);

@@ -82,8 +82,8 @@ NacreCraft 不是移植。这里没有逐行翻译原版 Java，也没有反编�
 | 仓库 | 内容 |
 |---|---|
 | **NacreCraft**（本仓库） | 内核、业务层、GPU、客户端/服务端、加载器、TPGA |
-| [NacreCraft.ModApi](https://github.com/NacreCraft-Dev/NacreCraft.ModApi) | 模组 API 表面，连同它编译所依赖的内核引用程序集 |
-| [NacreCraft.DevTools](https://github.com/NacreCraft-Dev/NacreCraft.DevTools) | `ncm` 命令行工具与 `dotnet new ncm` 项目模板 |
+| [NacreCraft.ModApi](https://github.com/NacreCraftDev/NacreCraft.ModApi) | 模组 API 表面，连同它编译所依赖的内核引用程序集 |
+| [NacreCraft.DevTools](https://github.com/NacreCraftDev/NacreCraft.DevTools) | `ncm` 命令行工具与 `dotnet new ncm` 项目模板 |
 
 客户端、服务端与加载器的构建产物另行发布。
 

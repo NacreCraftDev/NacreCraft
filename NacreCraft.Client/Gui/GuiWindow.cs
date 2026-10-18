@@ -180,6 +180,9 @@ public sealed class GuiWindow : GuiContainer
             _hoveredControl?.OnMouseLeave(args);
             _hoveredControl = hit;
             hit?.OnMouseEnter(args);
+            //Hover changes the drawing of two controls, and the scene is only rebuilt when something marks it dirty,
+            //so without this the highlight never follows the cursor
+            MarkDirty();
         }
 
         if (hit is null)
@@ -307,11 +310,11 @@ public sealed class GuiWindow : GuiContainer
         //Blur frames force a re-Render; BlurBeforeThisStratum is not recorded, so replay would lose the blur marker
         var trace = s_renderDiag < 4;
         s_renderDiag++;
-        if (trace) Log.Info($"gui window render enter dirty={_isDirty} cache={_renderCache is not null} blur={WantsBlur}");
+        if (trace) Log.Debug($"gui window render enter dirty={_isDirty} cache={_renderCache is not null} blur={WantsBlur}");
         if (!_isDirty && _renderCache is not null && !WantsBlur)
         {
             context.ReplayRange(_renderCache);
-            if (trace) Log.Info("gui window render replayed");
+            if (trace) Log.Debug("gui window render replayed");
         }
         else
         {
@@ -320,17 +323,17 @@ public sealed class GuiWindow : GuiContainer
             context.BeginRecording(_renderCache);
             //The background uses ScaledWidth/Height logical pixels; the ToClip conversion uses scaled as the denominator for full coverage
             context.DrawQuad(0, 0, ScaledWidth, ScaledHeight, BackgroundColor);
-            if (trace) Log.Info("gui window render background done");
+            if (trace) Log.Debug("gui window render background done");
             //RenderBackgroundHook draws the screen-level background texture over the solid color
             RenderBackgroundHook?.Invoke(context);
-            if (trace) Log.Info("gui window render screen background done");
+            if (trace) Log.Debug("gui window render screen background done");
             base.Render(context);
-            if (trace) Log.Info("gui window render widgets done");
+            if (trace) Log.Debug("gui window render widgets done");
             context.EndRecording();
             ClearDirtyTree();
         }
         //RenderForegroundHook draws directly every frame after widgets without caching; HUD hearts change every frame
         RenderForegroundHook?.Invoke(context);
-        if (trace) Log.Info("gui window render exit");
+        if (trace) Log.Debug("gui window render exit");
     }
 }

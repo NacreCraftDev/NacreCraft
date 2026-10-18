@@ -29,6 +29,7 @@ public sealed class SystemReport
         SetDetail("CPUs", Environment.ProcessorCount.ToString);
         SetDetail("Storage (workdir)", () => DescribeStorage(AppContext.BaseDirectory));
         SetDetail("Debug Flags", DescribeDebugFlags);
+        SetDetail("Loaded Modules", DescribeLoadedModules);
     }
 
     //SetDetail writes one entry directly
@@ -105,5 +106,22 @@ public sealed class SystemReport
         var enabled = new List<string>();
         if (DebugMode.IsEnabled) enabled.Add("debug");
         return enabled.Count == 0 ? "0 total" : $"{enabled.Count} total; {string.Join(" ", enabled)}";
+    }
+
+    //DescribeLoadedModules every module mapped into the process, native and managed alike, sorted for comparison
+    //A library absent from this list was never found: that is what separates an unresolved dependency from a broken one
+    private static string DescribeLoadedModules()
+    {
+        using var process = Process.GetCurrentProcess();
+        var modules = new List<string>(process.Modules.Count);
+        foreach (ProcessModule module in process.Modules)
+            modules.Add(string.IsNullOrEmpty(module.FileName) ? module.ModuleName : module.FileName);
+        modules.Sort(StringComparer.OrdinalIgnoreCase);
+
+        var builder = new StringBuilder();
+        builder.Append(modules.Count).Append(" loaded");
+        foreach (var module in modules)
+            builder.Append(Environment.NewLine).Append("\t\t").Append(module);
+        return builder.ToString();
     }
 }

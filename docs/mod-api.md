@@ -360,7 +360,7 @@ The remaining capabilities are also wrapped as handles:
 | `NcWhiteList` / `NcOpList` | whitelist / ops | `Count`, `Names`, `Contains`, `Add`, `Remove` (ops take a permission level and expose it) |
 | `NcBanList` / `NcIpBanList` | player / IP bans | `IsBanned`, `Ban(profile, reason?)`, `Unban` (IP bans are addressed by IP string) |
 
-Which kernel types may appear unwrapped on the public surface is governed by the wrapper purity policy — see [the ModApi README](https://github.com/NacreCraft-Dev/NacreCraft.ModApi#wrapper-purity-policy) (whitelisted / wrapped / internal). In short: brigadier, the `Primitives` value types, `ItemStack` and `GameProfile` are frozen by contract; everything else reaches mods through an `Nc*` handle. `NcAccess` ([4.3](#43-private-member-access)) is the deliberate hole in that wall.
+Which kernel types may appear unwrapped on the public surface is governed by the wrapper purity policy — see [the ModApi README](https://github.com/NacreCraftDev/NacreCraft.ModApi#wrapper-purity-policy) (whitelisted / wrapped / internal). In short: brigadier, the `Primitives` value types, `ItemStack` and `GameProfile` are frozen by contract; everything else reaches mods through an `Nc*` handle. `NcAccess` ([4.3](#43-private-member-access)) is the deliberate hole in that wall.
 
 ### 4.1 Registries
 

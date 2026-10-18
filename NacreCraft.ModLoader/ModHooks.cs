@@ -236,7 +236,10 @@ public sealed class ModHooks
 
         if (!typeIndex.TryGetValue(hook.Target, out var target))
         {
-            errors.Add($"injection target {hook.Target} of mod {mod.Manifest.Id} is in no known assembly");
+            //Two causes look identical here: a misspelled type name, and a rule that belongs to the other side and should
+            //have been filtered out by its environment. Naming both saves the reader from chasing the wrong one
+            errors.Add($"injection target {hook.Target} of mod {mod.Manifest.Id} is in no known assembly; "
+                + "check the type name, and give the rule an environment if the mod loads on both sides");
             return;
         }
 
@@ -251,6 +254,8 @@ public sealed class ModHooks
         rule.SourceMod = mod.Manifest.Id;
         //R2: the slots to hand to the callback; types come from the host's variable table at rewrite time
         rule.Locals = hook.Locals;
+        //Leaving it unset keeps the default, so order only diverges from mod id order when a mod asks for it
+        if (hook.Priority is { } priority) rule.Priority = priority;
         ruleTargets[rule] = target;
         builder.AddRule(rule);
 

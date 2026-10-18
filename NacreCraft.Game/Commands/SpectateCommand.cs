@@ -51,7 +51,7 @@ public static class SpectateCommand
     {
         if (target is not null && target.EntityId == player.EntityId)
             throw ErrorSelf.Create();
-        if (!player.IsSpectator)
+        if (!player.IsSpectator())
             throw ErrorNotSpectator.Create(player.Profile.Name);
         //Entities with tracking range 0 get no AddEntity and the client cannot see them, so they cannot be spectated, maps to vanilla clientTrackingRange
         if (target?.Type is { TrackingRangeChunks: 0 })

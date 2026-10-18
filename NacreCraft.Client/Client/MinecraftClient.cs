@@ -79,6 +79,9 @@ public sealed class MinecraftClient : IDisposable
     private readonly ReloadableServerResources? _rsr;
     //_pendingTasks work queued from other threads, drained on the tick thread; maps to vanilla BlockableEventLoop.pendingRunnables
     private readonly ConcurrentQueue<System.Action> _pendingTasks = new();
+    //_guiTasks work queued for the render thread; the control tree belongs to the render thread, so anything that
+    //switches screens from game logic goes through here instead of touching the GUI off-thread
+    private readonly ConcurrentQueue<System.Action> _guiTasks = new();
     //ResourceManager resource manager for block model loading and texture collection
     private readonly ResourceManager? _resourceManager;
     //PackRepository the repository the resource manager was built from; a reload re-discovers it and rebuilds the manager
@@ -240,7 +243,7 @@ public sealed class MinecraftClient : IDisposable
         ClientConnector.Connect(host, port, _level, Player,
             onJoinWorld: () =>
             {
-                _screens?.SetScreen(new GameScreen());
+                SubmitGui(() => _screens?.SetScreen(new GameScreen()));
                 Log.Info("Entered game, switching to GameScreen");
             },
             onConnected: conn =>
@@ -253,11 +256,14 @@ public sealed class MinecraftClient : IDisposable
                     listener.OnOpenScreen = packet =>
                     {
                         if (ChestScreen.IsChestKind(packet.Kind))
-                            _screens?.SetScreen(new ChestScreen(packet.Title, ChestScreen.RowsFor(packet.Kind)));
+                            SubmitGui(() => _screens?.SetScreen(new ChestScreen(packet.Title, ChestScreen.RowsFor(packet.Kind))));
                     };
                     listener.OnContainerClose = () =>
                     {
-                        if (_screens?.Current is ChestScreen) _screens.SetScreen(new GameScreen());
+                        SubmitGui(() =>
+                        {
+                            if (_screens?.Current is ChestScreen) _screens.SetScreen(new GameScreen());
+                        });
                     };
                 }
             },
@@ -278,10 +284,9 @@ public sealed class MinecraftClient : IDisposable
         set => _sleepBudgetMillis = Math.Max(0, value);
     }
 
-    //CreateStartupOverlay builds the loading overlay covering the startup stages
-    //The world render chain decodes every block texture and takes a noticeable while, so it runs on a background thread
-    //and the overlay polls it; the title screen stage has to run on the tick thread because it touches the control tree,
-    //and its first draw bakes the text glyphs, so the overlay fades out onto a screen that is already built
+    //CreateStartupOverlay builds the loading overlay covering the startup work
+    //The world render chain decodes every block texture and takes a noticeable while, so it runs on a background
+    //thread and the overlay polls it; the title screen is already up underneath, so the fade out lands on it
     private LoadingOverlay? CreateStartupOverlay()
     {
         if (_screens is null || _gpuApp is null) return null;
@@ -289,14 +294,11 @@ public sealed class MinecraftClient : IDisposable
         var stages = new List<(string Label, Func<float>)>
         {
             //The background build reports no intermediate progress, so the bar holds until it lands
-            ("world", () => worldBuild.IsCompleted ? 1f : 0f),
-            ("title", () =>
-            {
-                _screens.SetScreen(new TitleScreen());
-                return 1f;
-            })
+            ("world", () => worldBuild.IsCompleted ? 1f : 0f)
         };
-        return new LoadingOverlay(_gpuApp.Window, RegisterLogoTexture, stages);
+        //Startup does not fade in, matching vanilla where only a manual reload passes fadeIn true
+        //A fade in would start at a low alpha and let the title screen show through before the cover lands
+        return new LoadingOverlay(_gpuApp.Window, RegisterLogoTexture, stages, fadeIn: false);
     }
 
     //RegisterLogoTexture loads the Mojang Studios logo the loading overlay draws
@@ -362,6 +364,10 @@ public sealed class MinecraftClient : IDisposable
     //Any thread may call it, which is what lets external code touch client state without racing the render thread
     public void Submit(System.Action task) => _pendingTasks.Enqueue(task);
 
+    //SubmitGui queues work to run on the render thread before the next frame is built
+    //Used by game logic that opens or closes screens, since the control tree is owned by the render thread
+    public void SubmitGui(System.Action task) => _guiTasks.Enqueue(task);
+
     //RunQueuedTasks drains the queued work, maps to vanilla BlockableEventLoop.runAllTasks
     //A failing task is logged and dropped so one bad task cannot stall the loop
     private void RunQueuedTasks()
@@ -389,17 +395,20 @@ public sealed class MinecraftClient : IDisposable
         if (_gpuApp is not null)
         {
             Log.Info($"MinecraftClient window-driven mode started render distance {Config.RenderDistance} FOV {Config.Fov}");
-            //The window is up first and the loading overlay covers the startup work, the same order vanilla uses: the
-            //world render chain and the first screen are both built while the overlay is on screen
+            //The title screen goes up first and the loading overlay covers it, which is the order vanilla uses
+            //The overlay then fades out onto an already built screen instead of revealing the empty background first
+            _screens?.SetScreen(new TitleScreen());
             _screens?.SetOverlay(CreateStartupOverlay());
-            _gpuApp.FrameTick += OnFrameTick;
+            _gpuApp.FrameTick += OnGameTick;
+            _gpuApp.GuiTick += OnGuiTick;
             try
             {
                 _gpuApp.Run();
             }
             finally
             {
-                _gpuApp.FrameTick -= OnFrameTick;
+                _gpuApp.FrameTick -= OnGameTick;
+                _gpuApp.GuiTick -= OnGuiTick;
                 _running = false;
                 Log.Info($"MinecraftClient window-driven loop exited, total frames {_frameCount}");
             }
@@ -412,7 +421,7 @@ public sealed class MinecraftClient : IDisposable
             while (_running)
             {
                 var frameStart = watch.Elapsed;
-                Tick(TargetFrameMillis / 1000.0);
+                GameTick(TargetFrameMillis / 1000.0);
                 if (_sleepBudgetMillis > 0)
                 {
                     var elapsed = (int)(watch.Elapsed - frameStart).TotalMilliseconds;
@@ -428,28 +437,19 @@ public sealed class MinecraftClient : IDisposable
         }
     }
 
-    //OnFrameTick VulkanGuiApp's Tick thread triggers this callback at 20tps to run the game's Tick quartet
-    //After phase 7 decoupled Tick/Render, all game logic is on the Tick thread; SubmitFrame is called automatically by VulkanGuiApp
-    private void OnFrameTick(double delta)
-    {
-        Tick(delta);
-    }
+    //OnGameTick runs on the Tick thread: world logic only
+    //The GUI is not touched here, so the tick rate never gates how often the picture changes
+    private void OnGameTick(double delta) => GameTick(delta);
 
-    //Tick single-frame logic quartet
-    //Input.Poll dispatches input from the queue to GuiWindow when there is a GPU
-    //Layout handles the post-resize dirty flag, exclusively owning the control tree with no contention
-    //Gui.Update calls Window.Update to advance control animation state
-    //Network.ProcessPackets processes inbound packets; chunk loading and Player sync happen here
-    //Camera updates the world render camera from the local Player state
-    //Gpu.Render: VulkanGuiApp automatically calls SubmitFrame after FrameTick to publish the snapshot
-    private void Tick(double delta)
+    //OnGuiTick runs on the Render thread: input, layout, widget animation and screen updates
+    //Vanilla updates widgets inside renderWidget for the same reason, so hover and animation track the frame rate
+    private void OnGuiTick(double delta) => GuiTick(delta);
+
+    //GameTick world logic, decoupled from the GUI since the render thread owns the widget tree
+    private void GameTick(double delta)
     {
-        _gpuApp?.PollInput();
         //Queued work runs early in the tick, the same place vanilla Minecraft.runTick calls runAllTasks
         RunQueuedTasks();
-        _screens?.ProcessLayoutIfDirty();
-        _gpuApp?.Window.Update(delta);
-        _screens?.Tick();
         _connection?.Tick();
         //The local world advances one frame after packet processing, converting this frame to a number of ticks by the server-sent tick rate
         //When the server is frozen it does not advance ticks, so entity animation stops
@@ -458,6 +458,27 @@ public sealed class MinecraftClient : IDisposable
         _lightTexture?.Update(1.0f);
         UpdateCamera();
         _frameCount++;
+    }
+
+    //GuiTick input dispatch, layout and control animation for one rendered frame
+    private void GuiTick(double delta)
+    {
+        //Screen switches queued by game logic land before input, so a frame never sees a half-replaced tree
+        while (_guiTasks.TryDequeue(out var task))
+        {
+            try
+            {
+                task();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"Queued gui task failed: {ex}");
+            }
+        }
+        _gpuApp?.PollInput();
+        _screens?.ProcessLayoutIfDirty();
+        _gpuApp?.Window.Update(delta);
+        _screens?.Tick();
     }
 
     //UpdateCamera updates the camera from the local player position/orientation and the perspective from Config.Fov/RenderDistance

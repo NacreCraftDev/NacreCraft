@@ -44,9 +44,6 @@ public sealed class LevelCollisionGetter : CollisionGetter
             if (Shapes.JoinIsNotEmpty(shape, Shapes.Create(entity.BoundingBox), BooleanOps.And)) return false;
         }
 
-        if (_level.ExtraEntityBoxes is null) return true;
-        foreach (var playerBox in _level.ExtraEntityBoxes())
-            if (Shapes.JoinIsNotEmpty(shape, Shapes.Create(playerBox), BooleanOps.And)) return false;
         return true;
     }
 }

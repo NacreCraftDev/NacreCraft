@@ -146,7 +146,9 @@ public sealed class GuiButton : GuiControl
                 s_textDiag++;
                 Log.Debug($"button label '{Text}' x={X} width={Width} textWidth={textWidth} lineHeight={context.LineHeight} textX={textX} textY={textY}");
             }
-            context.DrawText(textX, textY, Text, ForegroundColor);
+            //Vanilla greys the label of an inactive widget, maps to AbstractWidget.getFGColor
+            var labelColor = Enabled ? ForegroundColor : GuiColor.FromRgb(160, 160, 160);
+            context.DrawText(textX, textY, Text, labelColor);
         }
     }
 }

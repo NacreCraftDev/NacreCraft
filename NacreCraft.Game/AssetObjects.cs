@@ -3,11 +3,13 @@ using NacreCraft.Logging;
 
 namespace NacreCraft.Game;
 
-//LanguageAssets language asset preparation; lands the language table and language manifest from resource objects into the program root
-//The vanilla client jar only ships en_us; the other languages live in the resource server's object storage and are downloaded by the launcher by resource index
-//Here the same index is used: if the local object exists and the size matches it is copied directly, otherwise it is fetched from the resource server
-//Only language-related entries are handled; textures, models and the like are still provided by jar extraction
-public static class LanguageAssets
+//AssetObjects lands indexed resource objects into the program root
+//The client jar does not carry all of its assets: the language tables and pack.mcmeta are absent outright, and the font
+//entries are absent or present only as empty placeholders. All of them live in the resource object storage the launcher
+//downloads alongside the version, which is why an index-driven step is needed at all
+//Same index here: an object already local with a matching size is used as is, otherwise it is fetched from the resource server
+//Only the entries jar extraction cannot supply are handled; textures, models and the like still come from the jar
+public static class AssetObjects
 {
     //ObjectHost resource object URL prefix, exactly the one the launcher uses
     private const string ObjectHost = "https://resources.download.minecraft.net";
@@ -15,7 +17,7 @@ public static class LanguageAssets
     //Client object download client, reusing the connection; only used when the local object is missing
     private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(30) };
 
-    //Prepare lands the language assets into the program root by resource index and returns the number of files landed
+    //Prepare lands the objects into the program root by resource index and returns the number of files landed
     //assetsDir is the launcher-level assets directory, containing indexes and objects
     //When assetIndex is empty the most recently modified one in the indexes directory is used
     //When targetRoot is empty it lands in the program root; tests can pass a temp directory to avoid pollution
@@ -25,7 +27,7 @@ public static class LanguageAssets
         var indexFile = LocateIndex(assetsDir, assetIndex);
         if (indexFile is null)
         {
-            Log.Warning($"Asset index not found, language assets skipped {assetsDir}");
+            Log.Warning($"Asset index not found, objects skipped {assetsDir}");
             return 0;
         }
 
@@ -45,6 +47,7 @@ public static class LanguageAssets
             var size = entry.Value.TryGetProperty("size", out var sizeNode) ? sizeNode.GetInt64() : -1L;
 
             var target = MapTarget(entry.Name, root);
+            //The size check is what lets these overwrite the empty placeholders jar extraction left behind
             if (File.Exists(target) && (size < 0 || new FileInfo(target).Length == size)) continue;
 
             var source = EnsureObject(objectsDir, hash, size);
@@ -55,7 +58,7 @@ public static class LanguageAssets
             if (source.StartsWith(objectsDir, StringComparison.Ordinal)) copied++;
         }
 
-        Log.Info($"Language assets ready index {Path.GetFileName(indexFile)} dropped {dropped} of which fetched {copied}");
+        Log.Info($"Asset objects ready index {Path.GetFileName(indexFile)} dropped {dropped} of which fetched {copied}");
         return dropped;
     }
 
@@ -74,11 +77,14 @@ public static class LanguageAssets
             .FirstOrDefault();
     }
 
-    //IsWanted only picks the language tables and language manifest; other assets are provided by jar extraction
+    //IsWanted picks the entries jar extraction cannot supply
+    //Language tables and pack.mcmeta are missing from the jar outright; the font entries are missing too, or present only
+    //as empty placeholders, which is the case for include/unifont.json and the unifont zips the default font references
     private static bool IsWanted(string sourcePath)
         => sourcePath.Equals("pack.mcmeta", StringComparison.Ordinal)
            || (sourcePath.StartsWith("minecraft/lang/", StringComparison.Ordinal)
-               && sourcePath.EndsWith(".json", StringComparison.Ordinal));
+               && sourcePath.EndsWith(".json", StringComparison.Ordinal))
+           || sourcePath.StartsWith("minecraft/font/", StringComparison.Ordinal);
 
     //MapTarget maps the source path in the index to its landing location under the target root
     //Root files such as pack.mcmeta land at the root; the rest restore the resource pack structure as assets/<path>
@@ -106,7 +112,7 @@ public static class LanguageAssets
         }
         catch (Exception ex)
         {
-            Log.Warning($"Language asset fetch failed {hash} {ex.Message}");
+            Log.Warning($"Asset object fetch failed {hash} {ex.Message}");
             return null;
         }
     }

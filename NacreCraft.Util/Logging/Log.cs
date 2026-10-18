@@ -1,7 +1,9 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
+
 namespace NacreCraft.Logging;
 
 public enum LogLevel
@@ -35,8 +37,11 @@ public static class LogPlaceholders
 
 public static class Log
 {
-    private static readonly Stack<string> _logSourceStack = new();
-    private static string _defaultLogSource = "Unknown";
+    //Source override is async-local: the old design used one global Stack with a lock on every read and write
+    //That meant every log line serialized through a lock and sources from different threads mixed together
+    //AsyncLocal gives each async context its own current source, and PushSource saves the previous value to restore on dispose
+    private static readonly AsyncLocal<string?> _overrideSource = new();
+    private static volatile string _defaultLogSource = "Unknown";
     private static readonly Dictionary<Type, string> _classSourceCache = new();
 
     public static void SetClassSource<T>() => SetClassSource(typeof(T));
@@ -49,18 +54,8 @@ public static class Log
         {
             if (!_classSourceCache.ContainsKey(type))
                 _classSourceCache[type] = fullName;
-            _defaultLogSource = fullName;
-            lock (_logSourceStack)
-            {
-                if (_logSourceStack.Count == 0)
-                    _logSourceStack.Push(fullName);
-                else
-                {
-                    _logSourceStack.Pop();
-                    _logSourceStack.Push(fullName);
-                }
-            }
         }
+        _defaultLogSource = fullName;
     }
 
     public static IDisposable PushMethodSource<T>([CallerMemberName] string methodName = "")
@@ -83,29 +78,27 @@ public static class Log
 
     public static void SetDefaultSource(string source) => _defaultLogSource = source;
 
-    public static IDisposable PushSource(string source) => new LogSourceScope(source);
-
-    private static string GetCurrentSource()
+    public static IDisposable PushSource(string source)
     {
-        lock (_logSourceStack)
-            return _logSourceStack.Count > 0 ? _logSourceStack.Peek() : _defaultLogSource;
+        var previous = _overrideSource.Value;
+        _overrideSource.Value = source;
+        return new LogSourceScope(previous);
     }
+
+    private static string GetCurrentSource() => _overrideSource.Value ?? _defaultLogSource;
 
     private sealed class LogSourceScope : IDisposable
     {
-        public LogSourceScope(string source)
-        {
-            lock (_logSourceStack)
-                _logSourceStack.Push(source);
-        }
+        private readonly string? _previous;
+        private bool _disposed;
+
+        public LogSourceScope(string? previous) => _previous = previous;
 
         public void Dispose()
         {
-            lock (_logSourceStack)
-            {
-                if (_logSourceStack.Count > 0)
-                    _logSourceStack.Pop();
-            }
+            if (_disposed) return;
+            _disposed = true;
+            _overrideSource.Value = _previous;
         }
     }
 
@@ -115,23 +108,73 @@ public static class Log
     private static string _logDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
     //Both sinks default to Info only; detailed logging is enabled by the kernel via --debug calling SetConsoleLevel/SetFileLevel
     //The old version defaulted to Debug, flooding debug logs without any flag, wasting CPU on console IO and formatting
-    private static LogLevel _consoleLevel = LogLevel.Info;
-    private static LogLevel _fileLevel = LogLevel.Info;
+    private static volatile LogLevel _consoleLevel = LogLevel.Info;
+    private static volatile LogLevel _fileLevel = LogLevel.Info;
     private static StreamWriter _fileWriter = null!;
     private static readonly object _lock = new();
     private static readonly object _consoleLock = new();
 
-    //Async log buffer: the calling thread only packs raw fields into the queue, no string building and no IO
-    //_pending grows dynamically; the output thread swaps it out entirely under the lock then formats outside the lock to reduce contention on both sides
-    private static readonly object _bufferLock = new();
-    private static List<LogEntry> _pending = new();
-    //_signal is released once per enqueue; the output thread sleeps and wakes on it instead of spinning
+    //Fast-path flag: true when Debug would be accepted by any sink
+    //Debug call sites run in hot paths like per-cell sampling and per-tick queries, so the check has to be one volatile read
+    //Reading _consoleLevel + _fileLevel + _fileWriter on every call was several loads and branches; folding it into one field makes the disabled path near-free
+    //Kept in sync by SetConsoleLevel / SetFileLevel / EnableFileLogging / InitializeFileWriter / CloseFileWriter
+    private static volatile bool _debugEnabled;
+
+    private static void UpdateDebugEnabled()
+    {
+        var consoleAccepts = _consoleLevel != LogLevel.None && LogLevel.Debug >= _consoleLevel;
+        var fileAccepts = _enableFileLogging && _fileWriter != null
+            && _fileLevel != LogLevel.None && LogLevel.Debug >= _fileLevel;
+        _debugEnabled = consoleAccepts || fileAccepts;
+    }
+
+    //Per-thread log buffers: the old design had one global _pending list guarded by _bufferLock
+    //At high concurrency every producer serialized through that lock; with --debug the lock became a visible stall
+    //Each thread now owns its own buffer and only contends with the single output thread that swaps it out
+    //[ThreadStatic] gives the fastest TLS read; ConcurrentBag registration lets the output thread find every buffer
+    //Dead threads leave their buffer in the bag, but thread pool threads are stable so the list stays bounded in practice
+    private sealed class ThreadBuffer
+    {
+        public readonly object Lock = new();
+        public List<LogEntry> Entries = new();
+    }
+
+    [ThreadStatic] private static ThreadBuffer? _localBuffer;
+    private static readonly ConcurrentBag<ThreadBuffer> _allBuffers = new();
+
+    //Batches swapped out of the producer buffers, plus the pool they are recycled through
+    //Only the output thread touches either, so the pool does not need to be a concurrent collection
+    private static readonly List<List<LogEntry>> _roundBatches = new();
+    private static readonly Stack<List<LogEntry>> _batchPool = new();
+    private const int MaxPooledBatches = 256;
+
+    private static ThreadBuffer GetThreadBuffer()
+    {
+        var buffer = _localBuffer;
+        if (buffer is not null) return buffer;
+        buffer = new ThreadBuffer();
+        _localBuffer = buffer;
+        _allBuffers.Add(buffer);
+        return buffer;
+    }
+
+    //Output thread wakeup: a single global signal with a dirty flag
+    //The old design released the semaphore once per enqueue, so its count could grow to thousands during a burst
+    //The output thread then had to drain all those counts with Wait(0), pure waste
+    //Now the flag collapses any burst into at most one pending Release
     private static readonly SemaphoreSlim _signal = new(0);
+    private static int _dirtyFlag;
     private static Thread? _outputThread;
     private static volatile bool _shutdown;
 
+    //Flush coordination: the output thread processes the whole round then honours the request
+    //Using a flag instead of an in-band barrier entry avoids having to place the barrier after every thread's buffer is drained
+    private static ManualResetEventSlim? _flushEvt;
+    private static volatile bool _flushRequested;
+
     //LogEntry one log entry pending output
     //Formatting is left entirely to the output thread; the calling thread only grabs time and origin, which must be taken on the spot or they mix up across threads
+    //Timestamp is a DateTime, not a string: the caller used to ToString on every entry, allocating even when the entry was later dropped
     //Barrier non-null means this is a barrier; when the output thread reaches it, all prior logs have been written out and flushed
     //RawConsole/RawFile non-null means skip formatting and output directly, used for the log system's own messages
     private readonly record struct LogEntry(
@@ -141,14 +184,14 @@ public static class Log
         int LineNumber,
         string MemberName,
         string Source,
-        string Timestamp,
+        DateTime Timestamp,
         Action? Barrier,
         string? RawConsole,
         string? RawFile);
 
     private static LogEntry RawEntry(string consoleLine, string fileLine) => new(
         LogLevel.Info, string.Empty, string.Empty, 0, string.Empty, string.Empty,
-        string.Empty, null, consoleLine, fileLine);
+        default, null, consoleLine, fileLine);
 
     public static event Action<string>? OnLogOutput;
 
@@ -159,42 +202,36 @@ public static class Log
 
     //History cache stores the text fed to OnLogOutput
     //The GUI starts later than the log system, so logs emitted before subscribing can only be reviewed from this cache; consistent formatting makes them stitch together seamlessly
-    private static readonly object _historyLock = new();
+    //The lock is gone: only the output thread writes, readers use Volatile.Read on each slot to see a consistent string
     private static readonly string[] _history = new string[HistoryCapacity];
-    private static long _historyCount;
+    private static long _historyWrite;
 
     //RecordHistory records a line into the ring cache, called only on the output thread
     private static void RecordHistory(string line)
     {
-        lock (_historyLock)
-        {
-            _history[(int)(_historyCount % HistoryCapacity)] = line;
-            _historyCount++;
-        }
+        var index = _historyWrite;
+        Volatile.Write(ref _history[(int)(index % HistoryCapacity)], line);
+        Volatile.Write(ref _historyWrite, index + 1);
     }
 
     //GetHistory takes a snapshot of history logs, oldest to newest
     public static string[] GetHistory()
     {
-        lock (_historyLock)
-        {
-            var count = (int)Math.Min(_historyCount, HistoryCapacity);
-            var start = _historyCount - count;
-            var result = new string[count];
-            for (var i = 0; i < count; i++)
-                result[i] = _history[(int)((start + i) % HistoryCapacity)];
-            return result;
-        }
+        var write = Volatile.Read(ref _historyWrite);
+        var count = (int)Math.Min(write, HistoryCapacity);
+        var start = write - count;
+        var result = new string[count];
+        for (var i = 0; i < count; i++)
+            result[i] = Volatile.Read(ref _history[(int)((start + i) % HistoryCapacity)]);
+        return result;
     }
 
     //ClearHistory clears the history cache, used once for review and released after
+    //Rare enough that a plain Array.Clear plus a Volatile.Write on the counter is fine
     public static void ClearHistory()
     {
-        lock (_historyLock)
-        {
-            Array.Clear(_history);
-            _historyCount = 0;
-        }
+        Array.Clear(_history);
+        Volatile.Write(ref _historyWrite, 0);
     }
 
     private static int _warningCount;
@@ -209,13 +246,15 @@ public static class Log
     public static string? LastWarningMessage => _lastWarningMessage;
     public static string? LastErrorMessage => _lastErrorMessage;
 
-    private static bool _enableFileLogging = true;
+    private static volatile bool _enableFileLogging = true;
 
     //SimpleFormat concise format, like 2026-09-30 17:06:09[INFO] - message
-    private static readonly string SimpleFormat = $"{LogPlaceholders.Timestamp}[{LogPlaceholders.Level}] - {LogPlaceholders.Message}";
+    //The brackets belong to the level name so the color spans the whole [INFO] tag; leaving them in the template
+    //paints only the inner text and the brackets stay in the default color
+    private static readonly string SimpleFormat = $"{LogPlaceholders.Timestamp}{LogPlaceholders.Level} - {LogPlaceholders.Message}";
 
     //DetailFormat detailed format used by --debug, includes file and line, like 2026-09-30 17:06:09.123[DBG][xxx.cs:xx] - message
-    private static readonly string DetailFormat = $"{LogPlaceholders.Timestamp}[{LogPlaceholders.Level}][{LogPlaceholders.File}:{LogPlaceholders.Line}] - {LogPlaceholders.Message}";
+    private static readonly string DetailFormat = $"{LogPlaceholders.Timestamp}{LogPlaceholders.Level}[{LogPlaceholders.File}:{LogPlaceholders.Line}] - {LogPlaceholders.Message}";
 
     //DefaultFormat default format string, placeholders use constants directly to keep both sides in sync
     private static readonly string DefaultFormat = SimpleFormat;
@@ -225,20 +264,21 @@ public static class Log
 
     private static string _consoleFormat = DefaultFormat;
     private static string _fileFormat = DefaultFormat;
-    private static string _timestampFormat = TimestampFormat;
+    private static volatile string _timestampFormat = TimestampFormat;
     //Precompiled format template, rebuilt when the format string changes; the output thread concatenates each log directly from fragments
-    private static CompiledFormat _consoleCompiled = new(DefaultFormat);
-    private static CompiledFormat _fileCompiled = new(DefaultFormat);
+    private static volatile CompiledFormat _consoleCompiled = new(DefaultFormat);
+    private static volatile CompiledFormat _fileCompiled = new(DefaultFormat);
 
     //LevelNames level names indexed by enum value; the output thread originally ran Enum.ToString plus ToUpper for every log
-    private static readonly string[] LevelNames = { "DBG", "INFO", "WARN", "ERROR", "CRIT", "NONE" };
+    //Brackets are part of the name so the level color covers the whole tag
+    private static readonly string[] LevelNames = { "[DBG]", "[INFO]", "[WARN]", "[ERROR]", "[CRIT]", "[NONE]" };
 
-    //Buffer entry cap: when production outpaces output, logs must be dropped or _pending grows until OutOfMemory
-    //Measured: --debug full logging reaches 160k entries/sec, console output cannot keep up and no amount of memory can hold it
-    //Three-tier shedding: soft cap drops Debug/Info, hard cap drops Warning too, and at the top Error is dropped as well; keeping the process alive wins
-    private const int PendingSoftLimit = 65536;
-    private const int PendingHardLimit = 131072;
-    private const int PendingMaxLimit = 262144;
+    //Per-thread buffer caps. The old global cap (64k/128k/256k) had to grow to hundreds of thousands before shedding
+    //Each thread now has its own three-tier cap, so total memory is bounded by threads * PerThreadMaxLimit
+    //Sheds by level: Debug/Info first, Warning next, Error/Critical last, so a log flood does not take the crash scene down with it
+    private const int PerThreadSoftLimit = 1024;
+    private const int PerThreadHardLimit = 4096;
+    private const int PerThreadMaxLimit = 16384;
 
     //MaxMessageLength per-message character cap, truncated when exceeded
     //Large objects like chunk data can ToString into tens of KB per entry; truncation saves real memory in the buffer
@@ -281,7 +321,7 @@ public static class Log
         {
             var packed = LogArchive.Archive(_logDirectory);
             if (packed > 0)
-                WriteCleanupLog($"[Log Archive] Packed {packed} old log file(s) into {LogArchive.Extension}");
+                Info($"[Log] Packed {packed} old log file(s) into {LogArchive.Extension}");
         }
         catch (Exception e)
         {
@@ -321,21 +361,7 @@ public static class Log
                 }
             }
             if (deletedCount > 0)
-                WriteCleanupLog($"[Log Cleanup] Deleted {deletedCount} old log file(s) (retention: {_retentionDays} days)");
-        }
-        catch
-        {
-        }
-    }
-
-    //WriteCleanupLog the log system's own cleanup note, goes through the same output queue so it does not interleave with other logs
-    private static void WriteCleanupLog(string message)
-    {
-        try
-        {
-            var timestamp = DateTime.Now.ToString(_timestampFormat);
-            var logMessage = $"{timestamp}[INFO] - {message}";
-            Enqueue(RawEntry($"{timestamp}{LogColors.Info}[INFO]{LogColors.Reset} - {message}", logMessage));
+                Info($"[Log] Deleted {deletedCount} old log file(s) (retention: {_retentionDays} days)");
         }
         catch
         {
@@ -391,6 +417,7 @@ public static class Log
             if (_enableFileLogging)
                 InitializeFileWriter();
         }
+        UpdateDebugEnabled();
     }
 
     private static void InitializeFileWriter()
@@ -414,6 +441,7 @@ public static class Log
             _enableFileLogging = false;
             _fileWriter = null!;
         }
+        UpdateDebugEnabled();
     }
 
     private static void CloseFileWriter()
@@ -432,6 +460,7 @@ public static class Log
         {
             _fileWriter = null!;
         }
+        UpdateDebugEnabled();
     }
 
     public static void EnableFileLogging(bool enable)
@@ -448,12 +477,22 @@ public static class Log
             else
                 CloseFileWriter();
         }
+        UpdateDebugEnabled();
     }
 
     public static bool IsFileLoggingEnabled => _enableFileLogging && _fileWriter != null;
 
-    public static void SetConsoleLevel(LogLevel level) => _consoleLevel = level;
-    public static void SetFileLevel(LogLevel level) => _fileLevel = level;
+    public static void SetConsoleLevel(LogLevel level)
+    {
+        _consoleLevel = level;
+        UpdateDebugEnabled();
+    }
+
+    public static void SetFileLevel(LogLevel level)
+    {
+        _fileLevel = level;
+        UpdateDebugEnabled();
+    }
 
     private static string GetAnsiColor(LogLevel level) => level switch
     {
@@ -499,11 +538,20 @@ public static class Log
         private readonly Slot[] _slots;
         private readonly string[] _texts;
 
+        //NeedsFile/NeedsLevel/NeedsTimestamp let the output thread skip filename extraction and timestamp formatting
+        //when the active template does not actually reference them
+        public readonly bool NeedsFile;
+        public readonly bool NeedsLevel;
+        public readonly bool NeedsTimestamp;
+
         public CompiledFormat(string format)
         {
             var slots = new List<Slot>();
             var texts = new List<string>();
             var index = 0;
+            var needsFile = false;
+            var needsLevel = false;
+            var needsTimestamp = false;
             while (index < format.Length)
             {
                 var open = format.IndexOf('{', index);
@@ -530,10 +578,16 @@ public static class Log
                 slots.Add(slot);
                 //Unrecognized placeholders are preserved as-is, so a bad format string is directly visible in the output
                 texts.Add(slot == Slot.Literal ? format[open..(close + 1)] : string.Empty);
+                if (slot == Slot.File) needsFile = true;
+                if (slot == Slot.Level) needsLevel = true;
+                if (slot == Slot.Timestamp) needsTimestamp = true;
                 index = close + 1;
             }
             _slots = slots.ToArray();
             _texts = texts.ToArray();
+            NeedsFile = needsFile;
+            NeedsLevel = needsLevel;
+            NeedsTimestamp = needsTimestamp;
         }
 
         private static Slot Resolve(string token) => token switch
@@ -553,14 +607,14 @@ public static class Log
 
         //Append appends one log into the buffer per the template
         //levelColor when non-null only the level tag is colored, the rest keeps the default color, so only tags like [INFO] are colored
-        public void Append(StringBuilder sb, in LogEntry entry, string fileName, string levelName, string levelColor)
+        public void Append(StringBuilder sb, in LogEntry entry, string timestamp, string fileName, string levelName, string levelColor)
         {
             for (var i = 0; i < _slots.Length; i++)
             {
                 switch (_slots[i])
                 {
                     case Slot.Literal: sb.Append(_texts[i]); break;
-                    case Slot.Timestamp: sb.Append(entry.Timestamp); break;
+                    case Slot.Timestamp: sb.Append(timestamp); break;
                     case Slot.Level:
                         if (levelColor.Length == 0)
                         {
@@ -604,8 +658,9 @@ public static class Log
         if (message.Length > MaxMessageLength)
             message = string.Concat(message.AsSpan(0, MaxMessageLength), "...(truncated)");
 
+        //DateTime.Now is cheap compared to ToString, so the entry carries the struct and the output thread formats it
         Enqueue(new LogEntry(level, message, filePath, lineNumber, memberName, GetCurrentSource(),
-            DateTime.Now.ToString(_timestampFormat), null, null, null));
+            DateTime.Now, null, null, null));
     }
 
     //SetMainThread designates the server main thread
@@ -614,7 +669,7 @@ public static class Log
 
     //LastOriginFile/Line/Member/Source call site of the most recent log actually written by the main thread
     //Printed when the watchdog reports Can't keep up, to confirm the last line the main thread reached before and after the stall
-    private static int _mainThreadId;
+    private static volatile int _mainThreadId;
     private static string _lastOriginFile = "";
     private static int _lastOriginLine;
     private static string _lastOriginMember = "";
@@ -625,8 +680,16 @@ public static class Log
     public static string LastOriginMember => _lastOriginMember;
     public static string LastOriginSource => _lastOriginSource;
 
-    //Enqueue enqueues and wakes the output thread
-    //Drops logs when the buffer hits its cap: when production outpaces output, not dropping means OutOfMemory
+    //SignalOutput wakes the output thread only when the dirty flag was clear
+    //The flag collapses a burst of producers into at most one pending Release, so the semaphore count never explodes
+    private static void SignalOutput()
+    {
+        if (Interlocked.Exchange(ref _dirtyFlag, 1) == 0)
+            _signal.Release();
+    }
+
+    //Enqueue appends to the calling thread's own buffer, then wakes the output thread
+    //Drops logs when the thread buffer hits its cap: when production outpaces output, not dropping means OutOfMemory
     //Sheds by level: Debug/Info first, Warning next, Error/Critical last, so a log flood does not take the crash scene down with it
     private static void Enqueue(LogEntry entry)
     {
@@ -639,19 +702,20 @@ public static class Log
             _lastOriginMember = entry.MemberName;
             _lastOriginSource = entry.Source;
         }
-        lock (_bufferLock)
+        var buffer = GetThreadBuffer();
+        lock (buffer.Lock)
         {
-            var count = _pending.Count;
-            if (count >= PendingMaxLimit
-                || (count >= PendingHardLimit && entry.Level < LogLevel.Error)
-                || (count >= PendingSoftLimit && entry.Level < LogLevel.Warning))
+            var count = buffer.Entries.Count;
+            if (count >= PerThreadMaxLimit
+                || (count >= PerThreadHardLimit && entry.Level < LogLevel.Error)
+                || (count >= PerThreadSoftLimit && entry.Level < LogLevel.Warning))
             {
                 Interlocked.Increment(ref _droppedCounts[(int)entry.Level]);
                 return;
             }
-            _pending.Add(entry);
+            buffer.Entries.Add(entry);
         }
-        _signal.Release();
+        SignalOutput();
     }
 
     //ReportDrops summarizes accumulated drops into one Error note
@@ -675,7 +739,7 @@ public static class Log
         ProcessBatch(new List<LogEntry>
         {
             new(LogLevel.Error, message, "Log.cs", 0, nameof(ReportDrops), "NacreCraft.Logging.Log",
-                DateTime.Now.ToString(_timestampFormat), null, null, null)
+                DateTime.Now, null, null, null)
         });
     }
 
@@ -690,29 +754,72 @@ public static class Log
         _outputThread.Start();
     }
 
-    //OutputLoop the output thread body, repeatedly swapping out the whole buffer then processing it
-    //The swap happens once under the lock, formatting and IO are outside the lock, so producers are almost never blocked
+    //OutputLoop the output thread body, repeatedly draining every producer buffer then processing the batch
+    //Buffers are swapped under their own lock, formatting and IO happen outside any lock, so producers are almost never blocked
     private static void OutputLoop()
     {
-        var draining = new List<LogEntry>();
         while (true)
         {
             _signal.Wait();
-            //Clears excess signals, processes all buffer entries in one round
+            //Clears the dirty flag before draining; a producer that arrives during the drain will re-set it and re-Release
             while (_signal.Wait(0)) { }
-            lock (_bufferLock)
+            Interlocked.Exchange(ref _dirtyFlag, 0);
+            ProcessAllBuffers();
+            if (_flushRequested)
             {
-                //Swapped with an empty list, the old list keeps loading the next round with capacity kept at peak; this is the dynamically growing buffer
-                (_pending, draining) = (draining, _pending);
-            }
-            if (draining.Count > 0)
-            {
-                ProcessBatch(draining);
-                draining.Clear();
+                FlushFileWriter();
+                _flushEvt?.Set();
+                _flushEvt = null;
+                _flushRequested = false;
             }
             //The drop note is reported after this round's backlog is processed, so it is not buried by its own preceding logs
             ReportDrops();
             if (_shutdown) return;
+        }
+    }
+
+    //ProcessAllBuffers swaps every producer buffer out first and only then processes the batches
+    //The two phases must not interleave. AppendixConsole raises OnLogOutput, and a subscriber that logs again produces
+    //on this very thread while a batch is being enumerated; that entry lands in whichever buffer it owns, and if such a
+    //buffer were swapped later in the same round its Entries would be appended to mid-enumeration, which List rejects
+    //A swapped-out batch is therefore handed a freshly emptied list instead of a recycled shared one, so its owner never
+    //writes into a list this thread is walking
+    private static void ProcessAllBuffers()
+    {
+        _roundBatches.Clear();
+        foreach (var buffer in _allBuffers)
+        {
+            lock (buffer.Lock)
+            {
+                if (buffer.Entries.Count == 0) continue;
+                _roundBatches.Add(buffer.Entries);
+                buffer.Entries = TakeBatchList();
+            }
+        }
+        foreach (var batch in _roundBatches)
+        {
+            ProcessBatch(batch);
+            ReturnBatchList(batch);
+        }
+        _roundBatches.Clear();
+    }
+
+    //TakeBatchList/ReturnBatchList recycle the lists that back producer buffers
+    //Without the pool every round would allocate one list per active thread; with it the steady state allocates nothing
+    private static List<LogEntry> TakeBatchList()
+    {
+        lock (_batchPool)
+        {
+            return _batchPool.Count > 0 ? _batchPool.Pop() : new List<LogEntry>();
+        }
+    }
+
+    private static void ReturnBatchList(List<LogEntry> list)
+    {
+        list.Clear();
+        lock (_batchPool)
+        {
+            if (_batchPool.Count < MaxPooledBatches) _batchPool.Push(list);
         }
     }
 
@@ -722,6 +829,12 @@ public static class Log
     {
         var consoleBatch = new StringBuilder();
         var single = new StringBuilder(192);
+        var consoleCompiled = _consoleCompiled;
+        var fileCompiled = _fileCompiled;
+        var consoleLevel = _consoleLevel;
+        var fileLevel = _fileLevel;
+        var timestampFormat = _timestampFormat;
+        var hasFile = _enableFileLogging && _fileWriter != null;
         foreach (var entry in batch)
         {
             //Barrier: flush all preceding entries before releasing waiters, guaranteeing that logs are really on disk when Flush() returns
@@ -738,20 +851,23 @@ public static class Log
                 if (entry.RawFile is not null) WriteFileLine(entry.RawFile);
                 continue;
             }
-            //Both the filename and level name sinks need it, computed only once here
-            var fileName = ExtractFileName(entry.FilePath);
-            var levelName = LevelName(entry.Level);
-            if (_consoleLevel != LogLevel.None && entry.Level >= _consoleLevel)
+            //Filename and level name are computed lazily so a template that does not reference them skips the work
+            var fileName = consoleCompiled.NeedsFile || fileCompiled.NeedsFile ? ExtractFileName(entry.FilePath) : "unknown";
+            var levelName = consoleCompiled.NeedsLevel || fileCompiled.NeedsLevel ? LevelName(entry.Level) : string.Empty;
+            var timestamp = consoleCompiled.NeedsTimestamp || fileCompiled.NeedsTimestamp
+                ? entry.Timestamp.ToString(timestampFormat)
+                : string.Empty;
+            if (consoleLevel != LogLevel.None && entry.Level >= consoleLevel)
             {
                 single.Clear();
                 //Colors only the level tag; wrapping the whole line would color the body too, making long logs noisy
-                _consoleCompiled.Append(single, entry, fileName, levelName, GetAnsiColor(entry.Level));
+                consoleCompiled.Append(single, entry, timestamp, fileName, levelName, GetAnsiColor(entry.Level));
                 AppendConsole(consoleBatch, single);
             }
-            if (_fileLevel == LogLevel.None || entry.Level < _fileLevel) continue;
+            if (!hasFile || fileLevel == LogLevel.None || entry.Level < fileLevel) continue;
             single.Clear();
-            _fileCompiled.Append(single, entry, fileName, levelName, string.Empty);
-            WriteFileLine(single.ToString());
+            fileCompiled.Append(single, entry, timestamp, fileName, levelName, string.Empty);
+            WriteFileLine(single);
         }
         FlushConsole(consoleBatch);
         //Every batch is flushed, not only the ones carrying an Error
@@ -795,7 +911,8 @@ public static class Log
         }
     }
 
-    //WriteFileLine writes a line to the log file, called only on the output thread
+    //WriteFileLine writes a single preformatted line to the log file, called only on the output thread
+    //Takes a string for raw entries; the StringBuilder overload below avoids the ToString for normal formatted entries
     private static void WriteFileLine(string line)
     {
         if (!_enableFileLogging || _fileWriter is null) return;
@@ -804,6 +921,27 @@ public static class Log
             try
             {
                 _fileWriter.WriteLine(line);
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine($"[log] file write failed: {e}");
+                _enableFileLogging = false;
+                CloseFileWriter();
+            }
+        }
+    }
+
+    //WriteFileLine StringBuilder overload avoids an intermediate string allocation per file line
+    //The whole batch is written under a single lock acquisition to keep the producer from stalling on file IO
+    private static void WriteFileLine(StringBuilder line)
+    {
+        if (!_enableFileLogging || _fileWriter is null) return;
+        lock (_lock)
+        {
+            try
+            {
+                _fileWriter.Write(line);
+                _fileWriter.Write('\n');
             }
             catch (Exception e)
             {
@@ -838,10 +976,18 @@ public static class Log
     public static void Flush()
     {
         if (_shutdown || _outputThread is null) return;
-        using var done = new ManualResetEventSlim(false);
-        Enqueue(new LogEntry(LogLevel.Info, string.Empty, string.Empty, 0, string.Empty, string.Empty,
-            string.Empty, done.Set, null, null));
-        done.Wait(TimeSpan.FromSeconds(2));
+        var evt = new ManualResetEventSlim(false);
+        _flushEvt = evt;
+        _flushRequested = true;
+        SignalOutput();
+        try
+        {
+            evt.Wait(TimeSpan.FromSeconds(2));
+        }
+        finally
+        {
+            evt.Dispose();
+        }
     }
 
     //Shutdown drains the buffer, stops the output thread and closes files, idempotent
@@ -850,21 +996,150 @@ public static class Log
         if (_shutdown) return;
         Flush();
         _shutdown = true;
-        _signal.Release();
+        SignalOutput();
         _outputThread?.Join(TimeSpan.FromSeconds(2));
         lock (_lock) CloseFileWriter();
     }
 
-    //DebugLogHandler deferred construction parameter for Debug logs
-    //Previously Log.Debug($"...") built the interpolated string before passing it in; that string was wasted when the level was off
-    //Throwaway allocations dominate hot paths like per-cell sampling and per-tick queries; now nothing is built at all when the level is off
+    //Per-level interpolated string handlers
+    //A shared handler cannot work here: [InterpolatedStringHandlerArgument] carries no value on a static method, so the
+    //handler never learns which level asked for it and would have to guess a predicate. Each level therefore owns a type
+    //that bakes its own check in. When the level is off no buffer is built and every Append collapses to a no-op, which is
+    //the whole point: $"" interpolation and boxing do not happen at all on the disabled path
+    [InterpolatedStringHandler]
+    public ref struct InfoLogHandler
+    {
+        private readonly StringBuilder? _builder;
+
+        public InfoLogHandler(int literalLength, int formattedCount)
+            => _builder = IsEnabled(LogLevel.Info) ? new StringBuilder(literalLength + formattedCount * 8) : null;
+
+        public readonly bool Enabled => _builder is not null;
+
+        public void AppendLiteral(string value) => _builder?.Append(value);
+
+        public void AppendFormatted<T>(T value) => _builder?.Append(value);
+
+        public void AppendFormatted(string? value) => _builder?.Append(value);
+
+        public void AppendFormatted(ReadOnlySpan<char> value) => _builder?.Append(value);
+
+        public override readonly string ToString() => _builder?.ToString() ?? string.Empty;
+    }
+
+    [InterpolatedStringHandler]
+    public ref struct WarningLogHandler
+    {
+        private readonly StringBuilder? _builder;
+
+        public WarningLogHandler(int literalLength, int formattedCount)
+            => _builder = IsEnabled(LogLevel.Warning) ? new StringBuilder(literalLength + formattedCount * 8) : null;
+
+        public readonly bool Enabled => _builder is not null;
+
+        public void AppendLiteral(string value) => _builder?.Append(value);
+
+        public void AppendFormatted<T>(T value) => _builder?.Append(value);
+
+        public void AppendFormatted(string? value) => _builder?.Append(value);
+
+        public void AppendFormatted(ReadOnlySpan<char> value) => _builder?.Append(value);
+
+        public override readonly string ToString() => _builder?.ToString() ?? string.Empty;
+    }
+
+    [InterpolatedStringHandler]
+    public ref struct ErrorLogHandler
+    {
+        private readonly StringBuilder? _builder;
+
+        public ErrorLogHandler(int literalLength, int formattedCount)
+            => _builder = IsEnabled(LogLevel.Error) ? new StringBuilder(literalLength + formattedCount * 8) : null;
+
+        public readonly bool Enabled => _builder is not null;
+
+        public void AppendLiteral(string value) => _builder?.Append(value);
+
+        public void AppendFormatted<T>(T value) => _builder?.Append(value);
+
+        public void AppendFormatted(string? value) => _builder?.Append(value);
+
+        public void AppendFormatted(ReadOnlySpan<char> value) => _builder?.Append(value);
+
+        public override readonly string ToString() => _builder?.ToString() ?? string.Empty;
+    }
+
+    [InterpolatedStringHandler]
+    public ref struct CriticalLogHandler
+    {
+        private readonly StringBuilder? _builder;
+
+        public CriticalLogHandler(int literalLength, int formattedCount)
+            => _builder = IsEnabled(LogLevel.Critical) ? new StringBuilder(literalLength + formattedCount * 8) : null;
+
+        public readonly bool Enabled => _builder is not null;
+
+        public void AppendLiteral(string value) => _builder?.Append(value);
+
+        public void AppendFormatted<T>(T value) => _builder?.Append(value);
+
+        public void AppendFormatted(string? value) => _builder?.Append(value);
+
+        public void AppendFormatted(ReadOnlySpan<char> value) => _builder?.Append(value);
+
+        public override readonly string ToString() => _builder?.ToString() ?? string.Empty;
+    }
+
+    //IsEnabled tells the handler whether the requested level would be accepted by any sink
+    //Mirrors DebugEnabled but for arbitrary levels, used by the interpolated overloads below
+    public static bool IsEnabled(LogLevel level)
+    {
+        if (level == LogLevel.Debug) return _debugEnabled;
+        var toConsole = _consoleLevel != LogLevel.None && level >= _consoleLevel;
+        if (toConsole) return true;
+        return _enableFileLogging && _fileWriter != null
+            && _fileLevel != LogLevel.None && level >= _fileLevel;
+    }
+
+    //DebugEnabled whether Debug will be accepted by any sink, now a single volatile read
+    public static bool DebugEnabled => _debugEnabled;
+
+    //Debug fast path: one volatile read and a branch, inlined at the call site
+    //Slow path is NoInlining so the call site stays small and the JIT keeps inlining the fast path into hot loops
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Debug(string message,
+        [CallerFilePath] string filePath = "",
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerMemberName] string memberName = "")
+    {
+        if (!_debugEnabled) return;
+        DebugSlow(message, filePath, lineNumber, memberName);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void DebugSlow(string message, string filePath, int lineNumber, string memberName)
+        => WriteLog(LogLevel.Debug, message, filePath, lineNumber, memberName);
+
+    //Debug interpolation overload; when the level is off the handler builds no buffer and all Appends become no-ops
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Debug([InterpolatedStringHandlerArgument] ref DebugLogHandler handler,
+        [CallerFilePath] string filePath = "",
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerMemberName] string memberName = "")
+    {
+        if (!handler.Enabled) return;
+        DebugSlow(handler.ToString(), filePath, lineNumber, memberName);
+    }
+
+    //DebugLogHandler is kept as an alias so existing call sites and the public API do not break
+    //It now derives from the shared handler and only checks DebugEnabled
     [InterpolatedStringHandler]
     public ref struct DebugLogHandler
     {
         private readonly StringBuilder? _builder;
 
         public DebugLogHandler(int literalLength, int formattedCount)
-            => _builder = DebugEnabled ? new StringBuilder(literalLength + formattedCount * 8) : null;
+            => _builder = _debugEnabled ? new StringBuilder(literalLength + formattedCount * 8) : null;
 
         //Enabled whether a string really needs to be produced, short-circuits downstream when off
         public readonly bool Enabled => _builder is not null;
@@ -880,51 +1155,92 @@ public static class Log
         public override readonly string ToString() => _builder?.ToString() ?? string.Empty;
     }
 
-    //DebugEnabled whether Debug will be accepted by any sink
-    public static bool DebugEnabled
-        => (_consoleLevel != LogLevel.None && LogLevel.Debug >= _consoleLevel)
-            || (_enableFileLogging && _fileWriter != null && _fileLevel != LogLevel.None
-                && LogLevel.Debug >= _fileLevel);
-
-    public static void Debug(string message,
+    //Info/Warning/Error/Critical fast paths mirror Debug: one volatile-ish read on the level, then the slow path
+    //String overloads skip the pre-check because the level filter is cheap enough and stays in WriteLog for consistency
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Info(string message,
         [CallerFilePath] string filePath = "",
         [CallerLineNumber] int lineNumber = 0,
         [CallerMemberName] string memberName = "")
-        => WriteLog(LogLevel.Debug, message, filePath, lineNumber, memberName);
+        => InfoSlow(message, filePath, lineNumber, memberName);
 
-    //Debug interpolation overload; when the level is off the handler builds no buffer and all Appends become no-ops
-    public static void Debug([InterpolatedStringHandlerArgument] ref DebugLogHandler handler,
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void InfoSlow(string message, string filePath, int lineNumber, string memberName)
+        => WriteLog(LogLevel.Info, message, filePath, lineNumber, memberName);
+
+    //Info interpolation overload; when the level is off the handler builds no buffer and all Appends become no-ops
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Info([InterpolatedStringHandlerArgument] ref InfoLogHandler handler,
         [CallerFilePath] string filePath = "",
         [CallerLineNumber] int lineNumber = 0,
         [CallerMemberName] string memberName = "")
     {
         if (!handler.Enabled) return;
-        WriteLog(LogLevel.Debug, handler.ToString(), filePath, lineNumber, memberName);
+        InfoSlow(handler.ToString(), filePath, lineNumber, memberName);
     }
 
-    public static void Info(string message,
-        [CallerFilePath] string filePath = "",
-        [CallerLineNumber] int lineNumber = 0,
-        [CallerMemberName] string memberName = "")
-        => WriteLog(LogLevel.Info, message, filePath, lineNumber, memberName);
-
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Warning(string message,
         [CallerFilePath] string filePath = "",
         [CallerLineNumber] int lineNumber = 0,
         [CallerMemberName] string memberName = "")
+        => WarningSlow(message, filePath, lineNumber, memberName);
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void WarningSlow(string message, string filePath, int lineNumber, string memberName)
         => WriteLog(LogLevel.Warning, message, filePath, lineNumber, memberName);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Warning([InterpolatedStringHandlerArgument] ref WarningLogHandler handler,
+        [CallerFilePath] string filePath = "",
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerMemberName] string memberName = "")
+    {
+        if (!handler.Enabled) return;
+        WarningSlow(handler.ToString(), filePath, lineNumber, memberName);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Error(string message,
         [CallerFilePath] string filePath = "",
         [CallerLineNumber] int lineNumber = 0,
         [CallerMemberName] string memberName = "")
+        => ErrorSlow(message, filePath, lineNumber, memberName);
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ErrorSlow(string message, string filePath, int lineNumber, string memberName)
         => WriteLog(LogLevel.Error, message, filePath, lineNumber, memberName);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Error([InterpolatedStringHandlerArgument] ref ErrorLogHandler handler,
+        [CallerFilePath] string filePath = "",
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerMemberName] string memberName = "")
+    {
+        if (!handler.Enabled) return;
+        ErrorSlow(handler.ToString(), filePath, lineNumber, memberName);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Critical(string message,
         [CallerFilePath] string filePath = "",
         [CallerLineNumber] int lineNumber = 0,
         [CallerMemberName] string memberName = "")
+        => CriticalSlow(message, filePath, lineNumber, memberName);
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void CriticalSlow(string message, string filePath, int lineNumber, string memberName)
         => WriteLog(LogLevel.Critical, message, filePath, lineNumber, memberName);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Critical([InterpolatedStringHandlerArgument] ref CriticalLogHandler handler,
+        [CallerFilePath] string filePath = "",
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerMemberName] string memberName = "")
+    {
+        if (!handler.Enabled) return;
+        CriticalSlow(handler.ToString(), filePath, lineNumber, memberName);
+    }
 
     public static void Exception(Exception ex, string? message = null,
         [CallerFilePath] string filePath = "",

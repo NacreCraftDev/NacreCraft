@@ -384,6 +384,17 @@ Note the injected mod **cannot be your own mod** — self-injection also counts 
 | `label` | probe label, used only by `Mark` and `Probe` |
 | `environment` | the side the rule applies to, default `both`; a rule targeting a server type run on the client has no target at all and is filtered out by `environment` |
 
+`environment` is per rule, not per mod. The top-level one decides where the dll gets loaded; this one decides where a single rule applies. A mod that ships on both sides and injects into a client type and a server type has to declare it on both rules, or the side that lacks the type reports `in no known assembly` on every start:
+
+```json
+"hooks": [
+  { "target": "NacreCraft.Client.MinecraftClient", "method": "Run", "type": "MethodBody", "environment": "client" },
+  { "target": "NacreCraft.Server.DedicatedServer", "method": "Tick", "type": "Probe", "environment": "server" }
+]
+```
+
+Leaving it out means `both`, which is right for a single-sided mod and wrong for a dual-sided one.
+
 `sourceMod` is not written by mods: the assembly step stamps every rule with the `id` of the mod that declared it, and the outcome list uses it to name who a rule belongs to.
 
 The same rule can also be written as an annotation on the replacement method; the correspondence is:

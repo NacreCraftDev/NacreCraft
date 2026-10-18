@@ -79,7 +79,7 @@ public sealed class ItemEntityRenderer : EntityRenderer
             ItemEntity.GetSpin(state.AgeInTicks, state.BobOffset)));
         poseStack.Scale(DropScale, DropScale, DropScale);
         poseStack.Translate(-ModelPivot, -ModelPivot, -ModelPivot);
-        var pose = poseStack.Pose();
+        var pose = poseStack.Copy();
         var normalMatrix = poseStack.Normal();
         foreach (Direction direction in Enum.GetValues<Direction>())
         foreach (var quad in model.GetCullfaceQuads(direction))

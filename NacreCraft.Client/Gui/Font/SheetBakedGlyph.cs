@@ -79,7 +79,8 @@ internal sealed class SheetBakedGlyph : BakedGlyph
     }
 
     //Render full render logic, maps to vanilla BakedSheetGlyph.renderChar
-    //The shadow uses the PolygonOffset pipeline offset by shadowOffset to draw the shadow color; bold also thickens the shadow
+    //The GUI path renders flat, so the shadow only shifts by the shadow offset and uses the same pipeline as the glyph;
+    //vanilla picks the polygon-offset pipeline for the world path only, where depth is written
     //The main glyph uses the Normal pipeline; when bold a second draw offset by boldOffset thickens it
     public override void Render(IGuiRenderContext context, in GlyphRenderOptions options)
     {
@@ -88,15 +89,15 @@ internal sealed class SheetBakedGlyph : BakedGlyph
         bool bold = options.Bold;
         bool italic = options.Italic;
 
-        //The shadow is drawn first, maps to vanilla renderChar: with hasShadow, polygonOffset shadow before the normal main glyph
+        //The shadow is drawn first, maps to vanilla renderChar: with hasShadow, the shadow is drawn before the main glyph
         if (options.HasShadow)
         {
             RenderSingle(context, x + options.ShadowOffset, y + options.ShadowOffset,
-                options.ShadowColor, bold, italic, DisplayMode.PolygonOffset);
+                options.ShadowColor, bold, italic, DisplayMode.Normal);
             if (bold)
             {
                 RenderSingle(context, x + options.BoldOffset + options.ShadowOffset, y + options.ShadowOffset,
-                    options.ShadowColor, true, italic, DisplayMode.PolygonOffset);
+                    options.ShadowColor, true, italic, DisplayMode.Normal);
             }
         }
 

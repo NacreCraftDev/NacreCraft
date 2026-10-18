@@ -95,6 +95,8 @@ public sealed class EntityManager
             for (var i = 0; i < _ticking.Count; i++)
             {
                 var entity = _ticking[i];
+                //A player is ticked by the server's player loop instead, so it stays out of this one
+                if (!entity.TicksByEntityManager) continue;
                 if (entityTicking is not null && !entityTicking(ChunkOf(entity.Pos).Pack())) continue;
                 entity.Tick();
             }

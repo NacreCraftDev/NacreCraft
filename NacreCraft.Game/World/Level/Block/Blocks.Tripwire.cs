@@ -290,8 +290,9 @@ public static partial class Blocks
         }
 
         //OnEntityInside rechecks immediately when an entity enters the wire's cell, maps to vanilla entityInside
-        //Vanilla passes the stepping entity in directly; hooks here only give a position, so entities are always queried by shape range
-        public override void OnEntityInside(ServerLevel level, BlockPos pos, BlockState state)
+        //The stepping entity is not used here: the press test counts everything overlapping the wire, the same shape query vanilla runs
+        public override void OnEntityInside(ServerLevel level, BlockPos pos, BlockState state,
+            NacreCraft.Registry.Entity? entity)
         {
             if (state.GetValue(BlockStateProperties.Powered) || level.HasScheduledTick(pos, this)) return;
             CheckPressed(level, pos, state);

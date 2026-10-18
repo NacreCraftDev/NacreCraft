@@ -120,6 +120,13 @@ public sealed class HookRule
     //槽号是编译产物 换编译器版本会变 只能当"这一版的目标"用 不是稳定标识
     public IReadOnlyList<int>? Locals { get; set; }
 
+    //Priority 同一宿主上的定序 值大的先应用 默认 1000 与 mixin 的默认同名同值
+    //只对落在同一方法上的规则有意义：MethodBody 一个方法体只能有一个 多条命中时只有最高的那条留下 其余记 ConflictLost
+    //Probe/Mark 可以多条共存 优先级只决定插桩先后 不比优先级时按 mod id 定序 结果不随扫描顺序漂移
+    public int Priority { get; set; } = DefaultPriority;
+
+    public const int DefaultPriority = 1000;
+
     //从 Type 建规则 手上已有类型对象时用这个
     public HookRule(string originalType, string originalMethod, Type replacementType, string replacementMethod, HookType hookType = HookType.CallSite, PatchMode patchMode = PatchMode.ILRewrite, string? description = null, string? label = null, int? labelArgumentIndex = null, int? localIndex = null, object? constantValue = null, string? inType = null, string? inMethod = null, HookPlacement placement = HookPlacement.Replace, int? ordinal = null, int? argumentIndex = null, string? sliceFrom = null, string? sliceTo = null)
     {

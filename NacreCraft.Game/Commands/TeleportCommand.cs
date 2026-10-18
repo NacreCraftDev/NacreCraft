@@ -7,6 +7,7 @@ using NacreCraft.Game.Commands.Arguments;
 using NacreCraft.Game.Network.Protocol.Game;
 using NacreCraft.Game.Server;
 using NacreCraft.Primitives;
+using NacreCraft.Storage;
 
 namespace NacreCraft.Game.Commands;
 
@@ -17,6 +18,10 @@ namespace NacreCraft.Game.Commands;
 public static class TeleportCommand
 {
     private static int _teleportId;
+
+    //ErrorInvalidPosition thrown when the destination lies outside the world bounds, maps to vanilla commands.teleport.invalidPosition
+    private static readonly SimpleCommandExceptionType ErrorInvalidPosition =
+        new(new TranslatableMessage("commands.teleport.invalidPosition"));
 
     //LookAt the facing after teleport; it only supplies the target point; the algorithm is the same for players and entities
     private interface LookAt
@@ -146,6 +151,10 @@ public static class TeleportCommand
     private static void PerformTeleport(ServerCommandSource source, CommandTarget target, double x, double y, double z,
         IReadOnlySet<RelativeFlag> relatives, float yaw, float pitch, LookAt? lookAt)
     {
+        //Vanilla rejects the whole teleport instead of clamping it, so a coordinate far outside the world never reaches the entity
+        var block = new BlockPos((int)Math.Floor(x), (int)Math.Floor(y), (int)Math.Floor(z));
+        if (!ServerLevel.IsInSpawnableBounds(block)) throw ErrorInvalidPosition.Create();
+
         if (target.Player is { } player)
         {
             PerformPlayerTeleport(source, player, x, y, z, relatives, yaw, pitch, lookAt);

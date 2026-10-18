@@ -31,6 +31,16 @@ const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 /// How long the copy button keeps saying it copied before going back to its normal label
 const COPIED_HINT: Duration = Duration::from_secs(2);
 
+/// Window background, painted by the panel the whole layout sits in
+const PANEL_FILL: egui::Color32 = egui::Color32::from_rgb(0x16, 0x16, 0x1A);
+
+/// The report sits in its own recessed box, so the frame around it has somewhere to show
+const REPORT_FILL: egui::Color32 = egui::Color32::from_rgb(0x0D, 0x0D, 0x11);
+const REPORT_BORDER: egui::Color32 = egui::Color32::from_rgb(0x36, 0x36, 0x42);
+
+/// Tone for the summary line, which is context rather than the headline
+const MUTED: egui::Color32 = egui::Color32::from_rgb(0xB2, 0xB2, 0xBE);
+
 /// The request channel, created the first time a window is asked for
 /// None records a thread that could not be started, so the next request does not try again
 static SENDER: OnceLock<Option<Sender<Request>>> = OnceLock::new();
@@ -42,7 +52,10 @@ static PROXY: OnceLock<EventLoopProxy<UserEvent>> = OnceLock::new();
 pub struct Request {
     pub title: String,
     pub summary: String,
-    pub report_path: PathBuf,
+    /// Text to draw as-is; when it is absent the window falls back to reading report_path
+    pub body: Option<String>,
+    /// Report file to read and to locate with the open-folder button; absent when the caller has no file
+    pub report_path: Option<PathBuf>,
     pub label_open_folder: String,
     pub label_copy: String,
     pub label_copied: String,
@@ -109,7 +122,18 @@ fn start() -> Option<Sender<Request>> {
 
 /// run owns the event loop for the lifetime of the process
 fn run(receiver: Receiver<Request>, ready: Sender<bool>) {
-    let event_loop = match EventLoop::<UserEvent>::with_user_event().build() {
+    let mut builder = EventLoop::<UserEvent>::with_user_event();
+
+    // The window lives on a dedicated thread rather than the process main thread, because the host already owns the
+    // main thread and this component must stay out of its way. Windows only tolerates that when the builder is told to
+    // allow it; without the flag the loop panics outright instead of failing to build
+    #[cfg(windows)]
+    {
+        use winit::platform::windows::EventLoopBuilderExtWindows as _;
+        builder.with_any_thread(true);
+    }
+
+    let event_loop = match builder.build() {
         Ok(event_loop) => event_loop,
         Err(error) => {
             logging::write(&format!("the error window event loop could not be created: {error}"));
@@ -140,7 +164,7 @@ struct Shown {
     title: String,
     summary: String,
     body: String,
-    report_path: PathBuf,
+    report_path: Option<PathBuf>,
     label_open_folder: String,
     label_copy: String,
     label_copied: String,
@@ -189,10 +213,18 @@ impl Runner {
         }
 
         install_fonts(&egui.egui_ctx);
+        apply_style(&egui.egui_ctx);
 
-        let body = match std::fs::read_to_string(&request.report_path) {
-            Ok(text) => text,
-            Err(error) => format!("(the report could not be read: {error})"),
+        // A caller that has no report file hands the text over directly; only a crash path reads it back off disk
+        let body = match request.body {
+            Some(text) => text,
+            None => match request.report_path.as_ref() {
+                Some(path) => match std::fs::read_to_string(path) {
+                    Ok(text) => text,
+                    Err(error) => format!("(the report could not be read: {error})"),
+                },
+                None => String::new(),
+            },
         };
 
         window.window.set_title(&request.title);
@@ -228,46 +260,78 @@ impl Runner {
 
         let mut close = false;
         egui.run(&window.window, |ui| {
-            ui.heading(&shown.title);
-            ui.add_space(2.0);
-            ui.label(&shown.summary);
-            ui.separator();
+            // The ui handed in by run_ui covers the whole window with no margin and no background of its own, so every
+            // widget would sit flush against the window edge. The panels below supply both
 
-            // The report owns the middle of the window and scrolls on its own, so the buttons stay where they are no
-            // matter how long the report runs
-            let scroll_height = (ui.available_height() - 44.0).max(80.0);
-            egui::ScrollArea::vertical()
-                .max_height(scroll_height)
-                .auto_shrink([false, false])
+            // The action row is a panel of its own: reserving room for it by hand is what pushed it off the bottom,
+            // and a panel claims its height before the report measures what is left
+            egui::Panel::bottom("ncn-error-actions")
+                .frame(background_frame(egui::Margin { left: 20, right: 20, top: 12, bottom: 16 }))
                 .show(ui, |ui| {
-                    ui.add(egui::Label::new(egui::RichText::new(shown.body.as_str()).monospace()));
+                    // Right aligned, so the actions sit where a dialog puts them instead of trailing the text
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button(&shown.label_close).clicked() {
+                            close = true;
+                        }
+
+                        let copied = shown
+                            .copied_at
+                            .is_some_and(|at| at.elapsed() < COPIED_HINT);
+                        let copy_label = if copied { &shown.label_copied } else { &shown.label_copy };
+                        if ui.button(copy_label).clicked() {
+                            ui.ctx().copy_text(shown.body.clone());
+                            shown.copied_at = Some(Instant::now());
+                        }
+
+                        // Nothing to locate when the text was handed over directly, so the button is left out
+                        if let Some(path) = shown.report_path.as_ref() {
+                            if ui.button(&shown.label_open_folder).clicked() {
+                                open_report_location(path);
+                            }
+                        }
+                    });
                 });
 
-            ui.separator();
-            ui.horizontal(|ui| {
-                if ui.button(&shown.label_open_folder).clicked() {
-                    open_report_location(&shown.report_path);
-                }
+            egui::Panel::top("ncn-error-header")
+                .frame(background_frame(egui::Margin { left: 20, right: 20, top: 18, bottom: 12 }))
+                .show(ui, |ui| {
+                    ui.heading(&shown.title);
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new(&shown.summary).size(15.0).color(MUTED));
+                });
 
-                let copied = shown
-                    .copied_at
-                    .is_some_and(|at| at.elapsed() < COPIED_HINT);
-                let copy_label = if copied { &shown.label_copied } else { &shown.label_copy };
-                if ui.button(copy_label).clicked() {
-                    ui.ctx().copy_text(shown.body.clone());
-                    shown.copied_at = Some(Instant::now());
-                }
+            // CentralPanel has to come last, once the other two have taken their share
+            egui::CentralPanel::default()
+                .frame(background_frame(egui::Margin { left: 20, right: 20, top: 0, bottom: 0 }))
+                .show(ui, |ui| {
+                    let report = egui::Frame::new()
+                        .fill(REPORT_FILL)
+                        .stroke(egui::Stroke::new(1.0, REPORT_BORDER))
+                        .corner_radius(egui::CornerRadius::same(6))
+                        .inner_margin(egui::Margin::same(14));
 
-                if ui.button(&shown.label_close).clicked() {
-                    close = true;
-                }
-            });
+                    report.show(ui, |ui| {
+                        // The card fills what is left over, minus its own padding and border
+                        let inner_height = (ui.available_height() - 30.0).max(60.0);
+                        ui.set_min_height(inner_height);
+                        egui::ScrollArea::vertical()
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| {
+                                // The size is spelled out rather than inherited: a monospace override otherwise keeps
+                                // whatever size the body style carries, tying the report to the label settings
+                                ui.add(egui::Label::new(
+                                    egui::RichText::new(shown.body.as_str()).monospace().size(15.0),
+                                ));
+                            });
+                    });
+                });
         });
 
         unsafe {
             use glow::HasContext as _;
             if let Some(gl) = self.gl.as_ref() {
-                gl.clear_color(0.10, 0.10, 0.12, 1.0);
+                // Matches the panel fill set in apply_style, so no strip of a different shade shows at the edges
+                gl.clear_color(0.086, 0.086, 0.102, 1.0);
                 gl.clear(glow::COLOR_BUFFER_BIT);
             }
         }
@@ -412,8 +476,11 @@ fn create_window(event_loop: &ActiveEventLoop) -> Result<(GlutinWindow, glow::Co
 
     let attributes = winit::window::WindowAttributes::default()
         .with_resizable(true)
-        .with_inner_size(winit::dpi::LogicalSize { width: 760.0, height: 560.0 })
+        .with_inner_size(winit::dpi::LogicalSize { width: 900.0, height: 640.0 })
         .with_title("NacreCraft")
+        // Taken from the executable rather than shipped alongside it, so the taskbar entry and the file on disk always
+        // show the same icon; a missing one simply leaves the window without
+        .with_window_icon(crate::icon::window_icon())
         // Kept hidden until the first frame is painted, so the window never flashes an empty background
         .with_visible(false);
 
@@ -513,6 +580,48 @@ fn install_fonts(ctx: &egui::Context) {
     ctx.set_fonts(fonts);
 }
 
+/// apply_style tunes the theme for reading a report
+/// The default theme draws body text at 12.5 points in a mid grey, which is the wrong thing to hand someone who has to
+/// scan a stack of log lines; the sizes below are set for a window that is mostly text rather than mostly controls
+fn apply_style(ctx: &egui::Context) {
+    const FILL: egui::Color32 = egui::Color32::from_rgb(0x16, 0x16, 0x1A);
+
+    // Pinned to dark: the fills below are picked against a dark background, and a light system theme would otherwise
+    // flip the window away from them
+    ctx.set_theme(egui::Theme::Dark);
+
+    ctx.all_styles_mut(|style| {
+        // An override beats the per-widget colours: labels, headings and the monospace body all read as one tone
+        style.visuals.override_text_color = Some(egui::Color32::from_rgb(0xF2, 0xF2, 0xF2));
+
+        style.text_styles = [
+            (egui::TextStyle::Heading, egui::FontId::proportional(28.0)),
+            (egui::TextStyle::Body, egui::FontId::proportional(17.0)),
+            (egui::TextStyle::Monospace, egui::FontId::monospace(16.0)),
+            (egui::TextStyle::Button, egui::FontId::proportional(17.0)),
+            (egui::TextStyle::Small, egui::FontId::proportional(14.0)),
+        ]
+        .into();
+
+        style.spacing.item_spacing = egui::vec2(10.0, 10.0);
+        style.spacing.button_padding = egui::vec2(16.0, 8.0);
+        style.spacing.scroll.bar_width = 12.0;
+
+        style.visuals.panel_fill = FILL;
+        style.visuals.window_fill = FILL;
+        // The buttons stay visible against the panel instead of blending into it
+        style.visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(0x2E, 0x2E, 0x36);
+        style.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(0x3C, 0x3C, 0x48);
+        style.visuals.widgets.active.bg_fill = egui::Color32::from_rgb(0x4A, 0x4A, 0x58);
+    });
+}
+
+/// background_frame is the shared panel background with the given padding
+/// Every panel uses the same fill, so the window reads as one surface rather than three stacked bars
+fn background_frame(margin: egui::Margin) -> egui::Frame {
+    egui::Frame::new().fill(PANEL_FILL).inner_margin(margin)
+}
+
 /// load_system_font reads the first usable font it finds
 /// Only single-face files are listed: the loader cannot open a .ttc collection, so those paths would fail at draw time
 /// rather than here
@@ -540,11 +649,20 @@ fn load_system_font() -> Option<Vec<u8>> {
 }
 
 /// open_report_location shows the report in the platform's file manager
+/// The path goes in unquoted: the argument is passed through to explorer as one token, and quotes written here would
+/// be escaped into it, which explorer cannot parse, so it falls back to whatever folder it last had open
 fn open_report_location(path: &Path) {
     #[cfg(target_os = "windows")]
-    let spawned = std::process::Command::new("explorer")
-        .arg(format!("/select,\"{}\"", path.display()))
-        .spawn();
+    let spawned = {
+        // Pointing /select at a file that is gone lands explorer in some unrelated folder, so the folder itself is the
+        // fallback rather than an unparseable selection
+        let target = if path.exists() {
+            format!("/select,{}", path.display())
+        } else {
+            path.parent().unwrap_or(path).display().to_string()
+        };
+        std::process::Command::new("explorer").arg(target).spawn()
+    };
 
     #[cfg(target_os = "macos")]
     let spawned = std::process::Command::new("open").arg("-R").arg(path).spawn();

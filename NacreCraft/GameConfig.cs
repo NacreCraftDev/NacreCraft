@@ -19,6 +19,8 @@ public sealed class GameConfig
 
     //Whether fullscreen
     public bool Fullscreen { get; set; }
+    //Fullscreen video mode in the "1920x1080@60" form, empty means the monitor's current mode
+    public string FullscreenVideoMode { get; set; } = string.Empty;
 
     //Whether VSync is enabled
     public bool EnableVsync { get; set; } = true;
@@ -55,6 +57,7 @@ public sealed class GameConfig
         config.Fov = props.GetInt("fov", 70);
         config.Gamma = props.GetFloat("gamma", 0.5f);
         config.Fullscreen = props.GetBool("fullscreen", false);
+        config.FullscreenVideoMode = props.GetOrDefault("fullscreenVideoMode", string.Empty);
         config.EnableVsync = props.GetBool("enableVsync", true);
         config.Demo = props.GetBool("demo", false);
         config.Language = props.GetOrDefault("lang", "en_us");
@@ -78,6 +81,7 @@ public sealed class GameConfig
         props.SetInt("fov", Fov);
         props.Set("gamma", Gamma.ToString(System.Globalization.CultureInfo.InvariantCulture));
         props.SetBool("fullscreen", Fullscreen);
+        props.Set("fullscreenVideoMode", FullscreenVideoMode);
         props.SetBool("enableVsync", EnableVsync);
         props.SetBool("demo", Demo);
         props.Set("lang", Language);

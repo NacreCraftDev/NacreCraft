@@ -41,8 +41,8 @@ public static class AppPaths
     //TracesDir traces/ subdirectory, where /debug trace writes its captures
     public static string TracesDir => Path.Combine(BaseDirectory, "traces");
 
-    //OptionsPath client config file path assets/options.txt
-    public static string OptionsPath => Path.Combine(AssetsDir, "options.txt");
+    //OptionsPath client config file path root/options.txt, matching the vanilla gameDir location
+    public static string OptionsPath => Path.Combine(BaseDirectory, "options.txt");
 
     //ServerPropertiesPath server config file path root/server.properties
     public static string ServerPropertiesPath => Path.Combine(BaseDirectory, "server.properties");

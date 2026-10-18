@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace NacreCraft.Primitives;
 
 //Direction enum, maps to vanilla net.minecraft.core.Direction
@@ -135,6 +137,28 @@ public readonly struct Direction : IEquatable<Direction>
     };
 
     public bool IsHorizontal => AxisValue == Axis.X || AxisValue == Axis.Z;
+
+    //GetRotation the rotation that turns a texture plane to face this direction, maps to vanilla Direction.getRotation
+    //Vanilla builds it with JOML rotationXYZ/rotationX; downstream this orients decals such as arrows stuck in blocks
+    public Quaternion GetRotation() => Id3D switch
+    {
+        DownId => Quaternion.CreateFromAxisAngle(Vector3.UnitX, MathF.PI),
+        UpId => Quaternion.Identity,
+        NorthId => RotationXyz(1.5707964f, 0f, MathF.PI),
+        SouthId => RotationXyz(1.5707964f, 0f, 0f),
+        WestId => RotationXyz(1.5707964f, 0f, 1.5707964f),
+        _ => RotationXyz(1.5707964f, 0f, -1.5707964f),
+    };
+
+    //RotationXyz the JOML rotationXYZ convention: turn about X, then the already turned Y, then the already turned Z
+    //maps to org.joml.Quaternionf.rotationXYZ
+    private static Quaternion RotationXyz(float angleX, float angleY, float angleZ)
+    {
+        var aboutX = Quaternion.CreateFromAxisAngle(Vector3.UnitX, angleX);
+        var aboutY = Quaternion.CreateFromAxisAngle(Vector3.UnitY, angleY);
+        var aboutZ = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, angleZ);
+        return Quaternion.Concatenate(Quaternion.Concatenate(aboutX, aboutY), aboutZ);
+    }
 
     //getAxis returns the Axis
     public Axis GetAxis() => AxisValue;

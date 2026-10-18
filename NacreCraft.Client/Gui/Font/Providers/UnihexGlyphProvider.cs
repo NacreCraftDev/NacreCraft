@@ -139,7 +139,7 @@ public sealed class UnihexGlyphProvider : IGlyphProvider
             int shift = 32 - bitWidth;
             contents[i] = value << shift;
         }
-        provider._glyphs[codepoint] = new UnihexGlyph(contents);
+        provider._glyphs[codepoint] = new UnihexGlyph(contents, bitWidth);
     }
 
     private static int DecodeHex(char c, int lineNo)
@@ -176,15 +176,16 @@ public sealed class UnihexGlyphProvider : IGlyphProvider
         internal readonly int _right;
         private readonly IGlyphInfo _info;
 
-        public UnihexGlyph(int[] contents)
+        public UnihexGlyph(int[] contents, int bitWidth)
         {
             _contents = contents;
             int mask = 0;
             for (int i = 0; i < 16; i++) mask |= _contents[i];
             if (mask == 0)
             {
+                //An empty cell keeps the full data width, maps to the vanilla mask==0 branch: left=0 right=bitWidth
                 _left = 0;
-                _right = 31;
+                _right = bitWidth;
             }
             else
             {

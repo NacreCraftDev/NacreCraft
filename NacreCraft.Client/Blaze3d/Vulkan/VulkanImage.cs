@@ -272,6 +272,76 @@ public sealed unsafe class VulkanImage : GpuTexture
         }
     }
 
+    //Staging buffers from the previous batch; its submit was not waited on, so they are freed on the next flush,
+    //which is a frame later and well past the point the queue consumed them
+    private readonly List<VulkanBuffer> _retiredStagings = new();
+
+    //UploadRegionBatch uploads several regions in one submit
+    //Each region still gets its own staging buffer, but the layout transition, the copies and the transition back all
+    //land in a single command, which turns N submit-and-waits into one
+    internal override void UploadRegionBatch(GpuDevice device, GpuTexture.PendingRegionUpload[] batch)
+    {
+        if (Format.HasDepthAspect())
+            throw new InvalidOperationException("DepthAttachment does not support UploadRegion");
+        foreach (var retired in _retiredStagings) retired.Dispose();
+        _retiredStagings.Clear();
+        var stagings = new List<VulkanBuffer>(batch.Length);
+        try
+        {
+            foreach (var upload in batch)
+            {
+                var staging = (VulkanBuffer)_gpuDevice.CreateBuffer(null,
+                    GpuBuffer.UsageCopySrc | GpuBuffer.UsageCopyDst | GpuBuffer.UsageMapWrite, upload.Pixels.Length);
+                staging.Upload(upload.Pixels);
+                stagings.Add(staging);
+            }
+
+            _gpuDevice.RunOneTimeCommand(cmd =>
+            {
+                //The source access and stage follow the tracked layout: the first region upload starts from Undefined,
+                //where the source access mask has to be empty and the source stage is TopOfPipe
+                var (srcAccess, srcStage) = GetBarrierParams(_currentLayout);
+                TransitionLayout(cmd, _currentLayout, ImageLayout.TransferDstOptimal,
+                    srcAccess, AccessFlags.TransferWriteBit,
+                    srcStage, PipelineStageFlags.TransferBit);
+
+                for (int i = 0; i < batch.Length; i++)
+                {
+                    var upload = batch[i];
+                    var region = new BufferImageCopy
+                    {
+                        BufferOffset = 0,
+                        BufferRowLength = (uint)upload.Width,
+                        BufferImageHeight = (uint)upload.Height,
+                        ImageSubresource =
+                        {
+                            AspectMask = ImageAspectFlags.ColorBit,
+                            MipLevel = 0,
+                            BaseArrayLayer = 0,
+                            LayerCount = 1
+                        },
+                        ImageOffset = new Offset3D { X = upload.X, Y = upload.Y, Z = 0 },
+                        ImageExtent = new Extent3D { Width = (uint)upload.Width, Height = (uint)upload.Height, Depth = 1 }
+                    };
+                    fixed (Image* img = &_image)
+                    {
+                        _vk.CmdCopyBufferToImage(cmd, stagings[i].Handle, _image, ImageLayout.TransferDstOptimal, 1, &region);
+                    }
+                }
+
+                TransitionLayout(cmd, ImageLayout.TransferDstOptimal, ImageLayout.ShaderReadOnlyOptimal,
+                    AccessFlags.TransferWriteBit, AccessFlags.ShaderReadBit,
+                    PipelineStageFlags.TransferBit, PipelineStageFlags.FragmentShaderBit);
+            }, waitForCompletion: false);
+            _currentLayout = ImageLayout.ShaderReadOnlyOptimal;
+        }
+        finally
+        {
+            //Handed to the queue but not waited on, so ownership moves to the next flush instead of freeing here
+            _retiredStagings.AddRange(stagings);
+        }
+    }
+
     //TransitionLayout layout transition helper; aspect defaults to ColorBit, depth images pass DepthBit
     private void TransitionLayout(CommandBuffer cmd, ImageLayout oldLayout, ImageLayout newLayout,
         AccessFlags srcAccess, AccessFlags dstAccess, PipelineStageFlags srcStage, PipelineStageFlags dstStage,

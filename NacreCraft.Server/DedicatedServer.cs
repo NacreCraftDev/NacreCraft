@@ -216,8 +216,6 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
         level.BlockUpdateSink = new ServerBlockUpdateSink(level, _playerList, _blockEntities);
         //Block entities persist with chunks and are cleaned up on unload through this bridge, the Game layer handles coding by id
         level.BlockEntityBridge = new ServerBlockEntityBridge(level, _blockEntities);
-        //Players are not in the entity manager, entities like pressure plates need the player bounding boxes added for enter detection
-        level.ExtraEntityBoxes = PlayerBoxes;
         //Shape collision for entity movement, the level layer cannot ask block behavior, a collision view fetches block collision shapes per entity
         CollisionGetter collisionView = new LevelCollisionGetter(level, level.MinSectionY, level.SectionsCount);
         level.CollisionShapeProvider = (entity, box) => collisionView.GetBlockCollisions(entity, box).ToList();
@@ -577,6 +575,16 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
     //Broadcasts death event 3 so the client plays the death animation, then removes the entity from the level and the tracker sends the removal packet
     private void OnEntityDied(NacreCraft.Registry.Entity entity)
     {
+        //A player is never removed from the world on death: that entity stands for the connection itself, so dropping it
+        //would take them out of every lookup and every tracker until they respawn. Vanilla keeps the player entity in place
+        //and lets the death screen take over, which is also what the respawn request expects to find
+        if (entity is ServerPlayer player)
+        {
+            _playerList.AnnounceDeath(player, player.LastAttacker);
+            player.LastAttacker = null;
+            return;
+        }
+
         Log.Info($"Entity died {entity.Id} entityId={entity.EntityId}");
         _playerList.BroadcastAll(
             new NacreCraft.Game.Network.Protocol.Game.ClientboundEntityEventPacket(entity.EntityId, 3));
@@ -594,17 +602,6 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
             pos, engine,
             NacreCraft.Game.Network.Protocol.Game.ClientboundLightUpdatePacketData.CreateFilter(count, skySections),
             NacreCraft.Game.Network.Protocol.Game.ClientboundLightUpdatePacketData.CreateFilter(count, blockSections)));
-    }
-
-    //PlayerBoxes bounding boxes of online players, player size follows vanilla 0.6x1.8 with the feet at the origin
-    //Entities like pressure plates need players for enter detection and players are not in the entity manager so they are added this way
-    private IEnumerable<AABB> PlayerBoxes()
-    {
-        foreach (var player in _playerList.Players)
-        {
-            var pos = player.Position;
-            yield return new AABB(pos.X - 0.3, pos.Y, pos.Z - 0.3, pos.X + 0.3, pos.Y + 1.8, pos.Z + 0.3);
-        }
     }
 
     //CollectRandomTickChunks collects the chunks to random-tick in this dimension
@@ -930,10 +927,8 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
             stageStart = TickStageProfiler.Now();
             level.TickLight();
             TickStageProfiler.Record(TickStage.Light, stageStart);
-            //Entity enter-block effects, maps to vanilla Entity.checkInsideBlocks after entity movement
-            stageStart = TickStageProfiler.Now();
-            if (runsNormally) level.DispatchEntityInside();
-            TickStageProfiler.Record(TickStage.EntityInside, stageStart);
+            //Enter-block effects are no longer swept here: each entity runs its own check at the end of the move that
+            //put it there, maps to vanilla Entity.checkInsideBlocks, and the player path does the same from its tick
         }
         //Block entities advance with the world and stop while frozen, maps to the runsNormally filter of vanilla Level.tickBlockEntities
         stageStart = TickStageProfiler.Now();

@@ -138,7 +138,8 @@ public interface IGuiRenderContext
     void DrawQuadInverted(int x, int y, int width, int height, GuiColor color);
 
     //DrawText draws text; the character size is decided by the implementation
-    void DrawText(int x, int y, string text, GuiColor color);
+    //shadow draws the vanilla drop shadow at the glyph's shadow offset; widgets enable it, matching vanilla drawString
+    void DrawText(int x, int y, string text, GuiColor color, bool shadow = true);
 
     //MeasureText measures the text width in GUI units, so it can be combined with widget coordinates directly
     float MeasureText(string text);

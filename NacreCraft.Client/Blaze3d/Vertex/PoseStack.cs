@@ -51,13 +51,6 @@ public sealed class PoseStack
         _poses.Push(Matrix4x4.Identity);
     }
 
-    //Pose gets the top model matrix and recomputes the normal matrix on demand
-    public Matrix4x4 Pose()
-    {
-        _normalDirty = true;
-        return _poses.Peek();
-    }
-
     //Normal gets the top normal matrix, the inverse transpose 3x3 part of the pose
     public Matrix4x4 Normal()
     {
@@ -125,8 +118,17 @@ public sealed class PoseStack
     public Vector3 TransformNormal(float x, float y, float z)
         => Vector3.Normalize(Vector3.TransformNormal(new Vector3(x, y, z), Normal()));
 
-    //Copy snapshots the top pose for submit's deferred render, so it can still draw at execute even after poseStack has popped
+    //Copy the top model matrix; it reads the current pose and doubles as the snapshot submit keeps for its deferred render
     public Matrix4x4 Copy() => _poses.Peek();
+
+    //Last snapshots the top pose together with its normal matrix, maps to vanilla PoseStack.last
+    public Pose Last() => new Pose(_poses.Peek(), Normal());
+
+    //Pose a matched pair of model and normal matrices, maps to vanilla PoseStack.Pose
+    //Vanilla's Pose is a mutable object the stack edits in place and hands out by reference; the matrices here are values
+    //and the stack keeps them lazily, so this is an immutable snapshot instead, which is all a consumer such as the
+    //sheeted decal generator needs from it
+    public readonly record struct Pose(Matrix4x4 Model, Matrix4x4 Normal);
 
     //ComputeNormalMatrix computes the normal matrix from the pose matrix, the inverse transpose 3x3 part
     //System.Numerics has no Matrix3x3 so the upper 3x3 of a Matrix4x4 inverse transpose is used

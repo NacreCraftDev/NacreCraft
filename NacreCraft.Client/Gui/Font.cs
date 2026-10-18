@@ -81,7 +81,10 @@ public sealed class GlyphFont
             var baked = GetBaked(codepoint);
             if (baked != null)
             {
-                var options = new GlyphRenderOptions(penX, penY, color, shadowColor, false, false, 1.0f, 1.0f);
+                //Bold/shadow offsets come from the glyph metrics, maps to vanilla glyphInfo.getBoldOffset/getShadowOffset;
+                //unihex glyphs use 0.5 while bitmap glyphs keep the default 1.0
+                var options = new GlyphRenderOptions(penX, penY, color, shadowColor, false, false,
+                    baked.Info.BoldOffset, baked.Info.ShadowOffset);
                 baked.Render(context, in options);
                 penX += baked.Info.Advance;
             }
@@ -89,7 +92,8 @@ public sealed class GlyphFont
             {
                 //Missing glyphs use GetMissing as a placeholder, maps to vanilla AllMissingGlyphProvider
                 var missing = _stitcher.GetMissing();
-                var options = new GlyphRenderOptions(penX, penY, color, shadowColor, false, false, 1.0f, 1.0f);
+                var options = new GlyphRenderOptions(penX, penY, color, shadowColor, false, false,
+                    missing.Info.BoldOffset, missing.Info.ShadowOffset);
                 missing.Render(context, in options);
                 penX += missing.Info.Advance;
             }

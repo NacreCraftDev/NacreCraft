@@ -53,20 +53,23 @@ public sealed partial class ServerWindow : Window
 
     private void Poll()
     {
-        RefreshNow();
         //When the server main loop exits (for example console Ctrl+C) the window wraps up by itself, maps to the cleanup after vanilla halt
-        if (_server.Running)
+        //A stop can arrive before the first tick has seen the loop running, so the requested shutdown counts as well
+        if (!_server.Running)
         {
-            _sawRunning = true;
+            if (!_sawRunning && !_server.Stopping) return;
+            _poll.Stop();
+            Title = ShutdownTitle;
+            _log.Detach();
+            _logPage.Detach();
+            _store.Detach();
+            Close();
             return;
         }
-        if (!_sawRunning) return;
-        _poll.Stop();
-        Title = ShutdownTitle;
-        _log.Detach();
-        _logPage.Detach();
-        _store.Detach();
-        Close();
+
+        _sawRunning = true;
+        //Only refresh while the loop is up, the panels read state the shutdown has already torn down
+        RefreshNow();
     }
 
     private void RefreshNow()

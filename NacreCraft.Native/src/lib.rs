@@ -13,6 +13,7 @@
 //! - `stack`: the vectored exception handler that catches a stack overflow
 
 mod crash;
+mod icon;
 mod il;
 mod logging;
 mod rejit;
@@ -319,12 +320,16 @@ pub unsafe extern "C" fn ncn_register_stack_overflow_callback(
 
 /// ReportWindowRequest is the layout the managed side fills in
 /// Every string arrives as UTF-8 bytes plus its length, and the field order has to stay in step with the C# struct
+/// Body carries the text to show directly; report_path carries a file to read it from. A caller supplies one of them,
+/// so a failure that never wrote a report can still come up in the window
 #[repr(C)]
 pub struct ReportWindowRequest {
     pub title: *const u8,
     pub title_length: usize,
     pub summary: *const u8,
     pub summary_length: usize,
+    pub body: *const u8,
+    pub body_length: usize,
     pub report_path: *const u8,
     pub report_path_length: usize,
     pub label_open_folder: *const u8,
@@ -372,6 +377,10 @@ pub unsafe extern "C" fn ncn_show_report_window(request: *const ReportWindowRequ
         Ok(value) => value,
         Err(code) => return code,
     };
+    let body = match read_utf8(request.body, request.body_length) {
+        Ok(value) => value,
+        Err(code) => return code,
+    };
     let report_path = match read_utf8(request.report_path, request.report_path_length) {
         Ok(value) => value,
         Err(code) => return code,
@@ -402,10 +411,19 @@ pub unsafe extern "C" fn ncn_show_report_window(request: *const ReportWindowRequ
         (None, None)
     };
 
+    // An empty field means the caller did not supply it: a body to draw as-is, or a report file to read
+    let body = if body.is_empty() { None } else { Some(body) };
+    let report_path = if report_path.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(report_path))
+    };
+
     let code = ui::show(ui::Request {
         title,
         summary,
-        report_path: PathBuf::from(report_path),
+        body,
+        report_path,
         label_open_folder,
         label_copy,
         label_copied,

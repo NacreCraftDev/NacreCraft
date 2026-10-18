@@ -101,12 +101,16 @@ public static class ClientMain
         //   Must run before BootStrap because the latter freezes the registry; after freezing, data-driven loading has nowhere to write
         AssetsExtractor.Extract(options);
 
-        //5.1 Complete the language assets
-        //   The jar only carries en_us; other languages are in the resource object storage and land in assets/minecraft/lang and the root pack.mcmeta by resource index
-        //   Must run before ResourceManager construction; the folder pack enumerates the directory's files all at once when constructed
-        LanguageAssets.Prepare(
-            options.GetOptionOrDefault("assets-dir", string.Empty),
-            options.GetOptionOrDefault("asset-index", string.Empty));
+        //5.1 Land the assets the jar cannot supply
+        //   The jar carries no pack.mcmeta, only en_us of the language tables, and its font entries are either empty
+        //   placeholders or missing outright (unifont, which is where the CJK glyphs come from)
+        //   All of them live in the asset objects the launcher downloads alongside the version, so this reads the vanilla
+        //   argument names assetsDir/assetIndex
+        //   Must run after jar extraction so these objects overwrite the placeholders, and before ResourceManager
+        //   construction because the folder pack enumerates the directory's files all at once when constructed
+        AssetObjects.Prepare(
+            options.GetOptionOrDefault("assetsDir", string.Empty),
+            options.GetOptionOrDefault("assetIndex", string.Empty));
 
         //6. First half of Game-layer bootstrap, must run before data-driven loading
         //   The density function type table/block element JSON codecs depend on it; missing it makes the whole batch fail to decode
@@ -202,7 +206,9 @@ public static class ClientMain
         //   rsr is passed for later client Tags queries or /reload reloads
         //   resourceManager is passed to build the block atlas and world render chain once the swapchain is ready
         //   S3 texture injection and world render wiring are handled uniformly by MinecraftClient.EnsureWorldRenderer
-        var gpuApp = new VulkanGuiApp(gameConfig.EnableVsync, 800, 600, clientResources: resourceManager);
+        var gpuApp = new VulkanGuiApp(gameConfig.EnableVsync, 800, 600, clientResources: resourceManager, startFullscreen: gameConfig.Fullscreen);
+        //Options carry the fullscreen video mode, the same place vanilla reads it from in its Window constructor
+        gpuApp.SetPreferredFullscreenVideoMode(VideoMode.Read(gameConfig.FullscreenVideoMode));
         // minecraft.Run blocks the current thread until minecraft.Stop is called
         using var minecraft = new MinecraftClient(gameConfig, gpuApp, rsr: rsr, resourceManager: resourceManager,
             language: clientLanguage, packRepository: packRepository);

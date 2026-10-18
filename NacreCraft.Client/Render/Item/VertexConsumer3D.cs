@@ -94,7 +94,7 @@ public sealed class VertexConsumer3D : VertexConsumer
     //identical to vanilla instead of adding a convenience write only this class understood
     public static void PutBakedQuad(VertexConsumer consumer, PoseStack poseStack, in BakedQuad quad, QuadInstance instance)
     {
-        var pose = poseStack.Pose();
+        var pose = poseStack.Copy();
         var normalMatrix = poseStack.Normal();
         var normalVec = quad.Direction.UnitVector();
         var normal = Vector3.Normalize(Vector3.TransformNormal(normalVec, normalMatrix));

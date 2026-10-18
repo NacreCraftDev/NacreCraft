@@ -205,6 +205,11 @@ public sealed class ModHookRule
     [JsonPropertyName("locals")]
     public List<int>? Locals { get; set; }
 
+    //Priority: order among rules landing on the same host, higher applies first; absent keeps the engine default
+    //Only a rule that shares a host with another ever needs it, which is why declaring it is optional rather than expected
+    [JsonPropertyName("priority")]
+    public int? Priority { get; set; }
+
     //ConstantValue: the constant to match, used only when type is Constant
     //JSON carries no type tag so the integer width is guessed from the value range; to match long 5 on ldc.i8 you must write 5L in the annotation
     [JsonPropertyName("constantValue")]

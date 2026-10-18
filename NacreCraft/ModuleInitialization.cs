@@ -18,6 +18,8 @@ internal static class ModuleInitialization
     public static void Initialize()
     {
         EmbeddedAssemblyLoader.Initialize();
+        //--agent is claimed here, ahead of every entry point's parsing, so it never reaches the kernel's unhandled-argument broadcast
+        LaunchOptions.DeclareKernelOption("agent");
         //The crash handler lives in NacreCraft.Util; at this moment the kernel directory may not be set yet, and resolving directly would throw and crash the main library load
         //Instead, install it once that assembly is actually loaded; this layer only uses the BCL and touches no other kernel assembly
         AppDomain.CurrentDomain.AssemblyLoad += OnAssemblyLoad;
@@ -39,5 +41,8 @@ internal static class ModuleInitialization
         AppDomain.CurrentDomain.AssemblyLoad -= OnAssemblyLoad;
         CrashHandler.SetRootProvider(() => AppPaths.BaseDirectory);
         CrashHandler.Install();
+        //The agent runs last: the handler installed above is what reports it when it faults, and on a first run without
+        //the native layer Install has already relaunched the process, so this is only reached with the layer in place
+        AgentBootstrap.Run(Environment.GetCommandLineArgs());
     }
 }

@@ -27,6 +27,9 @@ public static class NativeErrorWindow
         public UIntPtr TitleLength;
         public IntPtr Summary;
         public UIntPtr SummaryLength;
+        //Body carries the text to show and ReportPath a file to read it from; one of the two is always empty
+        public IntPtr Body;
+        public UIntPtr BodyLength;
         public IntPtr ReportPath;
         public UIntPtr ReportPathLength;
         public IntPtr LabelOpenFolder;
@@ -47,15 +50,17 @@ public static class NativeErrorWindow
     //The wait belongs here: the caller continues its shutdown once this returns, and the process would otherwise end
     //before the window could be read
     public static void ShowCrash(string reportPath, string summary)
-        => Show("nacrecraft.error_window.crash_title", summary, reportPath, blocking: true);
+        => Show("nacrecraft.error_window.crash_title", summary, reportPath, string.Empty, blocking: true);
 
     //ShowModLoadFailure shows the window once mod loading is done, and does not block: startup carries on behind it
-    public static void ShowModLoadFailure(string reportPath, int failedCount)
+    //The text is handed over directly: a failed load writes no report, so the window has no file to read
+    public static void ShowModLoadFailure(string body, int problemCount)
         => Show("nacrecraft.error_window.mod_title",
-            Loc.Format("nacrecraft.error_window.mod_summary", failedCount), reportPath, blocking: false);
+            Loc.Format("nacrecraft.error_window.mod_summary", problemCount), string.Empty, body, blocking: false);
 
     //Show resolves the labels, hands the request over and reports whether anything came of it
-    private static void Show(string titleKey, string summary, string reportPath, bool blocking)
+    //Exactly one of reportPath and body is filled in; the empty one tells the native side which mode to use
+    private static void Show(string titleKey, string summary, string reportPath, string body, bool blocking)
     {
         if (!Enabled) return;
 
@@ -68,6 +73,8 @@ public static class NativeErrorWindow
                 TitleLength = titleLength,
                 Summary = Pin(summary, handles, out var summaryLength),
                 SummaryLength = summaryLength,
+                Body = Pin(body, handles, out var bodyLength),
+                BodyLength = bodyLength,
                 ReportPath = Pin(reportPath, handles, out var pathLength),
                 ReportPathLength = pathLength,
                 LabelOpenFolder = Pin(Loc.Get("nacrecraft.error_window.open_folder"), handles, out var openLength),

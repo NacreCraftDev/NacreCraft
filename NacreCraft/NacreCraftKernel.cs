@@ -85,9 +85,11 @@ public static class NacreCraftKernel
         var embedded = EmbeddedAssemblyLoader.ListEmbeddedAssemblies();
         if (embedded.Count > 0)
         {
-            Log.Info($"Embedded sub-libraries ({embedded.Count}):");
-            foreach (var name in embedded)
-                Log.Info($"  - {name}");
+            //Emitted as one entry rather than one per name: the format puts a separator in front of every entry, so a
+            //list marker on each line would land right after it and read as a doubled dash; only the first line now
+            //carries the prefix, and the rest come out as a plain list
+            var separator = Environment.NewLine + "  - ";
+            Log.Info($"Embedded sub-libraries ({embedded.Count}):{separator}{string.Join(separator, embedded)}");
         }
         //Log.Debug("PrintStartupInfo exit");
     }

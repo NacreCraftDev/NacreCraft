@@ -56,16 +56,16 @@ public sealed class TitleScreen : Screen
     {
         var cx = GuiWidth / 2;
         var cy = GuiHeight / 2;
-        //If the dirt background tile texture fails to load, textureId=0 falls back to a gray placeholder without blocking the menu
-        var dirtId = Minecraft.GpuApp?.RegisterTexture(Identifier.WithDefaultNamespace("textures/block/dirt.png")) ?? 0;
+        //The menu background is the vanilla 32x32 tile texture, not the block dirt texture; the texture already carries
+        //the darkened palette, so no tint is applied, maps to Screen.extractMenuBackgroundTexture
+        var dirtId = Minecraft.GpuApp?.RegisterTexture(Identifier.WithDefaultNamespace("textures/gui/menu_background.png")) ?? 0;
         _dirtBg = new GuiImage
         {
             TextureId = dirtId,
-            TextureWidth = 16,
-            TextureHeight = 16,
+            TextureWidth = 32,
+            TextureHeight = 32,
             Tile = true,
-            //Vanilla TitleScreen overlays a dark tint on the dirt background to simulate darken
-            Tint = GuiColor.FromRgb(64, 64, 64),
+            Tint = GuiColor.White,
             X = 0,
             Y = 0,
             Width = GuiWidth,

@@ -27,14 +27,19 @@ namespace NacreCraft.Game.Server;
 //Does not extend NacreCraft.Registry.Entity to avoid confusion with the existing entity system; this round only does the network-layer player
 //Implements ITrackedEntity so players and entities share one tracking sync path
 //Implements ISyncedEntity so metadata sync shares a mechanism with entities such as drops
-public sealed class ServerPlayer : ITrackedEntity, ISyncedEntity
+public sealed class ServerPlayer : Player
 {
-    //EntityId the entity id assigned by the server, used for sync such as ClientboundLoginPacket
-    //Shares the same allocator as Registry.Entity; two independent counters would collide and make attack packets target the wrong entity
-    public int EntityId { get; private set; }
     public GameProfile Profile { get; }
     public Connection Connection { get; }
-    public ServerLevel Level { get; internal set; }
+
+    //Level the dimension this player is in, viewed as the concrete server level
+    //The base holds it as a plain object because the registry layer cannot name the level types; this is the same storage
+    //behind a typed view, not a second field
+    public new ServerLevel Level
+    {
+        get => (ServerLevel)base.Level!;
+        internal set => base.Level = value;
+    }
 
     //GameType the player's game type, initialized from the server default in PlaceNewPlayer
     //On switch it syncs the inventory's infinite materials flag: creative swallows items it cannot fit without counting it as failure
@@ -56,6 +61,10 @@ public sealed class ServerPlayer : ITrackedEntity, ISyncedEntity
     //Abilities player ability state; the join ability packet and the player save both read it, maps to vanilla Player.abilities
     public Abilities Abilities { get; } = new();
 
+    //LastAttacker the player who landed the killing blow, recorded by PlayerList.Hurt so the death announcement can name
+    //them; the death event itself carries no damage source, so this is where the name has to come from
+    public ServerPlayer? LastAttacker { get; set; }
+
     //PermissionLevel permission level 0-4, set by PlayerList from ops.json on join
     //After op/deop changes PlayerList updates it and syncs the client, maps to the vanilla ServerPlayer permission level
     public int PermissionLevel { get; set; }
@@ -63,10 +72,11 @@ public sealed class ServerPlayer : ITrackedEntity, ISyncedEntity
     //HasPermissions whether it reaches the given permission level, maps to vanilla ServerPlayer.hasPermissions
     public bool HasPermissions(int level) => PermissionLevel >= level;
 
-    //Position player position, defaults to spawn 0,0,0; spawn logic is wired in later
-    public Vec3 Position { get; set; } = new(0, 64, 0);
-    public float Yaw { get; set; }
-    public float Pitch { get; set; }
+    //Position/Yaw/Pitch typed views onto the entity's own position and rotation
+    //The server code that predates the entity base keeps using these names; the storage is Pos/YRot/XRot
+    public Vec3 Position { get => Pos; set => Pos = value; }
+    public float Yaw { get => YRot; set => YRot = value; }
+    public float Pitch { get => XRot; set => XRot = value; }
 
     //_lastActivePosition the previous tick's position; differing from the current one means the player is active
     private Vec3 _lastActivePosition;
@@ -80,14 +90,11 @@ public sealed class ServerPlayer : ITrackedEntity, ISyncedEntity
     //RespawnAngle personal respawn facing
     public float RespawnAngle { get; set; }
 
-    //Velocity/OnGround the player's motion state recorded by the server; movement is reported by the client and filled back
-    public Vec3 Velocity { get; set; } = Vec3.Zero;
-    public bool OnGround { get; set; }
-
     //--- spectator camera, maps to vanilla ServerPlayer.camera ---
 
     //IsSpectator whether in spectator mode, maps to vanilla isSpectator
-    public bool IsSpectator => GameType == GameType.Spectator;
+    //Velocity and OnGround come from the entity base: movement is reported by the client and written straight onto them
+    public override bool IsSpectator() => GameType == GameType.Spectator;
 
     //_camera the current spectator camera entity; null means the view is on the player, maps to the vanilla camera field
     private ITrackedEntity? _camera;
@@ -127,37 +134,18 @@ public sealed class ServerPlayer : ITrackedEntity, ISyncedEntity
         Pitch = camera.XRot;
     }
 
-    //--- ITrackedEntity implementation ---
-
-    //Type the player entity type; players and entities share the tracking path and send AddEntity by this type
-    public EntityType<object>? Type => EntityTypes.PLAYER;
-
-    //Uuid the player's unique id, reusing the GameProfile id
-    public Guid Uuid => Profile.Id;
-
-    Vec3 ITrackedEntity.Pos => Position;
-    float ITrackedEntity.YRot => Yaw;
-    float ITrackedEntity.XRot => Pitch;
-
-    //Attributes the player attribute map, taking the default map by entity type
-    //maps to the vanilla ServerPlayer layer holding an AttributeMap via LivingEntity
-    public AttributeMap Attributes { get; }
-
-    //GetAttributeValue gets the final attribute value, maps to vanilla getAttributeValue
-    public double GetAttributeValue(AttributeDef attribute) => Attributes.GetValue(attribute);
-
     //--- pose and shared flags, maps to vanilla Entity.DATA_SHARED_FLAGS_ID and DATA_POSE ---
 
     //PoseStanding/PoseCrouching pose ids, aligned with the vanilla Pose enum
     public const int PoseStanding = 0;
     public const int PoseCrouching = 5;
 
-    //SyncedData player metadata container; shared flags and pose sync through it, maps to vanilla SynchedEntityData
-    public SynchedEntityData SyncedData { get; } = new();
-
-    //IsSprinting/IsSneaking sprint and sneak state, toggled by the player_command packet
-    public bool IsSprinting { get; private set; }
+    //IsSneaking sneak state, toggled by the player_command packet
+    //The metadata container and the sprint flag come from the entity base
     public bool IsSneaking { get; private set; }
+
+    //A player is ticked by the server's player loop, not by the level entity manager
+    public override bool TicksByEntityManager => false;
 
     //SharedFlags shared flags: bit 1 sneak, bit 3 sprint, the rest unused here
     public byte SharedFlags => (byte)((IsSneaking ? 1 << 1 : 0) | (IsSprinting ? 1 << 3 : 0));
@@ -230,9 +218,6 @@ public sealed class ServerPlayer : ITrackedEntity, ISyncedEntity
             Position.X, Position.Y, Position.Z, 0.2f, pitch * 2.0f);
     }
 
-    //EyeHeight player eye height, maps to the eye height in the vanilla player entity dimensions; used to compute the hand position when dropping
-    public const float EyeHeight = 1.62f;
-
     //DropPickupDelay pickup delay ticks after dropping, maps to vanilla 40 ticks
     private const int DropPickupDelay = 40;
 
@@ -298,41 +283,12 @@ public sealed class ServerPlayer : ITrackedEntity, ISyncedEntity
             MathF.Sin(yaw) * cosPitch, -MathF.Sin(pitch), MathF.Cos(yaw) * cosPitch);
     }
 
-    //MaxHealth full health from the max_health attribute, maps to vanilla getMaxHealth
-    //Once equipment and effects are wired up the max health with modifiers takes effect through the attribute
-    public float MaxHealth => (float)GetAttributeValue(EntityAttributes.MaxHealth);
-
     //AttackDamage bare-hand attack damage from the attack_damage attribute, maps to the vanilla player's ATTACK_DAMAGE
     //Weapon bonus/cooldown/crit are not implemented, added in phase 2
     public float AttackDamage => (float)GetAttributeValue(EntityAttributes.AttackDamage);
 
-    //Health current health; a new player is at full from the max_health attribute, restored by playerdata, and sent by the SetHealth packet on join
-    public float Health { get; set; }
-
-    //InvulnerableTime remaining ticks of the hurt invulnerability frames, maps to vanilla invulnerableTime
-    public int InvulnerableTime { get; private set; }
-
-    //IsDeadOrDying health reached zero, maps to vanilla isDeadOrDying
-    public bool IsDeadOrDying => Health <= 0f;
-
-    //Hurt deals damage, the minimal set of vanilla hurtServer
-    //No repeated damage within the invulnerability frames; armor reduction/knockback/damage source tracking are not done
-    public bool Hurt(float amount)
-    {
-        if (IsDeadOrDying || InvulnerableTime > 0) return false;
-        Health = Math.Max(0f, Health - amount);
-        //Invulnerability frames 10 ticks; vanilla is 20 of which 10 are for the hurt animation
-        InvulnerableTime = 10;
-        return true;
-    }
-
-    //SetHealth sets health and clamps to 0..full; save restore and respawn go through it, maps to vanilla setHealth
-    public void SetHealth(float value) => Health = Math.Clamp(value, 0f, MaxHealth);
-
-    //XpLevel xp level, XpProgress current level progress 0-1, XpTotal accumulated xp
-    public int XpLevel { get; set; }
-    public float XpProgress { get; set; }
-    public int XpTotal { get; set; }
+    //XpProgress view onto the base's XpP, kept because the command and save layers predate the rename
+    public float XpProgress { get => XpP; set => XpP = value; }
 
     //ContainerMenu the menu the player currently has open; PlaceNewPlayer creates the inventory menu and sends the initial content
     public AbstractContainerMenu? ContainerMenu { get; set; }
@@ -427,78 +383,61 @@ public sealed class ServerPlayer : ITrackedEntity, ISyncedEntity
     //--- mob effects, maps to vanilla LivingEntity.activeEffects ---
 
     //_activeEffects the effects currently active on the player, indexed by effect value
-    private readonly Dictionary<NacreCraft.Registry.MobEffect, MobEffectInstance> _activeEffects = new();
+    //Effects live in the entity base; these overrides add only the client sync a server player owes
+    //They map to the vanilla ServerPlayer onEffectAdded/onEffectUpdated/onEffectRemoved, which send to this connection alone
 
-        //ActiveEffects all active effect instances
-    public IReadOnlyCollection<MobEffectInstance> ActiveEffects => _activeEffects.Values;
-
-        //GetEffect gets the instance of the given effect; returns null when absent
-    public MobEffectInstance? GetEffect(NacreCraft.Registry.MobEffect effect)
-        => _activeEffects.GetValueOrDefault(effect);
-
-        //AddEffect applies an effect and returns whether it took effect; with an existing same-kind effect it follows vanilla update semantics and a weaker one does not override
-        //Only sent to the player itself, maps to vanilla ServerPlayer.onEffectUpdated syncing only this connection
-    public bool AddEffect(MobEffectInstance instance)
+    //AddEffect applies an effect and tells this connection about it
+    public override bool AddEffect(MobEffectInstance instance)
     {
-        var effect = instance.Effect.Value;
-        if (_activeEffects.TryGetValue(effect, out var existing))
-        {
-                //A lower level, or the same level with a shorter duration, does not override
-            if (instance.Amplifier < existing.Amplifier) return false;
-            if (instance.Amplifier == existing.Amplifier && instance.Duration < existing.Duration) return false;
-        }
-        _activeEffects[effect] = instance;
+        if (!base.AddEffect(instance)) return false;
         Connection.Send(ClientboundUpdateMobEffectPacket.Create(EntityId, instance,
-            effect is GameMobEffect gameEffect && gameEffect.NeedsBlend));
+            instance.Effect.Value is GameMobEffect gameEffect && gameEffect.NeedsBlend));
         return true;
     }
 
-        //RemoveEffect removes the given effect and notifies the client; returns whether it was removed
-    public bool RemoveEffect(NacreCraft.Registry.MobEffect effect)
+    //RemoveEffect removes one effect and tells this connection
+    public override bool RemoveEffect(Holder<NacreCraft.Registry.MobEffect> effect)
     {
-        if (!_activeEffects.Remove(effect, out var removed)) return false;
-        Connection.Send(new ClientboundRemoveMobEffectPacket(EntityId, removed.Effect));
+        if (!base.RemoveEffect(effect)) return false;
+        Connection.Send(new ClientboundRemoveMobEffectPacket(EntityId, effect));
         return true;
     }
 
-        //RemoveAllEffects removes all effects notifying the client for each; returns whether any were removed
-    public bool RemoveAllEffects()
+    //RemoveAllEffects clears every effect, telling this connection once per effect
+    public override bool RemoveAllEffects()
     {
-        if (_activeEffects.Count == 0) return false;
-        foreach (var instance in _activeEffects.Values)
-            Connection.Send(new ClientboundRemoveMobEffectPacket(EntityId, instance.Effect));
-        _activeEffects.Clear();
+        var effects = Effects.Map.Keys.ToList();
+        if (!base.RemoveAllEffects()) return false;
+        foreach (var effect in effects)
+            Connection.Send(new ClientboundRemoveMobEffectPacket(EntityId, effect));
         return true;
     }
 
-        //TickEffects advances effect durations every tick; expired ones are removed and the client notified
-    public void TickEffects()
+    //TickEffects ages the effects, reporting the ones that expired to this connection
+    public override void TickEffects()
     {
-        List<MobEffectInstance>? expired = null;
-        foreach (var instance in _activeEffects.Values)
+        var before = Effects.Map.Keys.ToList();
+        base.TickEffects();
+        foreach (var effect in before)
         {
-            instance.Tick();
-            if (instance.Expired) (expired ??= new()).Add(instance);
-        }
-        if (expired is null) return;
-            //The dictionary cannot be modified while iterating; expired entries are collected then removed together
-        foreach (var instance in expired)
-        {
-            _activeEffects.Remove(instance.Effect.Value);
-            Connection.Send(new ClientboundRemoveMobEffectPacket(EntityId, instance.Effect));
+            if (Effects.Map.ContainsKey(effect)) continue;
+            Connection.Send(new ClientboundRemoveMobEffectPacket(EntityId, effect));
         }
     }
 
     public ServerPlayer(GameProfile profile, Connection connection, ServerLevel level)
     {
-        EntityId = level.GetNextEntityId();
+        SetId(level.GetNextEntityId());
         Profile = profile;
         Connection = connection;
         Level = level;
+        Uuid = profile.Id;
+        //Default position just above the origin; PlayerList moves the player onto its spawn right after
+        Pos = new Vec3(0, 64, 0);
             //The player attribute map takes the default by entity type, from the same source as the client's local one; falls back to an empty map when unregistered
-        Attributes = new AttributeMap(DefaultAttributes.GetSupplier(EntityTypes.PLAYER) ?? AttributeSupplier.Empty);
+        SetAttributes(new AttributeMap(DefaultAttributes.GetSupplier(EntityTypes.PLAYER) ?? AttributeSupplier.Empty));
             //A new player is at full health, maps to setHealth(getMaxHealth()) in the vanilla LivingEntity constructor
-        Health = MaxHealth;
+        SetHealth(MaxHealth);
         _keepAliveSentAt = Environment.TickCount64;
             //Player metadata baseline, maps to vanilla Player's defineSynchedData
         SyncedData.Define(NacreCraft.Registry.Entity.SharedFlagsIndex, EntityDataSerializers.Byte, (byte)0);
@@ -507,8 +446,11 @@ public sealed class ServerPlayer : ITrackedEntity, ISyncedEntity
 
         //Tick per-frame scheduling, maps to vanilla ServerPlayer.tick
         //On a chunk crossing it updates the chunk view, drives ChunkSender progressive sending, keeps the heartbeat and syncs the menu's dirty slots to the client
-    public void Tick()
+    public override void Tick()
     {
+            //Only the bookkeeping half of the base tick runs: the physics half would fight the position the client reports
+            //Keeping it is what advances the tick counter and the previous position, which tracking and animation read
+        TickBase();
             //A spectator follows the camera position every tick, maps to the camera branch near the start of vanilla ServerPlayer.tick
         TickCamera();
             //Mob effects decrement duration every tick; expired ones are removed automatically and synced to the client
@@ -532,6 +474,9 @@ public sealed class ServerPlayer : ITrackedEntity, ISyncedEntity
             && !ReferenceEquals(openMenu, BackpackMenu) && !openMenu.StillValid(this))
             CloseContainer();
         TickKeepAlive();
+            //A player's position is reported by the client, so there is no move of ours to hang the inside-block check on
+            //and it runs from the tick instead; now that a player is an entity, the block gets the real entity, not just a box
+        Level?.CheckInsideBlocks(this);
     }
 
         //TickItemPickup checks drops underfoot and nearby and tries to pick them up
@@ -549,18 +494,15 @@ public sealed class ServerPlayer : ITrackedEntity, ISyncedEntity
         }
     }
 
-        //PickupBox the pickup test box: the player hit box 0.6 wide 1.8 tall inflated by vanilla 1.0/0.5/1.0 blocks
-    private AABB PickupBox()
-        => new AABB(Position.X - 0.3, Position.Y, Position.Z - 0.3,
-            Position.X + 0.3, Position.Y + 1.8, Position.Z + 0.3).Inflate(1.0, 0.5, 1.0);
+        //PickupBox the pickup test box: the player hit box inflated by vanilla 1.0/0.5/1.0 blocks
+    private AABB PickupBox() => BoundingBox.Inflate(1.0, 0.5, 1.0);
 
         //TickWorldBorderDamage continuous damage outside the world border, maps to the border damage section of vanilla LivingEntity.baseTick
         //No damage within the damage buffer; damage is the out-of-bounds blocks times damage per block with a minimum of 1
     private void TickWorldBorderDamage()
     {
         var border = Level.WorldBorder;
-        var box = new AABB(Position.X - 0.3, Position.Y, Position.Z - 0.3,
-            Position.X + 0.3, Position.Y + 1.8, Position.Z + 0.3);
+        var box = BoundingBox;
         if (border.IsWithinBounds(box)) return;
         var distance = border.GetDistanceToBorder(Position.X, Position.Z) + border.SafeZone;
         if (distance >= 0.0 || border.DamagePerBlock <= 0.0) return;

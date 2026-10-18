@@ -112,8 +112,8 @@ public sealed class GuiRenderContext : IGuiRenderContext
 
     //DrawText renders text; F7 prefers the Font dynamic bake path with FontAtlas as fallback
     //The Font path calls Font.Draw, iterating text Bake+Render and submitting GlyphBlitRenderState
-    //The FontAtlas path submits one BlitRenderState per glyph to the GUI_TEXT pipeline
-    public void DrawText(int x, int y, string text, GuiColor color)
+    //The FontAtlas path submits one BlitRenderState per glyph to the GUI_TEXT pipeline; that path has no shadow
+    public void DrawText(int x, int y, string text, GuiColor color, bool shadow = true)
     {
         if (string.IsNullOrEmpty(text)) return;
         var intColor = ToIntColor(color);
@@ -123,7 +123,7 @@ public sealed class GuiRenderContext : IGuiRenderContext
         {
             //The pen position stays in GUI units: GlyphFont advances the pen by each glyph's advance, and
             //DrawGlyphQuad scales the finished quad to device pixels
-            _font.Draw(this, text, x, y, intColor, shadow: false);
+            _font.Draw(this, text, x, y, intColor, shadow);
             return;
         }
 
@@ -288,6 +288,32 @@ public sealed class GuiRenderContext : IGuiRenderContext
         int bt = Math.Min(borderTop, height / 2);
         int br = Math.Min(borderRight, width / 2);
         int bb = Math.Min(borderBottom, height / 2);
+        //Vanilla shortcuts: when a dimension already matches the source, three pieces are enough and the middle band
+        //keeps the full source size on the other axis. Skipping them splits an unchanged dimension into three bands,
+        //which is what puts seams and a squashed center inside an otherwise intact widget texture
+        if (width == srcW && height == srcH)
+        {
+            DrawImage(textureId, x, y, width, height, srcX, srcY, srcW, srcH, tint);
+            return;
+        }
+        if (height == srcH)
+        {
+            DrawImage(textureId, x, y, bl, height, srcX, srcY, bl, srcH, tint);
+            BlitInnerSegment(textureId, x + bl, y, width - br - bl, height,
+                srcX + bl, srcY, srcW - br - bl, srcH, stretchInner, tint);
+            DrawImage(textureId, x + width - br, y, br, height,
+                srcX + srcW - br, srcY, br, srcH, tint);
+            return;
+        }
+        if (width == srcW)
+        {
+            DrawImage(textureId, x, y, width, bt, srcX, srcY, srcW, bt, tint);
+            BlitInnerSegment(textureId, x, y + bt, width, height - bb - bt,
+                srcX, srcY + bt, srcW, srcH - bb - bt, stretchInner, tint);
+            DrawImage(textureId, x, y + height - bb, width, bb,
+                srcX, srcY + srcH - bb, srcW, bb, tint);
+            return;
+        }
         //When the source size is under the sum of borders it falls back to DrawImage
         if (srcW < bl + br || srcH < bt + bb)
         {
@@ -324,6 +350,13 @@ public sealed class GuiRenderContext : IGuiRenderContext
     //The NineSlice stretchInner=false center-tile path also goes through this method
     public void DrawTiledSprite(int textureId, int srcW, int srcH,
         int x, int y, int width, int height, GuiColor tint)
+        => DrawTiledSprite(textureId, srcW, srcH, x, y, width, height, 0f, 1f, 0f, 1f, tint);
+
+    //DrawTiledSprite with an explicit UV sub-rect, maps to vanilla blitTiledSprite's textureX/textureY/spriteSize
+    //The nine-slice center must tile only its own band of the source texture; using the full 0..1 range would repeat
+    //the whole widget texture, borders included, inside the middle segment
+    public void DrawTiledSprite(int textureId, int srcW, int srcH,
+        int x, int y, int width, int height, float u0, float u1, float v0, float v1, GuiColor tint)
     {
         var texture = _textureResolver(textureId);
         if (texture is null || srcW <= 0 || srcH <= 0) return;
@@ -333,7 +366,7 @@ public sealed class GuiRenderContext : IGuiRenderContext
         var state = new TiledBlitRenderState(
             RenderPipelines.GUI_TEXTURED, texture, _poseStack.Peek(),
             srcW * _guiScale, srcH * _guiScale, ax, ay, ax1, ay1,
-            0f, 1f, 0f, 1f, ToIntColor(tint), _scissorStack.Peek());
+            u0, u1, v0, v1, ToIntColor(tint), _scissorStack.Peek());
         Submit(state);
     }
 
@@ -345,14 +378,20 @@ public sealed class GuiRenderContext : IGuiRenderContext
     {
         if (dw <= 0 || dh <= 0) return;
         if (stretchInner)
+        {
             DrawImage(textureId, dx, dy, dw, dh, sx, sy, sw, sh, tint);
-        else
-            DrawTiledSprite(textureId, sw, sh, dx, dy, dw, dh, tint);
+            return;
+        }
+        var texture = _textureResolver(textureId);
+        if (texture?.Texture0 is not { } img || img.Width <= 0 || img.Height <= 0) return;
+        DrawTiledSprite(textureId, sw, sh, dx, dy, dw, dh,
+            sx / (float)img.Width, (sx + sw) / (float)img.Width,
+            sy / (float)img.Height, (sy + sh) / (float)img.Height, tint);
     }
 
     //DrawSprite looks up a sprite by identifier and dispatches by scaling, maps to vanilla blitSprite
-    //Stretch goes to DrawImage Tile to DrawTiledSprite NineSlice to DrawImageNinePatch
-    //Returns silently when the sprite is not loaded or GuiSpriteManager is null, avoiding a crash
+    //The sprite is a region of the shared GUI atlas, so the UVs come from its atlas rectangle; the standalone-texture
+    //overloads below stay available for callers that draw a whole registered texture
     public void DrawSprite(string identifier, int x, int y, int width, int height, GuiColor tint)
     {
         if (_spriteManager is null) return;
@@ -361,17 +400,105 @@ public sealed class GuiRenderContext : IGuiRenderContext
         switch (sprite.Scaling)
         {
             case StretchScaling:
-                DrawImage(sprite.TextureId, x, y, width, height, 0, 0, sprite.Width, sprite.Height, tint);
+                BlitSprite(sprite, x, y, width, height, 0, 0, sprite.Width, sprite.Height, tint);
                 break;
             case TileScaling tile:
-                DrawTiledSprite(sprite.TextureId, tile.Width, tile.Height, x, y, width, height, tint);
+                BlitSpriteTiled(sprite, x, y, width, height, 0, 0, tile.Width, tile.Height, tint);
                 break;
             case NineSliceScaling nineSlice:
-                DrawImageNinePatch(sprite.TextureId, x, y, width, height, 0, 0, sprite.Width, sprite.Height,
-                    nineSlice.Border.Left, nineSlice.Border.Top, nineSlice.Border.Right, nineSlice.Border.Bottom,
-                    nineSlice.StretchInner, tint);
+                BlitSpriteNineSlice(sprite, x, y, width, height, nineSlice, tint);
                 break;
         }
+    }
+
+    //BlitSprite draws one region of a sprite; sx/sy are sprite-local pixels, converted to atlas UVs here
+    private void BlitSprite(GuiSprite sprite, int x, int y, int width, int height,
+        int sx, int sy, int sw, int sh, GuiColor tint)
+    {
+        if (width <= 0 || height <= 0 || sw <= 0 || sh <= 0) return;
+        var (ax, ay, ax1, ay1) = ToActual(x, y, width, height);
+        var state = new BlitRenderState(
+            RenderPipelines.GUI_TEXTURED, sprite.Texture, _poseStack.Peek(),
+            ax, ay, ax1, ay1,
+            (sprite.AtlasX + sx) / (float)sprite.AtlasWidth, (sprite.AtlasX + sx + sw) / (float)sprite.AtlasWidth,
+            (sprite.AtlasY + sy) / (float)sprite.AtlasHeight, (sprite.AtlasY + sy + sh) / (float)sprite.AtlasHeight,
+            ToIntColor(tint), _scissorStack.Peek());
+        Submit(state);
+    }
+
+    //BlitSpriteTiled tiles one sprite region at tileWidth/tileHeight GUI units, maps to vanilla blitTiledSprite
+    private void BlitSpriteTiled(GuiSprite sprite, int x, int y, int width, int height,
+        int sx, int sy, int tileWidth, int tileHeight, GuiColor tint)
+    {
+        if (width <= 0 || height <= 0 || tileWidth <= 0 || tileHeight <= 0) return;
+        var (ax, ay, ax1, ay1) = ToActual(x, y, width, height);
+        var state = new TiledBlitRenderState(
+            RenderPipelines.GUI_TEXTURED, sprite.Texture, _poseStack.Peek(),
+            tileWidth * _guiScale, tileHeight * _guiScale, ax, ay, ax1, ay1,
+            (sprite.AtlasX + sx) / (float)sprite.AtlasWidth, (sprite.AtlasX + sx + tileWidth) / (float)sprite.AtlasWidth,
+            (sprite.AtlasY + sy) / (float)sprite.AtlasHeight, (sprite.AtlasY + sy + tileHeight) / (float)sprite.AtlasHeight,
+            ToIntColor(tint), _scissorStack.Peek());
+        Submit(state);
+    }
+
+    //BlitSpriteNineSlice maps to vanilla blitNineSlicedSprite, including the three piece shortcuts and the
+    //stretch_inner rule; all coordinates are sprite-local pixels
+    private void BlitSpriteNineSlice(GuiSprite sprite, int x, int y, int width, int height,
+        NineSliceScaling nineSlice, GuiColor tint)
+    {
+        var border = nineSlice.Border;
+        var srcW = sprite.Width;
+        var srcH = sprite.Height;
+        int bl = Math.Min(border.Left, width / 2);
+        int bt = Math.Min(border.Top, height / 2);
+        int br = Math.Min(border.Right, width / 2);
+        int bb = Math.Min(border.Bottom, height / 2);
+        if (width == srcW && height == srcH)
+        {
+            BlitSprite(sprite, x, y, width, height, 0, 0, srcW, srcH, tint);
+            return;
+        }
+        if (height == srcH)
+        {
+            BlitSprite(sprite, x, y, bl, height, 0, 0, bl, srcH, tint);
+            BlitSpriteInner(sprite, x + bl, y, width - br - bl, height,
+                bl, 0, srcW - br - bl, srcH, nineSlice.StretchInner, tint);
+            BlitSprite(sprite, x + width - br, y, br, height, srcW - br, 0, br, srcH, tint);
+            return;
+        }
+        if (width == srcW)
+        {
+            BlitSprite(sprite, x, y, width, bt, 0, 0, srcW, bt, tint);
+            BlitSpriteInner(sprite, x, y + bt, width, height - bb - bt,
+                0, bt, srcW, srcH - bb - bt, nineSlice.StretchInner, tint);
+            BlitSprite(sprite, x, y + height - bb, width, bb, 0, srcH - bb, srcW, bb, tint);
+            return;
+        }
+        BlitSprite(sprite, x, y, bl, bt, 0, 0, bl, bt, tint);
+        BlitSpriteInner(sprite, x + bl, y, width - br - bl, bt,
+            bl, 0, srcW - br - bl, bt, nineSlice.StretchInner, tint);
+        BlitSprite(sprite, x + width - br, y, br, bt, srcW - br, 0, br, bt, tint);
+        BlitSprite(sprite, x, y + height - bb, bl, bb, 0, srcH - bb, bl, bb, tint);
+        BlitSpriteInner(sprite, x + bl, y + height - bb, width - br - bl, bb,
+            bl, srcH - bb, srcW - br - bl, bb, nineSlice.StretchInner, tint);
+        BlitSprite(sprite, x + width - br, y + height - bb, br, bb, srcW - br, srcH - bb, br, bb, tint);
+        BlitSpriteInner(sprite, x, y + bt, bl, height - bb - bt,
+            0, bt, bl, srcH - bb - bt, nineSlice.StretchInner, tint);
+        BlitSpriteInner(sprite, x + bl, y + bt, width - br - bl, height - bb - bt,
+            bl, bt, srcW - br - bl, srcH - bb - bt, nineSlice.StretchInner, tint);
+        BlitSpriteInner(sprite, x + width - br, y + bt, br, height - bb - bt,
+            srcW - br, bt, br, srcH - bb - bt, nineSlice.StretchInner, tint);
+    }
+
+    //BlitSpriteInner draws a nine-slice middle band, stretched or tiled at its own source size
+    private void BlitSpriteInner(GuiSprite sprite, int x, int y, int width, int height,
+        int sx, int sy, int sw, int sh, bool stretchInner, GuiColor tint)
+    {
+        if (width <= 0 || height <= 0) return;
+        if (stretchInner)
+            BlitSprite(sprite, x, y, width, height, sx, sy, sw, sh, tint);
+        else
+            BlitSpriteTiled(sprite, x, y, width, height, sx, sy, sw, sh, tint);
     }
 
     //PushPose converts the scaled delta to actual then multiplies with the top; child widgets position relative to the parent

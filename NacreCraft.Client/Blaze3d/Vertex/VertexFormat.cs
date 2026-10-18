@@ -127,4 +127,99 @@ public static class DefaultVertexFormat
         .AddAttribute(Uv2SemanticName, GpuFormat.R32Float)
         .AddAttribute(NormalSemanticName, GpuFormat.Rgb32Float)
         .Build();
+
+    //The attribute formats below are the vanilla ones, maps to the vanilla private format constants
+    //Colour is a packed RGBA8 and light is an RG16 pair here; the item and entity presets above pack those into
+    //R32 floats instead because their shaders decode the values from a raw bit pattern
+    private static readonly GpuFormat PositionFormat = GpuFormat.Rgb32Float;
+    private static readonly GpuFormat ColorFormat = GpuFormat.Rgba8Unorm;
+    private static readonly GpuFormat Uv0Format = GpuFormat.Rg32Float;
+    private static readonly GpuFormat Uv1Format = GpuFormat.Rg16Sint;
+    private static readonly GpuFormat Uv2Format = GpuFormat.Rg16Sint;
+    private static readonly GpuFormat NormalFormat = GpuFormat.Rgba8Snorm;
+    private static readonly GpuFormat LineWidthFormat = GpuFormat.R32Float;
+
+    //BLOCK terrain vertices, maps to vanilla BLOCK
+    public static readonly VertexFormat BLOCK = VertexFormat.Create()
+        .AddAttribute(PositionSemanticName, PositionFormat)
+        .AddAttribute(ColorSemanticName, ColorFormat)
+        .AddAttribute(Uv0SemanticName, Uv0Format)
+        .AddAttribute(Uv2SemanticName, Uv2Format)
+        .Build();
+
+    //ENTITY entity models, maps to vanilla ENTITY
+    public static readonly VertexFormat ENTITY = VertexFormat.Create()
+        .AddAttribute(PositionSemanticName, PositionFormat)
+        .AddAttribute(ColorSemanticName, ColorFormat)
+        .AddAttribute(Uv0SemanticName, Uv0Format)
+        .AddAttribute(Uv1SemanticName, Uv1Format)
+        .AddAttribute(Uv2SemanticName, Uv2Format)
+        .AddAttribute(NormalSemanticName, NormalFormat)
+        .Build();
+
+    //PARTICLE particles, maps to vanilla PARTICLE
+    public static readonly VertexFormat PARTICLE = VertexFormat.Create()
+        .AddAttribute(PositionSemanticName, PositionFormat)
+        .AddAttribute(Uv0SemanticName, Uv0Format)
+        .AddAttribute(ColorSemanticName, ColorFormat)
+        .AddAttribute(Uv2SemanticName, Uv2Format)
+        .Build();
+
+    //POSITION bare positions, maps to vanilla POSITION
+    public static readonly VertexFormat POSITION = VertexFormat.Create()
+        .AddAttribute(PositionSemanticName, PositionFormat)
+        .Build();
+
+    //POSITION_COLOR_NORMAL, maps to vanilla POSITION_COLOR_NORMAL
+    public static readonly VertexFormat POSITION_COLOR_NORMAL = VertexFormat.Create()
+        .AddAttribute(PositionSemanticName, PositionFormat)
+        .AddAttribute(ColorSemanticName, ColorFormat)
+        .AddAttribute(NormalSemanticName, NormalFormat)
+        .Build();
+
+    //POSITION_COLOR_LIGHTMAP lit geometry without a texture, maps to vanilla POSITION_COLOR_LIGHTMAP
+    public static readonly VertexFormat POSITION_COLOR_LIGHTMAP = VertexFormat.Create()
+        .AddAttribute(PositionSemanticName, PositionFormat)
+        .AddAttribute(ColorSemanticName, ColorFormat)
+        .AddAttribute(Uv2SemanticName, Uv2Format)
+        .Build();
+
+    //POSITION_COLOR_TEX_LIGHTMAP, maps to vanilla POSITION_COLOR_TEX_LIGHTMAP
+    public static readonly VertexFormat POSITION_COLOR_TEX_LIGHTMAP = VertexFormat.Create()
+        .AddAttribute(PositionSemanticName, PositionFormat)
+        .AddAttribute(ColorSemanticName, ColorFormat)
+        .AddAttribute(Uv0SemanticName, Uv0Format)
+        .AddAttribute(Uv2SemanticName, Uv2Format)
+        .Build();
+
+    //POSITION_TEX_LIGHTMAP_COLOR, maps to vanilla POSITION_TEX_LIGHTMAP_COLOR
+    public static readonly VertexFormat POSITION_TEX_LIGHTMAP_COLOR = VertexFormat.Create()
+        .AddAttribute(PositionSemanticName, PositionFormat)
+        .AddAttribute(Uv0SemanticName, Uv0Format)
+        .AddAttribute(Uv2SemanticName, Uv2Format)
+        .AddAttribute(ColorSemanticName, ColorFormat)
+        .Build();
+
+    //POSITION_TEX_COLOR_NORMAL, maps to vanilla POSITION_TEX_COLOR_NORMAL
+    public static readonly VertexFormat POSITION_TEX_COLOR_NORMAL = VertexFormat.Create()
+        .AddAttribute(PositionSemanticName, PositionFormat)
+        .AddAttribute(Uv0SemanticName, Uv0Format)
+        .AddAttribute(ColorSemanticName, ColorFormat)
+        .AddAttribute(NormalSemanticName, NormalFormat)
+        .Build();
+
+    //POSITION_COLOR_LINE_WIDTH lines carrying a width, maps to vanilla POSITION_COLOR_LINE_WIDTH
+    public static readonly VertexFormat POSITION_COLOR_LINE_WIDTH = VertexFormat.Create()
+        .AddAttribute(PositionSemanticName, PositionFormat)
+        .AddAttribute(ColorSemanticName, ColorFormat)
+        .AddAttribute(LineWidthSemanticName, LineWidthFormat)
+        .Build();
+
+    //POSITION_COLOR_NORMAL_LINE_WIDTH, maps to vanilla POSITION_COLOR_NORMAL_LINE_WIDTH
+    public static readonly VertexFormat POSITION_COLOR_NORMAL_LINE_WIDTH = VertexFormat.Create()
+        .AddAttribute(PositionSemanticName, PositionFormat)
+        .AddAttribute(ColorSemanticName, ColorFormat)
+        .AddAttribute(NormalSemanticName, NormalFormat)
+        .AddAttribute(LineWidthSemanticName, LineWidthFormat)
+        .Build();
 }

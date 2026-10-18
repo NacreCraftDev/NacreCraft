@@ -209,9 +209,9 @@ public sealed class GameScreen : Screen
         const int iconSize = 16;
         const int slotSize = 20;
         const int iconOffset = (slotSize - iconSize) / 2;
-        for (var i = 0; i < Inventory.HotbarSlots; i++)
+        for (var i = 0; i < PreviewInventory.HotbarSlots; i++)
         {
-            var identity = player.Inventory.GetHotbarItem(i);
+            var identity = player.PreviewInventory.GetHotbarItem(i);
             if (identity is null) continue;
             var slot = atlas.GetOrUpdate(identity, isAnimated: false);
             if (slot is null) continue;
@@ -282,8 +282,6 @@ public sealed class GameScreen : Screen
 
     public override void OnHotbarSelect(int slot) => _selectedSlot = Math.Clamp(slot, 0, 8);
 
-    //EyeHeight eye height, same value as the server's ServerPlayer.EyeHeight; the pick origin is raised to eye level by it
-    private const double EyeHeight = 1.62;
 
     //_actionSequence block action packet sequence number; the server acknowledges block changes by it; the client only guarantees it increments
     private int _actionSequence;
@@ -311,7 +309,8 @@ public sealed class GameScreen : Screen
         var connection = Minecraft.Connection;
         if (connection is null) return;
         var player = Minecraft.Player;
-        var eye = new Vec3(player.Pos.X, player.Pos.Y + EyeHeight, player.Pos.Z);
+        //The pick origin is the eye position, taken from the player's own eye height rather than a constant here
+        var eye = player.GetEyePosition();
         if (!BlockRaycast.TryPick(Minecraft.Level, eye, player.YRot, player.XRot, out var pos, out var face)) return;
         connection.Send(new ServerboundPlayerActionPacket(ServerboundPlayerActionPacket.ActionType.StartDestroyBlock,
             pos, face, NextActionSequence()));

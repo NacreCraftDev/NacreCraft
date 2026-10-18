@@ -183,28 +183,44 @@ public sealed class ServerGamePacketListenerImpl : ServerGamePacketListener, Tic
     private void StartDestroyBlock(PersistentServerLevel level, BlockPos pos)
     {
         var player = Player!;
+        //Outside the build height the action is dropped, but the client predicted it away and has to be told the real state
+        if (pos.Y > level.MaxBuildHeight - 1)
+        {
+            SendBlockCorrection(level, pos);
+            return;
+        }
         //Vanilla gives the block an attack callback at the moment mining starts; the note block relies on it for left-click audition
         if (level.GetBlockState(pos) is { Owner: BlockBehaviour behaviour } attacked)
             behaviour.OnAttack(level, player, pos, attacked);
         if (player.GameType == GameType.Creative)
         {
             var broken = ServerBlockUpdates.BreakBlock(level, Players!, player, pos);
+            //Nothing to break means the client is ahead of the server: send the real state so its prediction ends there
+            if (!broken) SendBlockCorrection(level, pos);
             Log.Debug($"Break block (creative) {pos} result={broken} profile={_profile.Name}");
             return;
         }
         _destroyProgressStart = _tickCount;
         var state = level.GetBlockState(pos);
-        //An empty position is treated as progress 1 like vanilla and does not enter the mining state
-        var progress = 1f;
-        if (state is not null && state.Value != Blocks.AIR.DefaultBlockState)
-            progress = BlockBehaviour.GetDestroyProgress(state.Value);
-        if (state is not null && state.Value != Blocks.AIR.DefaultBlockState && progress >= 1f)
+        //Vanilla rolls a mismatched prediction back through the client block-state prediction system; this client does not
+        //implement it, so the correction has to be a block update, otherwise a block the server already removed never clears
+        if (state is null || state.Value == Blocks.AIR.DefaultBlockState)
+        {
+            SendBlockCorrection(level, pos);
+            return;
+        }
+        var progress = BlockBehaviour.GetDestroyProgress(state.Value);
+        if (progress >= 1f)
         {
             DestroyBlockAndAck(pos);
             return;
         }
         //The target changed but the previous one was not finished; clear the old position's cracks first so they do not linger on other players' screens
-        if (_isDestroyingBlock) BroadcastDestroyProgress(level, _destroyPos, -1);
+        if (_isDestroyingBlock)
+        {
+            BroadcastDestroyProgress(level, _destroyPos, -1);
+            SendBlockCorrection(level, _destroyPos);
+        }
         _isDestroyingBlock = true;
         _destroyPos = pos;
         var stage = (int)(progress * 10f);
@@ -321,6 +337,15 @@ public sealed class ServerGamePacketListenerImpl : ServerGamePacketListener, Tic
         if (player is null || Players is null) return;
         if (player.Level is not PersistentServerLevel level) return;
         if (ServerBlockUpdates.BreakBlock(level, Players, player, pos)) return;
+        SendBlockCorrection(level, pos);
+    }
+
+    //SendBlockCorrection sends the server's actual state back, ending the client's local prediction for that position
+    //Vanilla does this whenever an action was rejected: without it the client keeps the block it predicted away
+    private void SendBlockCorrection(PersistentServerLevel level, BlockPos pos)
+    {
+        var player = Player;
+        if (player is null) return;
         var state = level.GetBlockState(pos);
         if (state is not null) player.Connection.Send(new ClientboundBlockUpdatePacket(pos, state.Value.Id));
     }
@@ -399,6 +424,12 @@ public sealed class ServerGamePacketListenerImpl : ServerGamePacketListener, Tic
     {
         var player = Player;
         if (player is null) return;
+        //The client is not trusted with its own position: the same checks vanilla applies before adopting the packet
+        if (ContainsInvalidValues(packet.X, packet.Y, packet.Z, packet.YRot, packet.XRot))
+        {
+            player.Disconnect("Invalid player movement");
+            return;
+        }
         if (_awaitingPositionFromClient is not null)
         {
             if (packet.HasRot)
@@ -408,7 +439,9 @@ public sealed class ServerGamePacketListenerImpl : ServerGamePacketListener, Tic
             }
             return;
         }
-        if (packet.HasPos) player.Position = new Vec3(packet.X, packet.Y, packet.Z);
+        if (packet.HasPos)
+            player.Position = new Vec3(
+                ClampHorizontal(packet.X), ClampVertical(packet.Y), ClampHorizontal(packet.Z));
         if (packet.HasRot)
         {
             player.Yaw = packet.YRot;
@@ -417,10 +450,33 @@ public sealed class ServerGamePacketListenerImpl : ServerGamePacketListener, Tic
         player.OnGround = packet.OnGround;
     }
 
-    //HandleClientCommand client command packet such as requesting respawn, logs at Debug
+    //ContainsInvalidValues NaN positions and non-finite rotations are rejected outright, maps to vanilla containsInvalidValues
+    private static bool ContainsInvalidValues(double x, double y, double z, float yRot, float xRot)
+        => double.IsNaN(x) || double.IsNaN(y) || double.IsNaN(z)
+            || !float.IsFinite(yRot) || !float.IsFinite(xRot);
+
+    //ClampHorizontal/ClampVertical bound a client-reported coordinate to the world limits, maps to vanilla clampHorizontal/clampVertical
+    //Beyond them nothing exists, and letting such a value through would put the follow-up block queries outside the int range
+    private const double HorizontalLimit = 3.0E7;
+    private const double VerticalLimit = 2.0E7;
+
+    private static double ClampHorizontal(double value)
+        => Math.Clamp(value, -HorizontalLimit, HorizontalLimit);
+
+    private static double ClampVertical(double value)
+        => Math.Clamp(value, -VerticalLimit, VerticalLimit);
+
+    //HandleClientCommand client command packet such as requesting respawn, maps to vanilla handleClientCommand
     public void HandleClientCommand(ServerboundClientCommandPacket packet)
     {
-        Log.Debug($"HandleClientCommand profile={_profile.Name}");
+        Log.Debug($"HandleClientCommand profile={_profile.Name} action={packet.Action}");
+        //Only a respawn request is acted on: the other two ask for data this server already sends on join
+        if (packet.Action != ClientCommandAction.PerformRespawn) return;
+        var player = Player;
+        //A living player asking to respawn is ignored, maps to vanilla only acting while the player is dead
+        if (player is null || !player.IsDeadOrDying) return;
+        //The death message and sound already went out when they died; this only puts them back on their feet
+        player.OwnerList?.Respawn(player);
     }
 
     //HandleAcceptTeleportPacket client acknowledges the teleport, maps to vanilla handleAcceptTeleportation

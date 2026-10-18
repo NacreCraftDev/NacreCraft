@@ -1,5 +1,7 @@
 using System.Runtime.Loader;
 using NacreCraft.Logging;
+using NacreCraft.Network.Chat;
+using NacreCraft.Util;
 
 namespace NacreCraft.ModLoader;
 
@@ -43,13 +45,25 @@ public static class ModBootstrap
             hooks.ApplyRuntimeInjects();
         }
 
+        //Problems from every phase are collected as they are reported, so the window at the end and the log say the same
+        //thing; a rule that never landed is exactly what the developer needs in front of them
+        var problems = new List<string>();
+
         //Problems accumulated during assembly and preloading are reported together here
         foreach (var error in hooks.Errors)
-            Log.Warning($"Mod injection rule error {error}");
+        {
+            var line = $"Mod injection rule error {error}";
+            problems.Add(line);
+            Log.Warning(line);
+        }
 
         //A collision at an injection point is not an error, just the later rule silently not applying, which no one would know about if not reported
         foreach (var warning in hooks.Warnings)
-            Log.Warning($"Mod injection conflict {warning}");
+        {
+            var line = $"Mod injection conflict {warning}";
+            problems.Add(line);
+            Log.Warning(line);
+        }
 
         if (hooks.TargetAssemblies.Count == 0 && hooks.RuntimeTargets.Count == 0)
         {
@@ -64,11 +78,23 @@ public static class ModBootstrap
         //Initialization must come after preloading; if a mod touches a kernel type in Init it triggers resolution
         //At that point the target assembly is already the rewritten version; the reverse would pull in the unrewritten one
         var manager = new ModManager();
+        //The error event has no other subscriber, so a fault that only reaches it would be lost altogether; it is taken
+        //here and lands in the log and the window along with everything else
+        manager.OnError += (message, exception) =>
+        {
+            var line = $"Mod load error {message}: {exception.Message}";
+            problems.Add(line);
+            Log.Warning(line);
+        };
         manager.Init(folder);
         var load = manager.LoadAllModsAsync(environment).GetAwaiter().GetResult();
 
         foreach (var error in load.Errors)
-            Log.Warning($"Mod init error {error}");
+        {
+            var line = $"Mod init error {error}";
+            problems.Add(line);
+            Log.Warning(line);
+        }
 
         Log.Info($"Mod init finished: {load.Loaded.Count} loaded, {load.Skipped.Count} skipped");
 
@@ -83,13 +109,49 @@ public static class ModBootstrap
                 landed++;
                 continue;
             }
-            Log.Warning($"Mod injection not applied [{outcome.SourceMod ?? "unknown"}] {outcome.Rule} reason={outcome.Kind} matches={outcome.Matches}");
+
+            var reason = $"[{outcome.SourceMod ?? "unknown"}] {outcome.Rule} reason={outcome.Kind} matches={outcome.Matches}";
+            Log.Warning($"Mod injection not applied {reason}");
+            if (outcome.Detail is { Length: > 0 } detail)
+                Log.Debug($"Mod injection detail {outcome.SourceMod ?? "unknown"}: {detail}");
+            //Under debug a rule that never landed joins the window alongside the load failures, which is where a mod author
+            //is already looking. A normal launch only interrupts for a failed load: one stale rule would otherwise put a
+            //dialog in front of every single start
+            if (DebugModeRequested())
+                problems.Add($"Mod injection not applied {reason}");
         }
         Log.Info($"Mod injection outcomes: {landed} of {hooks.Rules.Count} rules landed");
 
         //Registers with the host components; UI code that is not in the loading flow reads data from ModHost
         ModHost.Bind(manager, folder);
+
+        //The window comes up once loading is done, right before the kernel starts, and never blocks: startup carries on
+        //behind it. A failed load writes no report, so the lines are handed over directly
+        if (problems.Count > 0 && WindowAllowed())
+        {
+            //Mod loading finishes before the kernel installs its language table, so the table the window needs is installed here
+            NcLanguageFiles.Extract();
+            NcLanguage.Load(Language.Default);
+            NativeErrorWindow.ShowModLoadFailure(string.Join(Environment.NewLine, problems), problems.Count);
+        }
+
         return new ModBootstrapResult { Hooks = hooks, Manager = manager, Load = load };
+    }
+
+    //DebugModeRequested reports the --debug flag, the same spelling the launcher declares as a kernel flag
+    //Read off the command line because the flag is not carried down into this layer
+    private static bool DebugModeRequested()
+    {
+        var args = Environment.GetCommandLineArgs();
+        return Array.IndexOf(args, "--debug") >= 0;
+    }
+
+    //WindowAllowed reports whether there is a desktop to draw on; the same two spellings the server accepts
+    //The flag is read off the command line because mod loading finishes long before ServerMain gets to decide it
+    private static bool WindowAllowed()
+    {
+        var args = Environment.GetCommandLineArgs();
+        return Array.IndexOf(args, "--nogui") < 0 && Array.IndexOf(args, "nogui") < 0;
     }
 
     //ApplyDependencyVersions: drops incompatible mods by the dependency versions declared in the manifest

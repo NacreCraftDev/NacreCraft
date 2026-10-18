@@ -50,17 +50,22 @@ public sealed class VulkanGuiApp : VulkanAppBase
     //P0 GuiSpriteManager caches GuiSprites by identifier, lazily loading PNG+.mcmeta
     //On swapchain recreation ClearCache invalidates old TextureSetups
     private GuiSpriteManager? _spriteManager;
+    //GuiAtlas the stitched GUI sprite atlas; it only depends on pack contents, so it survives swapchain recreation
+    //and is rebuilt only on a resource reload
+    private GuiAtlas? _guiAtlas;
     //The client pack resource manager GUI textures and fonts are read through, so a resource pack can override them
     private readonly ClientResourceManager? _clientResources;
     //The logging abstraction decoupled from NacreCraft.Logging, passed to GuiResourceManager
     private readonly IGpuLogger _logger;
-    //Input event queue Silk callback threads enqueue; MinecraftClient.Tick calls PollInput to dequeue and dispatch
+    //Input event queue Silk callback threads enqueue; the render thread calls PollInput to dequeue and dispatch
     private readonly ConcurrentQueue<InputEvent> _inputQueue = new();
     //IInputContext the input context returned by CreateInput, released on Dispose
     private IInputContext? _inputContext;
-    //_latestSnapshot Tick writes publish with Interlocked.Exchange, read volatile on the Render thread
-    //Stage 7 Tick/Render decoupling; Render reads only snapshots and never accesses _renderState
+    //_latestSnapshot written on the Render thread by SubmitFrame immediately before it is consumed
+    //Stage 7 Tick/Render decoupling; the tick thread no longer touches the GUI scene at all
     private volatile GuiRenderState? _latestSnapshot;
+    //_lastGuiTimestamp previous render-thread frame timestamp, used to derive the widget delta
+    private long _lastGuiTimestamp;
     //_resourceLock protects _resourceManager/_renderContext replacement and keeps references stable during submission
     private readonly object _resourceLock = new();
     //_diagFrame counts rendered frames for the throttled frame logging
@@ -112,8 +117,15 @@ public sealed class VulkanGuiApp : VulkanAppBase
     private volatile bool _tickThreadRunning;
     //_tickException captured on the Tick thread and rethrown by OnAfterRun on the main thread
     private Exception? _tickException;
-    //TickTargetInterval target seconds per Tick cycle, 20tps
-    private const double TickTargetInterval = 0.05;
+    //TickTargetInterval target seconds per Tick cycle
+    //The loop builds the GUI scene and publishes the snapshot, so its rate is also how often the picture changes; at
+    //20tps everything animated stepped 20 times a second, which reads as stutter no matter how fast the renderer runs
+    private const double TickTargetInterval = 1.0 / 60.0;
+
+    //Windows rounds sleeps to a ~15.6ms timer tick unless the resolution is raised, which on its own caps this loop
+    //near 40 cycles a second; asking for 1ms makes the waits below land where they ask
+    [System.Runtime.InteropServices.DllImport("winmm.dll", EntryPoint = "timeBeginPeriod")]
+    private static extern uint TimeBeginPeriod(uint milliseconds);
     //TickJoinTimeoutMs how long OnAfterRun waits for the Tick thread to exit before declaring a deadlock
     private const int TickJoinTimeoutMs = 2000;
 
@@ -162,8 +174,12 @@ public sealed class VulkanGuiApp : VulkanAppBase
     public event System.Action<int, int>? RawMouseMove;
     //SwapchainRecreated fired after resources are rebuilt, so the Game layer can re-inject textures and re-layout screens
     public event Action? SwapchainRecreated;
-    //FrameTick the 20tps game logic callback invoked on the Tick thread before SubmitFrame
+    //FrameTick the game logic callback invoked on the Tick thread, world logic only
     public event System.Action<double>? FrameTick;
+
+    //GuiTick invoked on the render thread before the frame is built, so widget hover, layout and animation follow the
+    //frame rate; vanilla computes hover inside renderWidget for the same reason
+    public event System.Action<double>? GuiTick;
 
     //SetLevelRenderer injects the world renderer; null disables the world pass
     public void SetLevelRenderer(IWorldRenderer? renderer)
@@ -202,11 +218,18 @@ public sealed class VulkanGuiApp : VulkanAppBase
 
     //ReloadResources drops the GUI caches that mirror pack contents, called once a resource pack reload finished
     //maps to the levelExtractor.allChanged vanilla runs after the reload chain completes
+    //The GUI atlas is rebuilt here, which is the only time pack contents can change
     public void ReloadResources()
     {
         lock (_resourceLock)
         {
-            _spriteManager?.ClearCache();
+            _guiAtlas?.Dispose();
+            _guiAtlas = GuiAtlas.Build(_clientResources, _device, _logger);
+            if (_spriteManager is not null)
+            {
+                _spriteManager.Atlas = _guiAtlas;
+                _spriteManager.ClearCache();
+            }
         }
     }
 
@@ -218,11 +241,12 @@ public sealed class VulkanGuiApp : VulkanAppBase
     {
     }
 
-    //enableVsync is passed by the caller from GameConfig.EnableVsync so the GPU layer does not depend on the GameConfig type
+    //enableVsync and startFullscreen are passed by the caller from GameConfig so the GPU layer does not depend on the GameConfig type
     public VulkanGuiApp(bool enableVsync, int width, int height, IGpuLogger? logger = null,
-        ClientResourceManager? clientResources = null) : base(width, height)
+        ClientResourceManager? clientResources = null, bool startFullscreen = false) : base(width, height)
     {
         EnableVsync = enableVsync;
+        StartFullscreen = startFullscreen;
         _logger = logger ?? new ConsoleGpuLogger();
         _clientResources = clientResources;
         Window = new GuiWindow(width, height);
@@ -262,7 +286,9 @@ public sealed class VulkanGuiApp : VulkanAppBase
         _glyphStitcher = new GlyphStitcher(_device, _resourceManager);
         _font = CreateFontFromAssets();
         //P0 creates GuiSpriteManager and injects it into GuiRenderContext so DrawSprite dispatches by .mcmeta
-        _spriteManager = new GuiSpriteManager(_clientResources, _resourceManager);
+        //The GUI atlas is stitched once per pack set, maps to vanilla AtlasIds.GUI
+        _guiAtlas ??= GuiAtlas.Build(_clientResources, _device, _logger);
+        _spriteManager = new GuiSpriteManager(_clientResources, _resourceManager, _guiAtlas);
         _renderContext = new GuiRenderContext(_renderState, w, h, Window.GuiScale,
             _font, _resourceManager.FontAtlas, _resourceManager.FontTexture,
             id => _resourceManager.ResolveTexture(id),
@@ -535,6 +561,9 @@ public sealed class VulkanGuiApp : VulkanAppBase
                     Window.ProcessMouseMove(move.X, move.Y);
                     break;
                 case KeyInput key when key.Down:
+                    //F11 is the vanilla default binding for key.fullscreen; the toggle only flips a flag and the frame
+                    //loop applies it at the top of the next frame, where the surface is not acquired
+                    if (key.Key == (int)Key.F11) ToggleFullScreen();
                     RawKeyDown?.Invoke(key.Key);
                     Window.ProcessKeyDown(key.Key);
                     break;
@@ -566,7 +595,7 @@ public sealed class VulkanGuiApp : VulkanAppBase
             _glyphStitcher = new GlyphStitcher(_device, _resourceManager);
             _font = CreateFontFromAssets();
             //P0 rebuilds GuiSpriteManager; old textureIds are invalidated and the cache is cleared so DrawSprite reloads
-            _spriteManager = new GuiSpriteManager(_clientResources, _resourceManager);
+            _spriteManager = new GuiSpriteManager(_clientResources, _resourceManager, _guiAtlas);
             _renderContext = new GuiRenderContext(_renderState, w, h, Window.GuiScale,
                 _font, _resourceManager.FontAtlas, _resourceManager.FontTexture,
                 id => _resourceManager.ResolveTexture(id),
@@ -588,11 +617,10 @@ public sealed class VulkanGuiApp : VulkanAppBase
     }
 
     //SubmitFrame the submission phase builds RenderStates and publishes a deep-copied snapshot to _latestSnapshot
-    //The Tick thread calls it holding _resourceLock, reading stable _renderContext/_renderState references not replaced by OnSwapchainRecreated
+    //The Render thread calls it from OnRecordCommandBuffer, before the GUI is recorded, holding _resourceLock so the
+    //_renderContext/_renderState references stay stable against OnSwapchainRecreated
     //Inside the lock Window.Render calls _textureResolver, whose dictionary reads are mutually exclusive with RegisterTexture/OnSwapchainRecreated
     //P15 PreparePip moved to OnRecordCommandBuffer since vkQueueSubmit must be serial on the Render thread
-    //The Tick thread's SubmitFrame and the Render thread's DrawFrame both call vkQueueSubmit on the same queue and need external synchronization
-    //Stage 7 Tick/Render decoupling; the Render thread only reads snapshots and does not call this method
     public void SubmitFrame()
     {
         if (_submitDiag++ < 3)
@@ -667,43 +695,49 @@ public sealed class VulkanGuiApp : VulkanAppBase
         }
     }
 
-    //TickThreadLoop the 20tps game update loop
-    //Stopwatch measures each cycle; if under 50ms Thread.Sleep makes up the difference to keep a stable 20tps
-    //Each cycle first FrameTick.Invoke(delta) lets MinecraftClient do game logic then SubmitFrame publishes a snapshot
+    //TickThreadLoop the game logic loop
+    //Stopwatch measures each cycle; if under the target interval Thread.Sleep makes up the difference
+    //Each cycle only runs FrameTick so world logic keeps its own rate; the GUI scene is built on the render thread
     //Exceptions are captured into _tickException and RequestClose lets the main thread's OnAfterRun rethrow
     private void TickThreadLoop()
     {
         try
         {
+            //Raise the timer resolution for the life of this thread, otherwise the frame waits below get rounded to ticks
+            if (OperatingSystem.IsWindows()) TimeBeginPeriod(1);
             var watch = Stopwatch.StartNew();
             var lastElapsed = 0.0;
             var tickCount = 0;
             var lastTpsTime = 0.0;
+            //Debug totals, split so the slow half of the cycle is visible
+            var tickTotalMs = 0.0;
             while (_tickThreadRunning)
             {
                 var elapsed = watch.Elapsed.TotalSeconds;
                 var delta = elapsed - lastElapsed;
                 lastElapsed = elapsed;
+                var tickStart = watch.Elapsed.TotalMilliseconds;
                 FrameTick?.Invoke(delta);
-                SubmitFrame();
+                tickTotalMs += watch.Elapsed.TotalMilliseconds - tickStart;
                 tickCount++;
                 if (elapsed - lastTpsTime >= 1.0)
                 {
                     TickRate = tickCount;
+                    //Debug: this is the rate the picture actually changes at, independent of the renderer's frame rate
+                    if (Log.DebugEnabled)
+                        Log.Debug("tick rate " + tickCount + " tps tick avg " + (tickTotalMs / tickCount).ToString("F1") + "ms");
                     tickCount = 0;
+                    tickTotalMs = 0;
                     lastTpsTime = elapsed;
                 }
-                var frameEnd = watch.Elapsed.TotalSeconds;
-                var sleepSeconds = TickTargetInterval - (frameEnd - elapsed);
-                if (sleepSeconds > 0)
+                //Wait out the rest of the frame: sleep in 1ms steps while there is room, then spin through the last
+                //couple of milliseconds. With the 1ms timer resolution this lands within a millisecond of the target
+                var deadline = elapsed + TickTargetInterval;
+                while (watch.Elapsed.TotalSeconds < deadline)
                 {
-                    var sleepMs = (int)(sleepSeconds * 1000);
-                    if (sleepMs > 0) Thread.Sleep(sleepMs);
-                }
-                else
-                {
-                    //Already over time, yield the timeslice to avoid busy-waiting and start the next cycle immediately
-                    Thread.Yield();
+                    var remainingMs = (deadline - watch.Elapsed.TotalSeconds) * 1000.0;
+                    if (remainingMs > 2.0) Thread.Sleep(1);
+                    else Thread.SpinWait(64);
                 }
             }
         }
@@ -717,21 +751,32 @@ public sealed class VulkanGuiApp : VulkanAppBase
         }
     }
 
-    //OnRecordCommandBuffer the render phase reads the _latestSnapshot snapshot for PreparePip+Prepare+Upload+Draw
-    //Submission moved to SubmitFrame on the Tick thread; this method only reads snapshots
+    //OnRecordCommandBuffer builds the GUI for this frame and then records it
+    //GuiTick runs first on the Render thread: input, layout, widget animation; SubmitFrame then turns the control tree
+    //into a snapshot, which is consumed right below
     //P15 PreparePip on the Render thread holds the lock and calls PIP renderer.Prepare for offscreen rendering+blit
-    //vkQueueSubmit must be serial on the Render thread; the Tick thread's SubmitFrame does no GPU submission to avoid queue contention
+    //vkQueueSubmit must be serial on the Render thread; nothing on the Tick thread submits to the queue
     //On the first frame with no snapshot it only clears without binding a pipeline or drawing
-    //Stage 7 holds _resourceLock to protect the _resourceManager field reference and inner dictionaries, mutually exclusive with the Tick thread's RegisterTexture
+    //Stage 7 holds _resourceLock to protect the _resourceManager field reference and inner dictionaries, mutually exclusive with RegisterTexture
     //_guiPipeline/cmd/clearColor do not depend on _resourceManager and are prepared outside the lock
     protected override void OnRecordCommandBuffer(CommandEncoder encoder, GpuTextureView sceneView)
     {
+        //Widgets update here rather than on the tick thread: vanilla computes hover inside renderWidget, so the picture
+        //follows the frame rate instead of being capped by the game tick
+        var guiNow = Stopwatch.GetTimestamp();
+        var guiDelta = _lastGuiTimestamp == 0 ? 0.0 : (guiNow - _lastGuiTimestamp) / (double)Stopwatch.Frequency;
+        _lastGuiTimestamp = guiNow;
+        GuiTick?.Invoke(guiDelta);
+        SubmitFrame();
+        //Queued glyph uploads are drained after the scene is built, so glyphs baked this frame are on the atlas before
+        //the draw that samples them; this is the last point before recording that can submit on its own
+        GpuTexture.FlushPendingRegionUploads(_device);
         var snapshot = _latestSnapshot;
         var bg = Window.BackgroundColor;
         var clearColor = new Vector4(bg.R, bg.G, bg.B, bg.A);
         //Debug diagnostic: frames are written next to the executable, so the rendered GUI can be inspected without a
         //screen capture tool. The early frames catch the loading overlay, which is gone within a couple of seconds
-        if (Log.DebugEnabled && (++_dumpFrame == 20 || _dumpFrame == 60 || _dumpFrame == 200))
+        if (Log.DebugEnabled && (++_dumpFrame <= 3 || _dumpFrame == 5 || _dumpFrame == 10 || _dumpFrame == 20 || _dumpFrame == 60 || _dumpFrame == 200 || _dumpFrame == 600 || _dumpFrame == 1200 || _dumpFrame == 2000))
         {
             var scenePixels = _sceneColor.Readback();
             var sceneDumpPath = Path.Combine(AppContext.BaseDirectory, $"scene-dump-{_dumpFrame}.bmp");
@@ -962,6 +1007,10 @@ public sealed class VulkanGuiApp : VulkanAppBase
         _itemAtlasTextureId = 0;
         _glyphStitcher?.Dispose();
         _glyphStitcher = null;
+        //The GUI atlas holds a device texture, so it goes with the device rather than with the swapchain
+        _guiAtlas?.Dispose();
+        _guiAtlas = null;
+        _spriteManager = null;
         _font = null;
         if (_inputContext is not null)
         {

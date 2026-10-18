@@ -139,7 +139,7 @@ public static class EffectCommand
         foreach (var target in targets)
         {
             if (target.Player is not { } player) continue;
-            if (player.RemoveEffect(effectHolder.Value)) count++;
+            if (player.RemoveEffect(effectHolder)) count++;
         }
         if (count == 0) throw ErrorClearSpecificFailed.Create();
         var name = EffectName(effectHolder);

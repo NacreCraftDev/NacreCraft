@@ -44,8 +44,6 @@ namespace NacreCraft.Client.Gui.Font;
 internal sealed class FontTexture : IDisposable
 {
     public const int Size = 256;
-    //Counts the traced glyph uploads across atlases, keeping the diagnostic output bounded
-    private static int s_addDiag;
 
     private readonly GpuTexture _texture;
     private readonly Node _root;
@@ -75,24 +73,9 @@ internal sealed class FontTexture : IDisposable
         var node = _root.Insert(glyph);
         if (node == null) return null;
         var pixels = glyph.GetPixels();
-        //Diagnostic: the upload submits a one-time command on the caller thread, which is what stalls when the
-        //render thread holds the queue
-        var diag = s_addDiag < 6;
-        s_addDiag++;
-        if (diag)
-            Log.Info($"font texture upload enter thread={Environment.CurrentManagedThreadId} at={node.X},{node.Y} size={glyph.PixelWidth}x{glyph.PixelHeight}");
-        _texture.UploadRegion(node.X, node.Y, glyph.PixelWidth, glyph.PixelHeight, pixels);
-        if (diag)
-        {
-            Log.Info("font texture upload leave");
-            //Diagnostic: the atlas is read back once, so a glyph that draws as a solid block can be traced to the
-            //upload instead of the sampling
-            var atlas = _texture.Readback();
-            var opaque = 0;
-            for (int i = 3; i < atlas.Length; i += 4)
-                if (atlas[i] > 128) opaque++;
-            Log.Debug($"font atlas opaquePixels={opaque} of {atlas.Length / 4} first=({atlas[0]},{atlas[1]},{atlas[2]},{atlas[3]})");
-        }
+        //Queued rather than submitted: a submit-and-wait per glyph is what stalled startup and GUI rescaling
+        //The render thread drains the queue in one submit before it records (see GpuTexture.FlushPendingRegionUploads)
+        GpuTexture.QueueRegionUpload(_texture, node.X, node.Y, glyph.PixelWidth, glyph.PixelHeight, pixels);
         //UVs are inset by 0.01 pixels to avoid sampling out of bounds, maps to vanilla (x+0.01)/256.0f
         float u0 = (node.X + 0.01f) / Size;
         float u1 = ((node.X - 0.01f) + glyph.PixelWidth) / Size;

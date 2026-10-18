@@ -43,6 +43,15 @@ public interface ITrackedEntity
     AttributeMap? Attributes { get; }
 }
 
+//IEntityInsideHost the part of a level an entity needs right after it moves
+//Declared on this side because the registry layer cannot name the storage layer: the level holds a plain object reference,
+//so a level that offers the callback implements this and anything else (tests, a bare level) simply never gets the call
+public interface IEntityInsideHost
+{
+    //CheckInsideBlocks runs the inside-block callbacks for the blocks the entity now covers, maps to vanilla Entity.checkInsideBlocks
+    void CheckInsideBlocks(Entity entity);
+}
+
 //Entity abstract base class, maps to vanilla net.minecraft.world.entity.Entity
 //Holds core fields EntityId/Pos/Uuid/Velocity/YRot/XRot; Level uses object as a placeholder until the Level subsystem is ready
 //Vanilla holds a CompoundTag persistence field, simplified here so subclasses extend as needed
@@ -243,9 +252,17 @@ public abstract class Entity : ITrackedEntity, ISyncedEntity
     //Push adds an impulse to the velocity, maps to vanilla push
     public virtual void Push(Vec3 impulse) => Velocity = Velocity.Add(impulse);
 
+    //TicksByEntityManager whether the entity manager advances this entity, maps to a player being ticked by the server's
+    //own player loop in vanilla rather than by the entity tick list
+    public virtual bool TicksByEntityManager => true;
+
+    //EyeHeight height of the eyes above the feet, maps to vanilla EntityDimensions.eyeHeight, which defaults to 0.85 of the height
+    //Subclasses whose dimensions declare a different value override it
+    public virtual double EyeHeight => Height * 0.85;
+
     //GetEyePosition eye position, sampled as the ray origin when working out how much of the blast the entity can see
-    //Vanilla puts it at the eye height, which is 0.85 of the entity height for the base class, maps to vanilla getEyePosition
-    public virtual Vec3 GetEyePosition() => Pos.Add(0.0, Height * 0.85, 0.0);
+    //Maps to vanilla getEyePosition, which sits at the eye height above the feet
+    public virtual Vec3 GetEyePosition() => Pos.Add(0.0, EyeHeight, 0.0);
 
     //GetBlockExplosionResistance lets the entity tweak how much a block resists this blast, maps to vanilla method of the same name
     //The level is passed as object because the entity layer sits below the level types; the value comes back unchanged by default
@@ -480,6 +497,8 @@ public abstract class Entity : ITrackedEntity, ISyncedEntity
             HorizontalCollision = false;
             VerticalCollision = false;
             VerticalCollisionBelow = false;
+            //An entity moving through blocks without physics is exactly the case that still needs the inside callback
+            NotifyInsideBlocks();
             return;
         }
         var movement = Collide(delta);
@@ -511,6 +530,17 @@ public abstract class Entity : ITrackedEntity, ISyncedEntity
         }
         //Fall distance accumulates from the clipped displacement and damage is settled on landing, matching checkFallDamage at the end of vanilla move
         CheckFallDamage(movement.Y);
+        //Blocks the entity ended up inside get their callback here, maps to tryCheckInsideBlocks at the end of vanilla move
+        //Hung off the movement instead of a level-wide sweep, so an entity is checked once per move and never while the level
+        //is walking other entities
+        NotifyInsideBlocks();
+    }
+
+    //NotifyInsideBlocks hands this entity to its level for the inside-block check
+    //A level that does not offer the callback (a test harness, a bare level) is silently skipped
+    private void NotifyInsideBlocks()
+    {
+        if (Level is IEntityInsideHost host) host.CheckInsideBlocks(this);
     }
 
     //Collide clips the displacement so it hits no collision shape, maps to vanilla Entity.collide

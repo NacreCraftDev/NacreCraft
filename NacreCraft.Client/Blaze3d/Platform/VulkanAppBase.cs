@@ -37,6 +37,22 @@ public abstract unsafe class VulkanAppBase : IDisposable
     protected bool _framebufferResized;
     //EnableVsync whether vsync is enabled, true by default; subclasses set it from GameConfig at construction
     protected bool EnableVsync = true;
+    //StartFullscreen whether the window opens fullscreen; subclasses set it from GameConfig at construction
+    protected bool StartFullscreen;
+    //Frame rate report state, debug only
+    private long _lastFrameReportTicks;
+    private int _framesSinceReport;
+    //_preferredVideoMode the fullscreen video mode asked for, null means the monitor's current mode
+    private VideoMode? _preferredVideoMode;
+    //_videoModeDirty set when the preferred mode changes, applied at the top of the next frame
+    private bool _videoModeDirty;
+    //_fullscreen is the wanted state that ToggleFullScreen flips, _actuallyFullscreen the one the window is in
+    //Keeping them apart means a window change only ever happens at the top of a frame, maps to vanilla Window
+    private bool _fullscreen;
+    private bool _actuallyFullscreen;
+    //Windowed position and size, kept while fullscreen so leaving it restores where the window was
+    private Vector2D<int> _windowedPosition;
+    private Vector2D<int> _windowedSize;
 
     private readonly ShaderManager _shaderManager = new();
     private GpuSurface.PresentMode _presentMode;
@@ -126,6 +142,13 @@ public abstract unsafe class VulkanAppBase : IDisposable
         var opts = WindowOptions.DefaultVulkan;
         opts.Size = new Vector2D<int>(SurfaceWidth, SurfaceHeight);
         opts.Title = WindowTitle;
+        //Opening fullscreen is the same wanted state a toggle produces, so it goes through the same flag pair
+        if (StartFullscreen)
+        {
+            _fullscreen = true;
+            _actuallyFullscreen = true;
+            opts.WindowState = WindowState.Fullscreen;
+        }
         _window = SilkWindow.Create(opts);
         _window.Initialize();
         if (_window.VkSurface is null)
@@ -182,6 +205,74 @@ public abstract unsafe class VulkanAppBase : IDisposable
         _framebufferResized = true;
     }
 
+    //ToggleFullScreen flips the wanted fullscreen state only, maps to vanilla Window.toggleFullScreen
+    //The window itself is not touched here: UpdateFullscreenIfChanged applies it at the top of a frame, where no
+    //swapchain image is held, which is what keeps a toggle from racing the acquired image
+    public void ToggleFullScreen() => _fullscreen = !_fullscreen;
+
+    //UpdateFullscreenIfChanged applies a pending toggle, maps to vanilla Window.updateFullscreenIfChanged
+    private void UpdateFullscreenIfChanged()
+    {
+        if (_fullscreen == _actuallyFullscreen) return;
+        _actuallyFullscreen = _fullscreen;
+        try
+        {
+            ApplyWindowMode();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning($"Couldn't toggle fullscreen: {ex.Message}");
+        }
+    }
+
+    //SetPreferredFullscreenVideoMode records the wanted fullscreen video mode, maps to vanilla Window.setPreferredFullscreenVideoMode
+    //The window is not touched here: ChangeFullscreenVideoMode applies it at the top of a frame, where no image is held
+    public void SetPreferredFullscreenVideoMode(VideoMode? mode)
+    {
+        if (mode == _preferredVideoMode) return;
+        _preferredVideoMode = mode;
+        _videoModeDirty = true;
+    }
+
+    //ChangeFullscreenVideoMode applies a pending video mode change while fullscreen
+    //maps to vanilla Window.changeFullscreenVideoMode
+    private void ChangeFullscreenVideoMode()
+    {
+        if (!_actuallyFullscreen || !_videoModeDirty) return;
+        _videoModeDirty = false;
+        try
+        {
+            ApplyWindowMode();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning($"Couldn't change fullscreen video mode: {ex.Message}");
+        }
+    }
+
+    //ApplyWindowMode puts the window into the wanted mode, maps to vanilla Window.setMode
+    //Leaving fullscreen restores the position and size the window had on entry, which is why they get captured here
+    private void ApplyWindowMode()
+    {
+        if (_fullscreen)
+        {
+            _windowedPosition = _window.Position;
+            _windowedSize = _window.Size;
+            //A named mode is recorded and re-applied whenever it changes, but the window is put into the monitor's
+            //current mode: Silk.NET does not expose the GLFW handle in a form that takes an explicit mode, and with no
+            //video settings screen yet there is nothing to pick one from, so an exact mode waits on that
+            _window.WindowState = WindowState.Fullscreen;
+        }
+        else
+        {
+            _window.WindowState = WindowState.Normal;
+            _window.Position = _windowedPosition;
+            _window.Size = _windowedSize;
+        }
+        //The mode change resizes the framebuffer, so ask for a rebuild rather than waiting on the resize event
+        _framebufferResized = true;
+    }
+
     //RecreateSwapchain rebuilds the swapchain and dependent resources on a window size change or swapchain invalidation
     protected void RecreateSwapchain()
     {
@@ -203,6 +294,33 @@ public abstract unsafe class VulkanAppBase : IDisposable
 
     private void DrawFrame(double obj)
     {
+        //Debug timing: the frame rate is reported once a second, which is enough to tell a real drop from a one-off hitch
+        if (Log.DebugEnabled)
+        {
+            var nowTicks = Environment.TickCount64;
+            if (_lastFrameReportTicks == 0) _lastFrameReportTicks = nowTicks;
+            _framesSinceReport++;
+            if (nowTicks - _lastFrameReportTicks >= 1000)
+            {
+                Log.Debug($"frame rate {_framesSinceReport * 1000 / (nowTicks - _lastFrameReportTicks)} fps");
+                _framesSinceReport = 0;
+                _lastFrameReportTicks = nowTicks;
+            }
+        }
+        //Window changes land here, before the surface is touched, so a fullscreen toggle can never happen while an
+        //image is acquired; vanilla makes the same call at the top of its frame
+        UpdateFullscreenIfChanged();
+        //A video mode change is a window change too, so it belongs in the same place
+        ChangeFullscreenVideoMode();
+        //The surface has to be reconfigured before anything is acquired: GpuSurface refuses a configure while an image
+        //is held, and a fullscreen toggle invalidates the swapchain out from under that image
+        if (_framebufferResized || _vkSurface.IsSuboptimal)
+        {
+            _framebufferResized = false;
+            //A rebuild does not skip the frame: the swapchain is fresh right after, and drawing into it at once is what
+            //keeps a fullscreen toggle from leaving the window empty while the new targets settle
+            RecreateSwapchain();
+        }
         try
         {
             //Descriptor sets are handed out on every pipeline bind and never returned individually, so the pool is
@@ -212,14 +330,10 @@ public abstract unsafe class VulkanAppBase : IDisposable
         }
         catch (SurfaceException)
         {
-            Log.Debug("swapchain recreated: acquire reported the surface is out of date");
-            RecreateSwapchain();
-            return;
-        }
-        if (_vkSurface.IsSuboptimal)
-        {
-            Log.Debug("swapchain recreated: acquire reported the surface is suboptimal");
-            RecreateSwapchain();
+            //Acquire leaves the surface unacquired when it throws, so the rebuild is deferred to the next frame to
+            //keep configure and acquire in that order
+            Log.Debug("swapchain recreate deferred: acquire reported the surface is out of date");
+            _framebufferResized = true;
             return;
         }
 
@@ -272,7 +386,9 @@ public abstract unsafe class VulkanAppBase : IDisposable
         Cleanup();
         //Silk.NET's Dispose internally calls Reset; after a long run it may still report being inside the render loop and throw
         //Vulkan resources and event subscriptions were already released in Cleanup; this third-party error is ignored
-        try { _window.Dispose(); }
+        //A window that never came up leaves this null, and the failure that kept it null is the one worth reporting; throwing
+        //from the cleanup path would replace it with a null reference that says nothing about the real cause
+        try { _window?.Dispose(); }
         catch (InvalidOperationException) { }
         _disposed = true;
     }

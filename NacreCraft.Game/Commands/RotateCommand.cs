@@ -12,9 +12,6 @@ namespace NacreCraft.Game.Commands;
 //Directly changes the target's facing; supports absolute angles and facing coordinates; vanilla's facing-entity branch is missing
 public static class RotateCommand
 {
-    //EyeHeight player eye height; subtract it when computing pitch from a facing coordinate
-    private const double EyeHeight = 1.62;
-
     public static void Register(CommandDispatcher<CommandSourceStack> dispatcher)
     {
         dispatcher.Register(LiteralArgumentBuilder<CommandSourceStack>.Literal("rotate")
@@ -46,7 +43,8 @@ public static class RotateCommand
         foreach (var target in targets)
         {
             var dx = destination.X - target.Position.X;
-            var dy = destination.Y - (target.Position.Y + EyeHeight);
+            //The eye height comes from the target itself rather than a constant here
+            var dy = destination.Y - (target.Position.Y + target.EyeHeight);
             var dz = destination.Z - target.Position.Z;
             var horizontal = Math.Sqrt(dx * dx + dz * dz);
             var yaw = (float)(Math.Atan2(dz, dx) * 180.0 / Math.PI) - 90f;

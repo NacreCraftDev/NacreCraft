@@ -34,11 +34,11 @@ using NacreCraft.Client.Model.Geom;
 using NacreCraft.Client.Resources.Metadata.Gui;
 namespace NacreCraft.Client.Resources.Metadata.Gui;
 
-//GuiSprite a single sprite corresponding to one PNG + .mcmeta scaling config
-//A simplified TextureAtlasSprite; NacreCraft does no atlas packing, each sprite gets its own GpuTexture
-//TextureId returned by GuiResourceManager.RegisterTexture for GuiRenderContext.DrawImage
-//Texture holds the GpuTexture+Sampler registered by GuiResourceManager
-//Width/Height are the source PNG's actual pixel size Scaling is the parsed .mcmeta result
+//GuiSprite one sprite of the GUI atlas, maps to vanilla TextureAtlasSprite in AtlasIds.GUI
+//The region is expressed in atlas pixels: AtlasX/AtlasY is the top-left corner of this sprite inside the atlas, and
+//AtlasWidth/AtlasHeight describe the whole atlas. Width/Height are the sprite's own pixel size
+//Scaling is the parsed .mcmeta gui.scaling result
+//TextureId is only set by the legacy standalone-texture path, where the sprite covers its whole texture
 public sealed class GuiSprite
 {
     public int TextureId { get; }
@@ -46,7 +46,27 @@ public sealed class GuiSprite
     public int Width { get; }
     public int Height { get; }
     public GuiSpriteScaling Scaling { get; }
+    public int AtlasX { get; }
+    public int AtlasY { get; }
+    public int AtlasWidth { get; }
+    public int AtlasHeight { get; }
 
+    //Atlas sprite constructor, the UVs come from the region inside the shared GUI atlas
+    public GuiSprite(int atlasX, int atlasY, int atlasWidth, int atlasHeight,
+        int width, int height, TextureSetup texture, GuiSpriteScaling scaling)
+    {
+        TextureId = 0;
+        Texture = texture;
+        Width = width;
+        Height = height;
+        Scaling = scaling;
+        AtlasX = atlasX;
+        AtlasY = atlasY;
+        AtlasWidth = atlasWidth;
+        AtlasHeight = atlasHeight;
+    }
+
+    //Standalone texture constructor for the legacy per-file path; the sprite covers the whole texture
     public GuiSprite(int textureId, TextureSetup texture, int width, int height, GuiSpriteScaling scaling)
     {
         TextureId = textureId;
@@ -54,5 +74,9 @@ public sealed class GuiSprite
         Width = width;
         Height = height;
         Scaling = scaling;
+        AtlasX = 0;
+        AtlasY = 0;
+        AtlasWidth = width;
+        AtlasHeight = height;
     }
 }

@@ -395,14 +395,6 @@ public sealed class PersistentServerLevel : SimpleServerLevel, BlockGetter
         //Log.Debug($"Tick exit levelTick={_levelTick}");
     }
 
-    //EntityBoxes includes the injected player bounding boxes in addition to the entity manager's entities for the entity-inside test
-    protected override IEnumerable<AABB> EntityBoxes()
-    {
-        foreach (var entity in _entityManager.Visible) yield return entity.BoundingBox;
-        if (ExtraEntityBoxes is null) yield break;
-        foreach (var box in ExtraEntityBoxes()) yield return box;
-    }
-
     //CountLevelEntitiesInBox takes candidates from the spatial index then filters by AABB intersection; players are counted separately by the base
     protected override int CountLevelEntitiesInBox(AABB box)
     {

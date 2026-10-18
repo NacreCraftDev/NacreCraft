@@ -148,7 +148,7 @@ public sealed class EntityTracker
     {
         if (players.Count == 0) return;
         var prepStart = TickStageProfiler.Now();
-        var candidates = CollectCandidates(level, players);
+        var candidates = CollectCandidates(level);
         DiagnosticEntities = candidates.Count;
         var buckets = BucketByArea(candidates);
         TickStageProfiler.Record(TickStage.TrackPrep, prepStart);
@@ -303,12 +303,12 @@ public sealed class EntityTracker
         return packets;
     }
 
-    //CollectCandidates collects traceable objects: world entities plus online players
-    private static List<ITrackedEntity> CollectCandidates(PersistentServerLevel level, IReadOnlyList<ServerPlayer> players)
+    //CollectCandidates collects traceable objects: the level's visible entities, which now include the players in it
+    //Players used to be merged in by hand because they lived outside the entity manager
+    private static List<ITrackedEntity> CollectCandidates(PersistentServerLevel level)
     {
         var list = new List<ITrackedEntity>();
         foreach (var entity in level.Entities) list.Add(entity);
-        foreach (var player in players) list.Add(player);
         return list;
     }
 

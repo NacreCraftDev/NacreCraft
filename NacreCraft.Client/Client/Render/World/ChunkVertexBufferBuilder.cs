@@ -31,7 +31,7 @@ public sealed class ChunkVertexBufferBuilder
     //materialBits is the packed material flag byte; sectionIndex is the region-local section slot, 0 while there is no region yet
     public void EncodeQuad(PoseStack poseStack, in BakedQuad quad, QuadInstance instance, int materialBits, int sectionIndex)
     {
-        var pose = poseStack.Pose();
+        var pose = poseStack.Copy();
         //The texture quantization shrinks each corner toward the quad centroid, so the centroid is needed first
         var centerU = (quad.Uv0.X + quad.Uv1.X + quad.Uv2.X + quad.Uv3.X) * 0.25f;
         var centerV = (quad.Uv0.Y + quad.Uv1.Y + quad.Uv2.Y + quad.Uv3.Y) * 0.25f;

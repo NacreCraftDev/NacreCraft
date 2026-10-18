@@ -4,8 +4,9 @@ namespace NacreCraft.Client.Gui.Screens;
 
 //LoadingOverlay loading overlay, maps to vanilla net.minecraft.client.gui.screens.LoadingOverlay
 //Covers the screen with the brand color, the studio logo and a white progress bar while the stages it was given run
-//one per tick. It fades in over 500ms, and once every stage finished and the fade in has been up for a second it
-//fades out over 1000ms so the screen underneath (already initialized by then) shows through
+//one per tick. Startup shows it opaque from the first frame; only a manual reload asks for the 500ms fade in, which
+//is the same split vanilla makes. Once every stage finished and the overlay has been up for a second it fades out
+//over 1000ms so the screen underneath (already initialized by then) shows through
 public sealed class LoadingOverlay : IGuiOverlay
 {
     //BrandBackground the red brand color vanilla uses when the dark Mojang background option is off
@@ -21,6 +22,8 @@ public sealed class LoadingOverlay : IGuiOverlay
     private const int LogoSourceHeight = 256;
 
     private readonly GuiWindow _window;
+    //The window background in use before the overlay took it over, handed back once the overlay is done
+    private readonly GuiColor _previousBackground;
     //A stage reports its own progress from 0 to 1 and is done once it reaches 1; a stage backed by background work or
     //by a running reload keeps the bar honest instead of jumping when the whole build lands
     private readonly List<(string Label, Func<float> Work)> _stages;
@@ -46,6 +49,11 @@ public sealed class LoadingOverlay : IGuiOverlay
         _stages = stages;
         _onFinished = onFinished;
         _fadeIn = fadeIn;
+        //The window background is what the render thread clears to until the tick thread publishes its first snapshot,
+        //and that gap is the slowest part of startup because the glyphs have to be baked first
+        //Adopting the brand colour here keeps that gap from flashing the default dark grey, which vanilla never shows
+        _previousBackground = window.BackgroundColor;
+        window.BackgroundColor = BrandBackground;
     }
 
     public bool IsFinished { get; private set; }
@@ -100,7 +108,12 @@ public sealed class LoadingOverlay : IGuiOverlay
             //Past a full fade out only the brand layer is left, thinning out until the screen below is fully visible
             backgroundAlpha = 1f - Math.Clamp(fadeOutAnim - 1f, 0f, 1f);
             logoAlpha = backgroundAlpha;
-            if (fadeOutAnim >= 2f) IsFinished = true;
+            if (fadeOutAnim >= 2f)
+            {
+                IsFinished = true;
+                //The overlay is about to be removed from the render chain, so give the window background back
+                _window.BackgroundColor = _previousBackground;
+            }
         }
         else if (fadeOutAnim >= 0f)
         {

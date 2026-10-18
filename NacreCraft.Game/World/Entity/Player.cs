@@ -7,11 +7,12 @@ using EntityAttributes = NacreCraft.Registry.EntityAttribute.Attributes;
 
 namespace NacreCraft.Game.World.Entity;
 
-//Inventory player inventory PoC data layer, maps to vanilla net.minecraft.world.entity.player.Inventory
-//The PoC identifies items by object identity (e.g. the string "cube") and does not use the real ItemStack/Item registry
-//In production, network packets such as ClientboundContainerSetContentPacket fill in real ItemStacks
+//PreviewInventory client hotbar preview PoC, maps to vanilla net.minecraft.world.entity.player.Inventory
+//It identifies items by object identity (e.g. the string "cube") and does not use the real ItemStack/Item registry
+//The name is deliberately not Inventory: the server side already has a real PlayerInventory under that name, and the two
+//have to coexist until the client hotbar renders real ItemStacks
 //Hotbar takes slots 0-8, the main inventory slots 9-35, 36 slots total matching vanilla
-public sealed class Inventory
+public sealed class PreviewInventory
 {
     //HotbarSlots fixed hotbar slot count of 9, matching vanilla
     public const int HotbarSlots = 9;
@@ -51,6 +52,10 @@ public class Player : LivingEntity
     //A player is a living entity and takes fall damage, maps to vanilla LivingEntity overriding Entity
     public override bool TakesFallDamage => true;
 
+    //A player's eyes sit 1.62 above the feet, maps to the eyeHeight declared by the player entity dimensions
+    //The base class derives 0.85 of the height, which would put a player's eyes at 1.53
+    public override double EyeHeight => 1.62;
+
     //A player's gravity/knockback resistance/safe fall distance/fall damage multiplier/step height all go through attributes
     public override double DefaultGravity => GetAttributeValue(EntityAttributes.Gravity);
     public override double KnockbackResistance => GetAttributeValue(EntityAttributes.KnockbackResistance);
@@ -88,9 +93,9 @@ public class Player : LivingEntity
     //IsSpectator whether the player is in spectator mode, maps to vanilla Player.isSpectator
     public override bool IsSpectator() => GameMode == NacreCraft.Game.World.Level.GameType.Spectator.Id;
 
-    //Inventory player inventory PoC data layer, hotbar 0-8, main inventory 9-35
-    //Production fills it from network packets; the PoC pre-fills cube to demo hotbar item icon rendering
-    public Inventory Inventory { get; } = new();
+    //PreviewInventory hotbar preview data, hotbar 0-8, main inventory 9-35
+    //Production fills the real inventory from network packets; this stays a client-side preview until then
+    public PreviewInventory PreviewInventory { get; } = new();
 
     public Player()
     {
@@ -98,9 +103,9 @@ public class Player : LivingEntity
         SetAttributes(new AttributeMap(DefaultAttributes.GetSupplier(EntityTypes.PLAYER) ?? AttributeSupplier.Empty));
         //The player stands slightly above the origin by default
         Pos = new Vec3(0, 0, 0);
-        //The PoC pre-fills the 9 hotbar slots with cube items to demo hotbar item icon rendering
+        //Pre-fills the 9 hotbar slots with cube items to demo hotbar item icon rendering
         //In production, ClientboundContainerSetContentPacket fills in real ItemStacks
-        for (var i = 0; i < Inventory.HotbarSlots; i++)
-            Inventory.SetItem(i, "cube");
+        for (var i = 0; i < PreviewInventory.HotbarSlots; i++)
+            PreviewInventory.SetItem(i, "cube");
     }
 }

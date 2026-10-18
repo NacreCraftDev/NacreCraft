@@ -56,10 +56,10 @@
   "nacrecraft.gui.mods.status.interrupted": "已拦截",
   "nacrecraft.gui.mods.status.unknown": "未收录",
   "nacrecraft.error_window.crash_title": "NacreCraft 崩溃",
-  "nacrecraft.error_window.mod_title": "模组加载失败",
+  "nacrecraft.error_window.mod_title": "模组加载问题",
   "nacrecraft.error_window.open_folder": "打开文件夹",
   "nacrecraft.error_window.copy": "复制报告",
   "nacrecraft.error_window.copied": "已复制",
   "nacrecraft.error_window.close": "关闭",
-  "nacrecraft.error_window.mod_summary": "%s 个模组加载失败"
+  "nacrecraft.error_window.mod_summary": "发现 %s 个问题"
 }

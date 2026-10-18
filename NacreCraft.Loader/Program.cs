@@ -31,9 +31,7 @@ public static class Program
         LaunchOptions.DeclareKernelFlag("server");
         LaunchOptions.DeclareKernelFlag("client");
         LaunchOptions.DeclareKernelFlag("debug");
-        //--agent is consumed unconditionally so it never leaks into the business argument broadcast, including on the
-        //restart that installs the profiler; only debug mode goes on to act on its value
-        LaunchOptions.DeclareKernelOption("agent");
+        //--agent is declared and acted on by the main library's module initializer, which runs before this method
 
         //Detect the --debug flag to enable global debug mode, triggering NacreCraftKernel.PrintStartupInfo and other debug behavior
         if (Array.IndexOf(args, "--debug") >= 0)
@@ -46,11 +44,6 @@ public static class Program
             Log.SetFileLevel(LogLevel.Debug);
             Log.SetVerbose(true);
         }
-
-        //The agent is the earliest injected code: it runs before mode detection and before mod bootstrap, and it is
-        //deliberately placed ahead of the crash handler, so a fault in it takes the process down with it
-        if (DebugMode.IsEnabled)
-            AgentBootstrap.Run(args);
 
         var mode = DetectMode(args);
 

@@ -229,11 +229,15 @@ pub unsafe fn record(fault: &Fault) -> i32 {
 unsafe fn write_console(text: &str) {
     use win::{GetStdHandle, WriteFile};
 
+    // Both handles are written so the banner survives redirection of either stream, but a console usually backs both with
+    // the same screen buffer. Writing that twice prints the whole block twice, so a handle already written is skipped
+    let mut previous = std::ptr::null_mut();
     for kind in [STD_ERROR_HANDLE, STD_OUTPUT_HANDLE] {
         let handle = GetStdHandle(kind);
-        if handle.is_null() || handle as isize == -1 {
+        if handle.is_null() || handle as isize == -1 || handle == previous {
             continue;
         }
+        previous = handle;
         let mut written: u32 = 0;
         let _ = WriteFile(
             handle,
@@ -248,8 +252,10 @@ unsafe fn write_console(text: &str) {
 /// write uses the raw syscall wrapper: it is async-signal-safe, which is the only thing that matters here
 #[cfg(unix)]
 unsafe fn write_console(text: &str) {
-    for descriptor in [2i32, 1i32] {
-        let _ = libc_write(descriptor, text.as_ptr(), text.len());
+    // A terminal backs both descriptors with the same destination, so writing both prints the block twice. Stderr carries
+    // crash output by convention, and stdout is only used when that write fails outright
+    if libc_write(2, text.as_ptr(), text.len()) < 0 {
+        let _ = libc_write(1, text.as_ptr(), text.len());
     }
 }
 

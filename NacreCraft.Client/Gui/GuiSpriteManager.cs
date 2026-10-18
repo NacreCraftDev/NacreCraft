@@ -34,6 +34,7 @@ using NacreCraft.Client.Gui.Font.Glyphs;
 using NacreCraft.Client.Model;
 using NacreCraft.Client.Model.Geom;
 using NacreCraft.Client.Resources.Metadata.Gui;
+using NacreCraft.Logging;
 using NacreCraft.Registry;
 using ClientPackType = NacreCraft.Resources.PackType;
 using ClientResourceManager = NacreCraft.Resources.ResourceManager;
@@ -41,43 +42,68 @@ using ClientResourceManager = NacreCraft.Resources.ResourceManager;
 namespace NacreCraft.Client.Gui;
 
 //GuiSpriteManager identifier → GuiSprite cache, maps to vanilla TextureAtlas guiSprites
-//Sprites are read through the client ResourceManager, so any enabled resource pack can override one
-//Lazily loads the PNG via GuiResourceManager.RegisterTexture and reads the same-named .mcmeta file
+//Sprites come from the stitched GUI atlas first; a miss falls back to loading the standalone PNG through the client
+//ResourceManager, so any enabled resource pack can still override one
 //LoadSprite is protected virtual for tests to override without depending on GpuDevice
 public class GuiSpriteManager
 {
     private readonly ClientResourceManager? _resources;
     private readonly GuiResourceManager _resourceManager;
     private readonly Dictionary<string, GuiSprite?> _cache = new();
+    //_missingReported identifiers already reported, so a missing sprite warns once instead of every frame
+    private readonly HashSet<string> _missingReported = new();
 
-    public GuiSpriteManager(ClientResourceManager? resources, GuiResourceManager resourceManager)
+    //Atlas the stitched GUI sprite atlas; nullable when there is no client resource manager
+    public GuiAtlas? Atlas { get; set; }
+
+    public GuiSpriteManager(ClientResourceManager? resources, GuiResourceManager resourceManager, GuiAtlas? atlas)
     {
         _resources = resources;
         _resourceManager = resourceManager;
+        Atlas = atlas;
     }
 
-    //GetSprite gets a GuiSprite by identifier, lazily loading the PNG + .mcmeta if not loaded
-    //Returns null when the PNG is not found; the caller handles the fallback
-    //On a cache hit it returns the previous result including null results, avoiding repeated IO
+    //GetSprite gets a GuiSprite by identifier: the atlas is consulted first, then the standalone PNG + .mcmeta
+    //A miss is logged once and resolved to the missing placeholder, maps to vanilla TextureAtlas.getSprite returning
+    //missingno; drawing nothing is what makes a missing texture invisible instead of diagnosable
+    //On a cache hit it returns the previous result, avoiding repeated IO
     public GuiSprite? GetSprite(string identifier)
     {
-        if (_cache.TryGetValue(identifier, out var cached)) return cached;
+        if (Atlas?.GetSprite(identifier) is { } atlasSprite) return atlasSprite;
+        if (_cache.TryGetValue(identifier, out var cached))
+            return cached ?? ReportMissing(identifier);
         var sprite = LoadSprite(identifier);
         _cache[identifier] = sprite;
-        return sprite;
+        return sprite ?? ReportMissing(identifier);
     }
 
-    //ClearCache called by VulkanGuiApp to clear the cache on swapchain recreation
-    //textureId may change, invalidating the TextureSetup held by old GuiSprites
-    public void ClearCache() => _cache.Clear();
+    //ReportMissing logs the identifier once and returns the placeholder, or null when the atlas is unavailable
+    private GuiSprite? ReportMissing(string identifier)
+    {
+        if (_missingReported.Add(identifier))
+            Log.Warning($"Missing GUI sprite {identifier}");
+        return Atlas?.Missing;
+    }
+
+    //ClearCache called by VulkanGuiApp to clear the cache on swapchain recreation or after a resource reload
+    //textureId may change, invalidating the TextureSetup held by old GuiSprites; a reload can also add a sprite that
+    //was missing before, so the reported set is cleared as well
+    public void ClearCache()
+    {
+        _cache.Clear();
+        _missingReported.Clear();
+    }
 
     //LoadSprite resolves the PNG and the same-named .mcmeta through the resource manager
     //identifier "minecraft:textures/gui/sprites/widget/button" → resource minecraft:textures/gui/sprites/widget/button.png
+    //The atlas-relative form minecraft:widget/button is expanded to the same path, so both id forms reach a pack file
     //virtual for tests to override without real file IO and GpuDevice dependency
     protected virtual GuiSprite? LoadSprite(string identifier)
     {
         if (_resources is null) return null;
         var (ns, path) = SplitIdentifier(identifier);
+        if (!path.StartsWith("textures/", StringComparison.Ordinal))
+            path = path.StartsWith("mob_effect/", StringComparison.Ordinal) ? "textures/" + path : "textures/gui/sprites/" + path;
         var location = Identifier.TryBuild(ns, path + ".png");
         if (location is null) return null;
         var png = _resources.GetResource(ClientPackType.ClientResources, location.Value);
@@ -86,7 +112,9 @@ public class GuiSpriteManager
         int textureId;
         using (var stream = png.Open())
         {
-            textureId = _resourceManager.RegisterTexture(stream, location.Value.ToString());
+            //Sprites are sampled NEAREST like the vanilla GUI atlas, otherwise guiScale magnification blurs the
+            //1px borders that every widget texture is built from
+            textureId = _resourceManager.RegisterTexture(stream, location.Value.ToString(), nearest: true);
         }
         if (textureId == 0) return null;
         var texture = _resourceManager.ResolveTexture(textureId);

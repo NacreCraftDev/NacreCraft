@@ -56,10 +56,10 @@
   "nacrecraft.gui.mods.status.interrupted": "Intercepted",
   "nacrecraft.gui.mods.status.unknown": "Unknown",
   "nacrecraft.error_window.crash_title": "NacreCraft crashed",
-  "nacrecraft.error_window.mod_title": "Mod loading failed",
+  "nacrecraft.error_window.mod_title": "Mod loading problems",
   "nacrecraft.error_window.open_folder": "Open folder",
   "nacrecraft.error_window.copy": "Copy report",
   "nacrecraft.error_window.copied": "Copied",
   "nacrecraft.error_window.close": "Close",
-  "nacrecraft.error_window.mod_summary": "%s mods failed to load"
+  "nacrecraft.error_window.mod_summary": "%s problem(s) found"
 }

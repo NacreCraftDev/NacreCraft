@@ -1,22 +1,25 @@
 using System.Reflection;
 using NacreCraft.Logging;
 
-namespace NacreCraft.Loader;
+namespace NacreCraft;
 
 //AgentBootstrap loads an agent assembly at the earliest stage of startup, standing in for the JVM's -javaagent
-//It runs before ModBootstrap and long before the crash handler is installed, so an agent that faults takes the whole
-//process down; that is the trade accepted for running this early
+//It belongs to the main library rather than to one launcher, because every entry point loads the main library first:
+//the launcher, the standalone server and the standalone client all get an agent without wiring it up separately
+//Mod bootstrap and the kernel have not run yet at this point, so an agent always sees the kernel untouched
 internal static class AgentBootstrap
 {
     //EntryVariable holds the entry method name; a bare name like libmain is the default
     private const string EntryVariable = "NACRECRAFT_AGENT_ENTRY";
     private const string DefaultEntry = "libmain";
 
-    //Run scans args for the first --agent and loads the assembly it names
+    //Run scans the command line for the first --agent and loads the assembly it names
     //Only one agent is honoured, mirroring -javaagent: a later occurrence is ignored rather than chained
-    //The caller decides whether to reach here at all: outside debug the argument is still consumed, just silently
+    //Only debug runs one; the argument itself is claimed by LaunchOptions either way, so it never reaches the broadcast
     public static void Run(string[] args)
     {
+        if (Array.IndexOf(args, "--debug") < 0) return;
+
         for (int i = 0; i < args.Length; i++)
         {
             var token = args[i];

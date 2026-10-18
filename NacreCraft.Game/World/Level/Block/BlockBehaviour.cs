@@ -324,7 +324,9 @@ public abstract class BlockBehaviour : NacreCraft.Registry.Block, IBlockUpdateBe
     public virtual void Tick(ServerLevel level, BlockPos pos, BlockState state, RandomSource random) { }
 
     //OnEntityInside an entity entered this block's cell, maps to vanilla entityInside, no behavior by default
-    public virtual void OnEntityInside(ServerLevel level, BlockPos pos, BlockState state) { }
+    //entity is null only on the player path, where the game layer injects a box and has no entity to hand over
+    public virtual void OnEntityInside(ServerLevel level, BlockPos pos, BlockState state,
+        NacreCraft.Registry.Entity? entity) { }
 
     //OnProjectileHit callback when hit by a projectile, maps to vanilla onProjectileHit, no behavior by default
     //hit carries the hit point and entered face; blocks like targets use the hit point to compute the output strength

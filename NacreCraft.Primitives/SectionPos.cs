@@ -58,7 +58,9 @@ public readonly struct SectionPos : IEquatable<SectionPos>
     public static int SectionToBlockCoord(int sectionCoord) => sectionCoord << SectionBits;
 
     //blockToSectionCoord double version, vanilla uses it for entities
-    public static int BlockToSectionCoord(double blockCoord) => (int)Math.Floor(blockCoord / SectionSize);
+    //Floor first and shift afterwards, as vanilla does: the cast saturates and the shift keeps four bits of headroom, so a
+    //coordinate far outside the world advances the loop bound instead of landing on the maximum where incrementing wraps
+    public static int BlockToSectionCoord(double blockCoord) => (int)Math.Floor(blockCoord) >> SectionBits;
 
     //getX/getY/getZ read section coordinates from a packed long
     //Must shift left to the sign bit then arithmetic shift right to restore the sign, masking alone would turn negative section coordinates (overworld y sections start at -4) into positive ones
