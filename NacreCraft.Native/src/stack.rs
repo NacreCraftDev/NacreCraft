@@ -72,7 +72,7 @@ pub fn install() -> Result<(), String> {
         return crate::signals::install();
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(windows)]
     {
         if !HANDLER.load(Ordering::SeqCst).is_null() {
             return Err("already installed".to_string());
@@ -87,6 +87,11 @@ pub fn install() -> Result<(), String> {
         HANDLER.store(handle, Ordering::SeqCst);
         Ok(())
     }
+
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        Err("stack overflow handling is not implemented on this platform".to_string())
+    }
 }
 
 /// uninstall removes the handler again, used when the runtime is shutting down
@@ -96,7 +101,7 @@ pub fn uninstall() {
         crate::signals::uninstall();
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(windows)]
     {
         let handle = HANDLER.swap(std::ptr::null_mut(), Ordering::SeqCst);
         if !handle.is_null() {
