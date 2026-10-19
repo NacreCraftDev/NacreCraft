@@ -33,7 +33,9 @@ public sealed class RegistryOps<T> : DynamicOps<T>
         if (!idResult.Result().IsPresent)
             return DataResult<Holder<E>>.Error(() => "Failed to decode Identifier");
         var id = idResult.GetOrThrow();
-        var value = registry.Get(id);
+        //A pure read of the key index, which also holds the placeholder created for every element file
+        //Decoding runs concurrently and must not write the registry, so a missing reference is an error instead of a new holder
+        Holder<E>? value = registry.GetHolder(id);
         if (value is null)
             return DataResult<Holder<E>>.Error(() => $"Can't find value: {id} in registry {registryKey}");
         return DataResult<Holder<E>>.Success(value);

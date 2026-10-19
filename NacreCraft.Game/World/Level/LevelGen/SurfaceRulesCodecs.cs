@@ -317,7 +317,7 @@ internal sealed class BiomeListCodec : ScalarCodec<SurfaceRules.BiomeCondition>
         if (!stream.Result().IsPresent)
             return DataResult<SurfaceRules.BiomeCondition>.Error(
                 () => "biome_is must be a string or a string list");
-        var list = new List<Biome>();
+        var list = new List<Holder<Biome>>();
         foreach (var element in stream.GetOrThrow())
         {
             var text = ops.GetStringValue(element);
@@ -336,9 +336,13 @@ internal sealed class BiomeListCodec : ScalarCodec<SurfaceRules.BiomeCondition>
         if (value.Tag is not null)
             return DataResult<U>.Success(ops.CreateString("#" + value.Tag.Location));
         if (value.Biomes.Length == 1)
-            return DataResult<U>.Success(ops.CreateString(value.Biomes[0].Id.ToString()));
-        return DataResult<U>.Success(ops.CreateList(value.Biomes.Select(b => ops.CreateString(b.Id.ToString()))));
+            return DataResult<U>.Success(ops.CreateString(BiomeId(value.Biomes[0])));
+        return DataResult<U>.Success(ops.CreateList(value.Biomes.Select(b => ops.CreateString(BiomeId(b)))));
     }
+
+    //BiomeId the registry name of a biome reference, preferring the holder key and falling back to the element id
+    private static string BiomeId(Holder<Biome> holder)
+        => holder.UnwrapKey()?.Identifier.ToString() ?? holder.Value.Id.ToString();
 
     //ResolveTag parses "#namespace:tag"
     //Vanilla is lenient about tags that never appear in the data pack; this accepts them too and treats them as unbound during tests
@@ -361,14 +365,19 @@ internal sealed class BiomeListCodec : ScalarCodec<SurfaceRules.BiomeCondition>
             : BuiltInRegistries.BIOME;
 
     //ResolveBiome prefers the BIOME registry carried by RegistryOps and falls back to the built-in
-    private static DataResult<Biome> ResolveBiome<U>(DynamicOps<U> ops, string text)
+    //During data loading a biome declared later resolves to its placeholder holder, which Register binds afterwards
+    private static DataResult<Holder<Biome>> ResolveBiome<U>(DynamicOps<U> ops, string text)
     {
         var id = Identifier.TryParse(text);
         if (id is null)
-            return DataResult<Biome>.Error(() => $"invalid biome identifier: {text}");
+            return DataResult<Holder<Biome>>.Error(() => $"invalid biome identifier: {text}");
         var registry = ResolveRegistry(ops);
-        return registry is not null && registry.ContainsKey(id.Value) && registry.GetValue(id.Value) is { } value
-            ? DataResult<Biome>.Success(value)
-            : DataResult<Biome>.Error(() => $"unknown biome: {text}");
+        if (registry is null)
+            return DataResult<Holder<Biome>>.Error(() => $"unknown biome: {text}");
+        //A pure read of the key index, decoding runs concurrently and must not write the registry
+        var holder = registry.GetHolder(id.Value);
+        return holder is null
+            ? DataResult<Holder<Biome>>.Error(() => $"unknown biome: {text}")
+            : DataResult<Holder<Biome>>.Success(holder);
     }
 }

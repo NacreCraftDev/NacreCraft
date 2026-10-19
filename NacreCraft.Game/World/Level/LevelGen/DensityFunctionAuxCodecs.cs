@@ -7,47 +7,30 @@ namespace NacreCraft.Game.World.Level.LevelGen;
 
 //DensityFunctionRefs density function and noise parameter reference resolution, maps to vanilla RegistryFileCodec
 //String form goes through a registry lookup, inline form goes through the element codec
-//Prefers the RegistryAccess carried by RegistryOps, falling back to the static BuiltInRegistries
+//During data loading the lookup creates a standalone holder for an element declared later, matching vanilla createRegistrationLookup
 public static class DensityFunctionRefs
 {
-    //Resolve looks up an element by Identifier in the RegistryOps registry or the built-in registry
-    public static DataResult<T> Resolve<T, U>(DynamicOps<U> ops, ResourceKey<Registry<T>> key,
+    //Resolve looks up an element Holder by Identifier without writing, safe to call from concurrent decoding
+    public static DataResult<Holder<T>> Resolve<T, U>(DynamicOps<U> ops, ResourceKey<Registry<T>> key,
         Registry<T> builtin, Identifier id) where T : class
     {
-        if (ops is RegistryOps<U> registryOps)
+        if (ops is RegistryOps<U> registryOps && registryOps.GetRegistry(key) is { } registry)
         {
-            var registry = registryOps.GetRegistry(key);
-            if (registry is not null)
-                return Lookup(registry, key, id);
+            var held = registry.GetHolder(id);
+            return held is null
+                ? DataResult<Holder<T>>.Error(() => $"Can't find value: {id} in registry {key}")
+                : DataResult<Holder<T>>.Success(held);
         }
-        return Lookup(builtin, key, id);
+        var holder = builtin.GetHolder(id) ?? builtin.Get(id);
+        return holder is null
+            ? DataResult<Holder<T>>.Error(() => $"Can't find value: {id} in registry {key}")
+            : DataResult<Holder<T>>.Success(holder);
     }
 
-    //ResolveDensityFunction resolves a density function reference string
-    public static DataResult<DensityFunction> ResolveDensityFunction<U>(DynamicOps<U> ops, Identifier id)
-    {
-        if (ops is RegistryOps<U> registryOps)
-        {
-            var registry = registryOps.GetRegistry(Registries.DENSITY_FUNCTION);
-            if (registry is not null)
-                return AsDensityFunction(registry.GetValue(id), id);
-        }
-        return AsDensityFunction(BuiltInRegistries.DENSITY_FUNCTION.GetValue(id), id);
-    }
-
-    private static DataResult<T> Lookup<T>(Registry<T> registry, ResourceKey<Registry<T>> key, Identifier id)
-        where T : class
-    {
-        var value = registry.GetValue(id);
-        return value is null
-            ? DataResult<T>.Error(() => $"Can't find value: {id} in registry {key}")
-            : DataResult<T>.Success(value);
-    }
-
-    private static DataResult<DensityFunction> AsDensityFunction(object? value, Identifier id)
-        => value is DensityFunction df
-            ? DataResult<DensityFunction>.Success(df)
-            : DataResult<DensityFunction>.Error(() => $"Can't find density function: {id}");
+    //ResolveDensityFunction resolves a density function reference string into its registry holder
+    //The density function registry is object keyed on the Registry side, so the holder carries object
+    public static DataResult<Holder<object>> ResolveDensityFunction<U>(DynamicOps<U> ops, Identifier id)
+        => Resolve(ops, Registries.DENSITY_FUNCTION, BuiltInRegistries.DENSITY_FUNCTION, id);
 }
 
 //NoiseHolderCodec noise holder codec, maps to vanilla DensityFunction.NoiseHolder.CODEC
@@ -66,20 +49,20 @@ public sealed class NoiseHolderCodec : ScalarCodec<NoiseHolder>
             if (id is null)
                 return DataResult<NoiseHolder>.Error(() => $"Invalid noise identifier: {text}");
             return DensityFunctionRefs.Resolve(ops, Registries.NOISE, BuiltInRegistries.NOISE, id.Value)
-                .Map(data => new NoiseHolder(data));
+                .Map(holder => new NoiseHolder(holder));
         }
-        return NoiseParameters.Codec.Parse(ops, input).Map(data => new NoiseHolder(data));
+        return NoiseParameters.Codec.Parse(ops, input)
+            .Map(data => new NoiseHolder(Holder<NoiseParameters>.Direct(data)));
     }
 
     public override DataResult<U> EncodeStart<U>(DynamicOps<U> ops, NoiseHolder value)
     {
+        if (value.NoiseDataHolder.UnwrapKey() is { } key)
+            return DataResult<U>.Success(ops.CreateString(key.Identifier.ToString()));
         var data = value.NoiseData;
         if (data is null)
             return DataResult<U>.Error(() => "NoiseHolder has no noise data");
-        var id = BuiltInRegistries.NOISE.GetKey(data);
-        return id is not null
-            ? DataResult<U>.Success(ops.CreateString(id.Value.ToString()))
-            : NoiseParameters.Codec.EncodeStart(ops, data);
+        return NoiseParameters.Codec.EncodeStart(ops, data);
     }
 }
 

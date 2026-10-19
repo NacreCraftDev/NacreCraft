@@ -1,0 +1,95 @@
+name: Native
+
+# Builds the native layer for every supported runtime and attaches the artifacts to a tag release.
+# The normal build only produces the host platform, so the other targets need their own runners.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+    paths:
+      - "NacreCraft.Native/**"
+      - ".github/workflows/native.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: native-${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            rid: win-x64
+            artifact: nacrecraft_native.dll
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            rid: linux-x64
+            artifact: libnacrecraft_native.so
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            rid: linux-arm64
+            artifact: libnacrecraft_native.so
+          # macos-14 is an arm64 runner, and its toolchain can also emit the x86_64 slice
+          - os: macos-14
+            target: x86_64-apple-darwin
+            rid: osx-x64
+            artifact: libnacrecraft_native.dylib
+          - os: macos-14
+            target: aarch64-apple-darwin
+            rid: osx-arm64
+            artifact: libnacrecraft_native.dylib
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: NacreCraft.Native -> target
+      - name: Build
+        shell: pwsh
+        working-directory: NacreCraft.Native
+        run: ./build.ps1 -Target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.rid }}
+          path: NacreCraft.Native/out/${{ matrix.rid }}/${{ matrix.artifact }}
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Attach to release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Name by runtime
+        # Each artifact keeps its own folder, so the shared library names have to gain the rid before upload
+        run: |
+          mkdir -p upload
+          for directory in artifacts/native-*; do
+            rid="${directory#artifacts/native-}"
+            for file in "$directory"/*; do
+              extension="${file##*.}"
+              cp "$file" "upload/nacrecraft_native-${rid}.${extension}"
+            done
+          done
+          ls -l upload
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: "upload/*"
+          fail_on_unmatched_files: true

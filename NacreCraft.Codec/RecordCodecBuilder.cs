@@ -115,7 +115,11 @@ internal sealed class RecordCodec1<T, F1> : AbstractMapCodec<T>
     }
 
     public override DataResult<T> Decode<U>(DynamicOps<U> ops, MapLike<U> input)
-        => _f1.Codec.Decode(ops, input).Map(value => _ctor(value));
+    {
+        var r1 = _f1.Codec.Decode(ops, input);
+        if (!r1.TryGet(out var v1)) return Fail(r1);
+        return DataResult<T>.Success(_ctor(v1));
+    }
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, T value, RecordBuilder<U> builder)
     {
@@ -125,7 +129,7 @@ internal sealed class RecordCodec1<T, F1> : AbstractMapCodec<T>
 }
 
 //2-field record codec
-//decode Decodes field by field and combines them with FlatMap to call the constructor; encode walks the fields with EncodeTo into the builder
+//Decode walks the fields in order and calls the constructor; EncodeTo walks them into the builder
 internal sealed class RecordCodec2<T, F1, F2> : AbstractMapCodec<T>
 {
     private readonly FieldCodec<T, F1> _f1;
@@ -139,8 +143,11 @@ internal sealed class RecordCodec2<T, F1, F2> : AbstractMapCodec<T>
 
     public override DataResult<T> Decode<U>(DynamicOps<U> ops, MapLike<U> input)
     {
-        return _f1.Codec.Decode(ops, input)
-            .FlatMap(v1 => _f2.Codec.Decode(ops, input).Map(v2 => _ctor(v1, v2)));
+        var r1 = _f1.Codec.Decode(ops, input);
+        if (!r1.TryGet(out var v1)) return Fail(r1);
+        var r2 = _f2.Codec.Decode(ops, input);
+        if (!r2.TryGet(out var v2)) return Fail(r2);
+        return DataResult<T>.Success(_ctor(v1, v2));
     }
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, T value, RecordBuilder<U> builder)
@@ -167,9 +174,13 @@ internal sealed class RecordCodec3<T, F1, F2, F3> : AbstractMapCodec<T>
 
     public override DataResult<T> Decode<U>(DynamicOps<U> ops, MapLike<U> input)
     {
-        return _f1.Codec.Decode(ops, input)
-            .FlatMap(v1 => _f2.Codec.Decode(ops, input)
-                .FlatMap(v2 => _f3.Codec.Decode(ops, input).Map(v3 => _ctor(v1, v2, v3))));
+        var r1 = _f1.Codec.Decode(ops, input);
+        if (!r1.TryGet(out var v1)) return Fail(r1);
+        var r2 = _f2.Codec.Decode(ops, input);
+        if (!r2.TryGet(out var v2)) return Fail(r2);
+        var r3 = _f3.Codec.Decode(ops, input);
+        if (!r3.TryGet(out var v3)) return Fail(r3);
+        return DataResult<T>.Success(_ctor(v1, v2, v3));
     }
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, T value, RecordBuilder<U> builder)
@@ -198,10 +209,15 @@ internal sealed class RecordCodec4<T, F1, F2, F3, F4> : AbstractMapCodec<T>
 
     public override DataResult<T> Decode<U>(DynamicOps<U> ops, MapLike<U> input)
     {
-        return _f1.Codec.Decode(ops, input)
-            .FlatMap(v1 => _f2.Codec.Decode(ops, input)
-                .FlatMap(v2 => _f3.Codec.Decode(ops, input)
-                    .FlatMap(v3 => _f4.Codec.Decode(ops, input).Map(v4 => _ctor(v1, v2, v3, v4)))));
+        var r1 = _f1.Codec.Decode(ops, input);
+        if (!r1.TryGet(out var v1)) return Fail(r1);
+        var r2 = _f2.Codec.Decode(ops, input);
+        if (!r2.TryGet(out var v2)) return Fail(r2);
+        var r3 = _f3.Codec.Decode(ops, input);
+        if (!r3.TryGet(out var v3)) return Fail(r3);
+        var r4 = _f4.Codec.Decode(ops, input);
+        if (!r4.TryGet(out var v4)) return Fail(r4);
+        return DataResult<T>.Success(_ctor(v1, v2, v3, v4));
     }
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, T value, RecordBuilder<U> builder)
@@ -232,11 +248,17 @@ internal sealed class RecordCodec5<T, F1, F2, F3, F4, F5> : AbstractMapCodec<T>
 
     public override DataResult<T> Decode<U>(DynamicOps<U> ops, MapLike<U> input)
     {
-        return _f1.Codec.Decode(ops, input)
-            .FlatMap(v1 => _f2.Codec.Decode(ops, input)
-                .FlatMap(v2 => _f3.Codec.Decode(ops, input)
-                    .FlatMap(v3 => _f4.Codec.Decode(ops, input)
-                        .FlatMap(v4 => _f5.Codec.Decode(ops, input).Map(v5 => _ctor(v1, v2, v3, v4, v5))))));
+        var r1 = _f1.Codec.Decode(ops, input);
+        if (!r1.TryGet(out var v1)) return Fail(r1);
+        var r2 = _f2.Codec.Decode(ops, input);
+        if (!r2.TryGet(out var v2)) return Fail(r2);
+        var r3 = _f3.Codec.Decode(ops, input);
+        if (!r3.TryGet(out var v3)) return Fail(r3);
+        var r4 = _f4.Codec.Decode(ops, input);
+        if (!r4.TryGet(out var v4)) return Fail(r4);
+        var r5 = _f5.Codec.Decode(ops, input);
+        if (!r5.TryGet(out var v5)) return Fail(r5);
+        return DataResult<T>.Success(_ctor(v1, v2, v3, v4, v5));
     }
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, T value, RecordBuilder<U> builder)
@@ -270,12 +292,19 @@ internal sealed class RecordCodec6<T, F1, F2, F3, F4, F5, F6> : AbstractMapCodec
 
     public override DataResult<T> Decode<U>(DynamicOps<U> ops, MapLike<U> input)
     {
-        return _f1.Codec.Decode(ops, input)
-            .FlatMap(v1 => _f2.Codec.Decode(ops, input)
-                .FlatMap(v2 => _f3.Codec.Decode(ops, input)
-                    .FlatMap(v3 => _f4.Codec.Decode(ops, input)
-                        .FlatMap(v4 => _f5.Codec.Decode(ops, input)
-                            .FlatMap(v5 => _f6.Codec.Decode(ops, input).Map(v6 => _ctor(v1, v2, v3, v4, v5, v6)))))));
+        var r1 = _f1.Codec.Decode(ops, input);
+        if (!r1.TryGet(out var v1)) return Fail(r1);
+        var r2 = _f2.Codec.Decode(ops, input);
+        if (!r2.TryGet(out var v2)) return Fail(r2);
+        var r3 = _f3.Codec.Decode(ops, input);
+        if (!r3.TryGet(out var v3)) return Fail(r3);
+        var r4 = _f4.Codec.Decode(ops, input);
+        if (!r4.TryGet(out var v4)) return Fail(r4);
+        var r5 = _f5.Codec.Decode(ops, input);
+        if (!r5.TryGet(out var v5)) return Fail(r5);
+        var r6 = _f6.Codec.Decode(ops, input);
+        if (!r6.TryGet(out var v6)) return Fail(r6);
+        return DataResult<T>.Success(_ctor(v1, v2, v3, v4, v5, v6));
     }
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, T value, RecordBuilder<U> builder)
@@ -311,13 +340,21 @@ internal sealed class RecordCodec7<T, F1, F2, F3, F4, F5, F6, F7> : AbstractMapC
 
     public override DataResult<T> Decode<U>(DynamicOps<U> ops, MapLike<U> input)
     {
-        return _f1.Codec.Decode(ops, input)
-            .FlatMap(v1 => _f2.Codec.Decode(ops, input)
-                .FlatMap(v2 => _f3.Codec.Decode(ops, input)
-                    .FlatMap(v3 => _f4.Codec.Decode(ops, input)
-                        .FlatMap(v4 => _f5.Codec.Decode(ops, input)
-                            .FlatMap(v5 => _f6.Codec.Decode(ops, input)
-                                .FlatMap(v6 => _f7.Codec.Decode(ops, input).Map(v7 => _ctor(v1, v2, v3, v4, v5, v6, v7))))))));
+        var r1 = _f1.Codec.Decode(ops, input);
+        if (!r1.TryGet(out var v1)) return Fail(r1);
+        var r2 = _f2.Codec.Decode(ops, input);
+        if (!r2.TryGet(out var v2)) return Fail(r2);
+        var r3 = _f3.Codec.Decode(ops, input);
+        if (!r3.TryGet(out var v3)) return Fail(r3);
+        var r4 = _f4.Codec.Decode(ops, input);
+        if (!r4.TryGet(out var v4)) return Fail(r4);
+        var r5 = _f5.Codec.Decode(ops, input);
+        if (!r5.TryGet(out var v5)) return Fail(r5);
+        var r6 = _f6.Codec.Decode(ops, input);
+        if (!r6.TryGet(out var v6)) return Fail(r6);
+        var r7 = _f7.Codec.Decode(ops, input);
+        if (!r7.TryGet(out var v7)) return Fail(r7);
+        return DataResult<T>.Success(_ctor(v1, v2, v3, v4, v5, v6, v7));
     }
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, T value, RecordBuilder<U> builder)
@@ -355,14 +392,23 @@ internal sealed class RecordCodec8<T, F1, F2, F3, F4, F5, F6, F7, F8> : Abstract
 
     public override DataResult<T> Decode<U>(DynamicOps<U> ops, MapLike<U> input)
     {
-        return _f1.Codec.Decode(ops, input)
-            .FlatMap(v1 => _f2.Codec.Decode(ops, input)
-                .FlatMap(v2 => _f3.Codec.Decode(ops, input)
-                    .FlatMap(v3 => _f4.Codec.Decode(ops, input)
-                        .FlatMap(v4 => _f5.Codec.Decode(ops, input)
-                            .FlatMap(v5 => _f6.Codec.Decode(ops, input)
-                                .FlatMap(v6 => _f7.Codec.Decode(ops, input)
-                                    .FlatMap(v7 => _f8.Codec.Decode(ops, input).Map(v8 => _ctor(v1, v2, v3, v4, v5, v6, v7, v8)))))))));
+        var r1 = _f1.Codec.Decode(ops, input);
+        if (!r1.TryGet(out var v1)) return Fail(r1);
+        var r2 = _f2.Codec.Decode(ops, input);
+        if (!r2.TryGet(out var v2)) return Fail(r2);
+        var r3 = _f3.Codec.Decode(ops, input);
+        if (!r3.TryGet(out var v3)) return Fail(r3);
+        var r4 = _f4.Codec.Decode(ops, input);
+        if (!r4.TryGet(out var v4)) return Fail(r4);
+        var r5 = _f5.Codec.Decode(ops, input);
+        if (!r5.TryGet(out var v5)) return Fail(r5);
+        var r6 = _f6.Codec.Decode(ops, input);
+        if (!r6.TryGet(out var v6)) return Fail(r6);
+        var r7 = _f7.Codec.Decode(ops, input);
+        if (!r7.TryGet(out var v7)) return Fail(r7);
+        var r8 = _f8.Codec.Decode(ops, input);
+        if (!r8.TryGet(out var v8)) return Fail(r8);
+        return DataResult<T>.Success(_ctor(v1, v2, v3, v4, v5, v6, v7, v8));
     }
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, T value, RecordBuilder<U> builder)
@@ -402,15 +448,25 @@ internal sealed class RecordCodec9<T, F1, F2, F3, F4, F5, F6, F7, F8, F9> : Abst
 
     public override DataResult<T> Decode<U>(DynamicOps<U> ops, MapLike<U> input)
     {
-        return _f1.Codec.Decode(ops, input)
-            .FlatMap(v1 => _f2.Codec.Decode(ops, input)
-                .FlatMap(v2 => _f3.Codec.Decode(ops, input)
-                    .FlatMap(v3 => _f4.Codec.Decode(ops, input)
-                        .FlatMap(v4 => _f5.Codec.Decode(ops, input)
-                            .FlatMap(v5 => _f6.Codec.Decode(ops, input)
-                                .FlatMap(v6 => _f7.Codec.Decode(ops, input)
-                                    .FlatMap(v7 => _f8.Codec.Decode(ops, input)
-                                        .FlatMap(v8 => _f9.Codec.Decode(ops, input).Map(v9 => _ctor(v1, v2, v3, v4, v5, v6, v7, v8, v9))))))))));
+        var r1 = _f1.Codec.Decode(ops, input);
+        if (!r1.TryGet(out var v1)) return Fail(r1);
+        var r2 = _f2.Codec.Decode(ops, input);
+        if (!r2.TryGet(out var v2)) return Fail(r2);
+        var r3 = _f3.Codec.Decode(ops, input);
+        if (!r3.TryGet(out var v3)) return Fail(r3);
+        var r4 = _f4.Codec.Decode(ops, input);
+        if (!r4.TryGet(out var v4)) return Fail(r4);
+        var r5 = _f5.Codec.Decode(ops, input);
+        if (!r5.TryGet(out var v5)) return Fail(r5);
+        var r6 = _f6.Codec.Decode(ops, input);
+        if (!r6.TryGet(out var v6)) return Fail(r6);
+        var r7 = _f7.Codec.Decode(ops, input);
+        if (!r7.TryGet(out var v7)) return Fail(r7);
+        var r8 = _f8.Codec.Decode(ops, input);
+        if (!r8.TryGet(out var v8)) return Fail(r8);
+        var r9 = _f9.Codec.Decode(ops, input);
+        if (!r9.TryGet(out var v9)) return Fail(r9);
+        return DataResult<T>.Success(_ctor(v1, v2, v3, v4, v5, v6, v7, v8, v9));
     }
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, T value, RecordBuilder<U> builder)
@@ -453,16 +509,27 @@ internal sealed class RecordCodec10<T, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10> 
 
     public override DataResult<T> Decode<U>(DynamicOps<U> ops, MapLike<U> input)
     {
-        return _f1.Codec.Decode(ops, input)
-            .FlatMap(v1 => _f2.Codec.Decode(ops, input)
-                .FlatMap(v2 => _f3.Codec.Decode(ops, input)
-                    .FlatMap(v3 => _f4.Codec.Decode(ops, input)
-                        .FlatMap(v4 => _f5.Codec.Decode(ops, input)
-                            .FlatMap(v5 => _f6.Codec.Decode(ops, input)
-                                .FlatMap(v6 => _f7.Codec.Decode(ops, input)
-                                    .FlatMap(v7 => _f8.Codec.Decode(ops, input)
-                                        .FlatMap(v8 => _f9.Codec.Decode(ops, input)
-                                            .FlatMap(v9 => _f10.Codec.Decode(ops, input).Map(v10 => _ctor(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10)))))))))));
+        var r1 = _f1.Codec.Decode(ops, input);
+        if (!r1.TryGet(out var v1)) return Fail(r1);
+        var r2 = _f2.Codec.Decode(ops, input);
+        if (!r2.TryGet(out var v2)) return Fail(r2);
+        var r3 = _f3.Codec.Decode(ops, input);
+        if (!r3.TryGet(out var v3)) return Fail(r3);
+        var r4 = _f4.Codec.Decode(ops, input);
+        if (!r4.TryGet(out var v4)) return Fail(r4);
+        var r5 = _f5.Codec.Decode(ops, input);
+        if (!r5.TryGet(out var v5)) return Fail(r5);
+        var r6 = _f6.Codec.Decode(ops, input);
+        if (!r6.TryGet(out var v6)) return Fail(r6);
+        var r7 = _f7.Codec.Decode(ops, input);
+        if (!r7.TryGet(out var v7)) return Fail(r7);
+        var r8 = _f8.Codec.Decode(ops, input);
+        if (!r8.TryGet(out var v8)) return Fail(r8);
+        var r9 = _f9.Codec.Decode(ops, input);
+        if (!r9.TryGet(out var v9)) return Fail(r9);
+        var r10 = _f10.Codec.Decode(ops, input);
+        if (!r10.TryGet(out var v10)) return Fail(r10);
+        return DataResult<T>.Success(_ctor(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10));
     }
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, T value, RecordBuilder<U> builder)
@@ -507,17 +574,29 @@ internal sealed class RecordCodec11<T, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, 
 
     public override DataResult<T> Decode<U>(DynamicOps<U> ops, MapLike<U> input)
     {
-        return _f1.Codec.Decode(ops, input)
-            .FlatMap(v1 => _f2.Codec.Decode(ops, input)
-                .FlatMap(v2 => _f3.Codec.Decode(ops, input)
-                    .FlatMap(v3 => _f4.Codec.Decode(ops, input)
-                        .FlatMap(v4 => _f5.Codec.Decode(ops, input)
-                            .FlatMap(v5 => _f6.Codec.Decode(ops, input)
-                                .FlatMap(v6 => _f7.Codec.Decode(ops, input)
-                                    .FlatMap(v7 => _f8.Codec.Decode(ops, input)
-                                        .FlatMap(v8 => _f9.Codec.Decode(ops, input)
-                                            .FlatMap(v9 => _f10.Codec.Decode(ops, input)
-                                                .FlatMap(v10 => _f11.Codec.Decode(ops, input).Map(v11 => _ctor(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11))))))))))));
+        var r1 = _f1.Codec.Decode(ops, input);
+        if (!r1.TryGet(out var v1)) return Fail(r1);
+        var r2 = _f2.Codec.Decode(ops, input);
+        if (!r2.TryGet(out var v2)) return Fail(r2);
+        var r3 = _f3.Codec.Decode(ops, input);
+        if (!r3.TryGet(out var v3)) return Fail(r3);
+        var r4 = _f4.Codec.Decode(ops, input);
+        if (!r4.TryGet(out var v4)) return Fail(r4);
+        var r5 = _f5.Codec.Decode(ops, input);
+        if (!r5.TryGet(out var v5)) return Fail(r5);
+        var r6 = _f6.Codec.Decode(ops, input);
+        if (!r6.TryGet(out var v6)) return Fail(r6);
+        var r7 = _f7.Codec.Decode(ops, input);
+        if (!r7.TryGet(out var v7)) return Fail(r7);
+        var r8 = _f8.Codec.Decode(ops, input);
+        if (!r8.TryGet(out var v8)) return Fail(r8);
+        var r9 = _f9.Codec.Decode(ops, input);
+        if (!r9.TryGet(out var v9)) return Fail(r9);
+        var r10 = _f10.Codec.Decode(ops, input);
+        if (!r10.TryGet(out var v10)) return Fail(r10);
+        var r11 = _f11.Codec.Decode(ops, input);
+        if (!r11.TryGet(out var v11)) return Fail(r11);
+        return DataResult<T>.Success(_ctor(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11));
     }
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, T value, RecordBuilder<U> builder)
@@ -564,18 +643,31 @@ internal sealed class RecordCodec12<T, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, 
 
     public override DataResult<T> Decode<U>(DynamicOps<U> ops, MapLike<U> input)
     {
-        return _f1.Codec.Decode(ops, input)
-            .FlatMap(v1 => _f2.Codec.Decode(ops, input)
-                .FlatMap(v2 => _f3.Codec.Decode(ops, input)
-                    .FlatMap(v3 => _f4.Codec.Decode(ops, input)
-                        .FlatMap(v4 => _f5.Codec.Decode(ops, input)
-                            .FlatMap(v5 => _f6.Codec.Decode(ops, input)
-                                .FlatMap(v6 => _f7.Codec.Decode(ops, input)
-                                    .FlatMap(v7 => _f8.Codec.Decode(ops, input)
-                                        .FlatMap(v8 => _f9.Codec.Decode(ops, input)
-                                            .FlatMap(v9 => _f10.Codec.Decode(ops, input)
-                                                .FlatMap(v10 => _f11.Codec.Decode(ops, input)
-                                                    .FlatMap(v11 => _f12.Codec.Decode(ops, input).Map(v12 => _ctor(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12)))))))))))));
+        var r1 = _f1.Codec.Decode(ops, input);
+        if (!r1.TryGet(out var v1)) return Fail(r1);
+        var r2 = _f2.Codec.Decode(ops, input);
+        if (!r2.TryGet(out var v2)) return Fail(r2);
+        var r3 = _f3.Codec.Decode(ops, input);
+        if (!r3.TryGet(out var v3)) return Fail(r3);
+        var r4 = _f4.Codec.Decode(ops, input);
+        if (!r4.TryGet(out var v4)) return Fail(r4);
+        var r5 = _f5.Codec.Decode(ops, input);
+        if (!r5.TryGet(out var v5)) return Fail(r5);
+        var r6 = _f6.Codec.Decode(ops, input);
+        if (!r6.TryGet(out var v6)) return Fail(r6);
+        var r7 = _f7.Codec.Decode(ops, input);
+        if (!r7.TryGet(out var v7)) return Fail(r7);
+        var r8 = _f8.Codec.Decode(ops, input);
+        if (!r8.TryGet(out var v8)) return Fail(r8);
+        var r9 = _f9.Codec.Decode(ops, input);
+        if (!r9.TryGet(out var v9)) return Fail(r9);
+        var r10 = _f10.Codec.Decode(ops, input);
+        if (!r10.TryGet(out var v10)) return Fail(r10);
+        var r11 = _f11.Codec.Decode(ops, input);
+        if (!r11.TryGet(out var v11)) return Fail(r11);
+        var r12 = _f12.Codec.Decode(ops, input);
+        if (!r12.TryGet(out var v12)) return Fail(r12);
+        return DataResult<T>.Success(_ctor(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12));
     }
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, T value, RecordBuilder<U> builder)
@@ -625,19 +717,33 @@ internal sealed class RecordCodec13<T, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, 
 
     public override DataResult<T> Decode<U>(DynamicOps<U> ops, MapLike<U> input)
     {
-        return _f1.Codec.Decode(ops, input)
-            .FlatMap(v1 => _f2.Codec.Decode(ops, input)
-                .FlatMap(v2 => _f3.Codec.Decode(ops, input)
-                    .FlatMap(v3 => _f4.Codec.Decode(ops, input)
-                        .FlatMap(v4 => _f5.Codec.Decode(ops, input)
-                            .FlatMap(v5 => _f6.Codec.Decode(ops, input)
-                                .FlatMap(v6 => _f7.Codec.Decode(ops, input)
-                                    .FlatMap(v7 => _f8.Codec.Decode(ops, input)
-                                        .FlatMap(v8 => _f9.Codec.Decode(ops, input)
-                                            .FlatMap(v9 => _f10.Codec.Decode(ops, input)
-                                                .FlatMap(v10 => _f11.Codec.Decode(ops, input)
-                                                    .FlatMap(v11 => _f12.Codec.Decode(ops, input)
-                                                        .FlatMap(v12 => _f13.Codec.Decode(ops, input).Map(v13 => _ctor(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13))))))))))))));
+        var r1 = _f1.Codec.Decode(ops, input);
+        if (!r1.TryGet(out var v1)) return Fail(r1);
+        var r2 = _f2.Codec.Decode(ops, input);
+        if (!r2.TryGet(out var v2)) return Fail(r2);
+        var r3 = _f3.Codec.Decode(ops, input);
+        if (!r3.TryGet(out var v3)) return Fail(r3);
+        var r4 = _f4.Codec.Decode(ops, input);
+        if (!r4.TryGet(out var v4)) return Fail(r4);
+        var r5 = _f5.Codec.Decode(ops, input);
+        if (!r5.TryGet(out var v5)) return Fail(r5);
+        var r6 = _f6.Codec.Decode(ops, input);
+        if (!r6.TryGet(out var v6)) return Fail(r6);
+        var r7 = _f7.Codec.Decode(ops, input);
+        if (!r7.TryGet(out var v7)) return Fail(r7);
+        var r8 = _f8.Codec.Decode(ops, input);
+        if (!r8.TryGet(out var v8)) return Fail(r8);
+        var r9 = _f9.Codec.Decode(ops, input);
+        if (!r9.TryGet(out var v9)) return Fail(r9);
+        var r10 = _f10.Codec.Decode(ops, input);
+        if (!r10.TryGet(out var v10)) return Fail(r10);
+        var r11 = _f11.Codec.Decode(ops, input);
+        if (!r11.TryGet(out var v11)) return Fail(r11);
+        var r12 = _f12.Codec.Decode(ops, input);
+        if (!r12.TryGet(out var v12)) return Fail(r12);
+        var r13 = _f13.Codec.Decode(ops, input);
+        if (!r13.TryGet(out var v13)) return Fail(r13);
+        return DataResult<T>.Success(_ctor(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13));
     }
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, T value, RecordBuilder<U> builder)
@@ -689,20 +795,35 @@ internal sealed class RecordCodec14<T, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, 
 
     public override DataResult<T> Decode<U>(DynamicOps<U> ops, MapLike<U> input)
     {
-        return _f1.Codec.Decode(ops, input)
-            .FlatMap(v1 => _f2.Codec.Decode(ops, input)
-                .FlatMap(v2 => _f3.Codec.Decode(ops, input)
-                    .FlatMap(v3 => _f4.Codec.Decode(ops, input)
-                        .FlatMap(v4 => _f5.Codec.Decode(ops, input)
-                            .FlatMap(v5 => _f6.Codec.Decode(ops, input)
-                                .FlatMap(v6 => _f7.Codec.Decode(ops, input)
-                                    .FlatMap(v7 => _f8.Codec.Decode(ops, input)
-                                        .FlatMap(v8 => _f9.Codec.Decode(ops, input)
-                                            .FlatMap(v9 => _f10.Codec.Decode(ops, input)
-                                                .FlatMap(v10 => _f11.Codec.Decode(ops, input)
-                                                    .FlatMap(v11 => _f12.Codec.Decode(ops, input)
-                                                        .FlatMap(v12 => _f13.Codec.Decode(ops, input)
-                                                            .FlatMap(v13 => _f14.Codec.Decode(ops, input).Map(v14 => _ctor(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14)))))))))))))));
+        var r1 = _f1.Codec.Decode(ops, input);
+        if (!r1.TryGet(out var v1)) return Fail(r1);
+        var r2 = _f2.Codec.Decode(ops, input);
+        if (!r2.TryGet(out var v2)) return Fail(r2);
+        var r3 = _f3.Codec.Decode(ops, input);
+        if (!r3.TryGet(out var v3)) return Fail(r3);
+        var r4 = _f4.Codec.Decode(ops, input);
+        if (!r4.TryGet(out var v4)) return Fail(r4);
+        var r5 = _f5.Codec.Decode(ops, input);
+        if (!r5.TryGet(out var v5)) return Fail(r5);
+        var r6 = _f6.Codec.Decode(ops, input);
+        if (!r6.TryGet(out var v6)) return Fail(r6);
+        var r7 = _f7.Codec.Decode(ops, input);
+        if (!r7.TryGet(out var v7)) return Fail(r7);
+        var r8 = _f8.Codec.Decode(ops, input);
+        if (!r8.TryGet(out var v8)) return Fail(r8);
+        var r9 = _f9.Codec.Decode(ops, input);
+        if (!r9.TryGet(out var v9)) return Fail(r9);
+        var r10 = _f10.Codec.Decode(ops, input);
+        if (!r10.TryGet(out var v10)) return Fail(r10);
+        var r11 = _f11.Codec.Decode(ops, input);
+        if (!r11.TryGet(out var v11)) return Fail(r11);
+        var r12 = _f12.Codec.Decode(ops, input);
+        if (!r12.TryGet(out var v12)) return Fail(r12);
+        var r13 = _f13.Codec.Decode(ops, input);
+        if (!r13.TryGet(out var v13)) return Fail(r13);
+        var r14 = _f14.Codec.Decode(ops, input);
+        if (!r14.TryGet(out var v14)) return Fail(r14);
+        return DataResult<T>.Success(_ctor(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14));
     }
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, T value, RecordBuilder<U> builder)
@@ -756,21 +877,37 @@ internal sealed class RecordCodec15<T, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, 
 
     public override DataResult<T> Decode<U>(DynamicOps<U> ops, MapLike<U> input)
     {
-        return _f1.Codec.Decode(ops, input)
-            .FlatMap(v1 => _f2.Codec.Decode(ops, input)
-                .FlatMap(v2 => _f3.Codec.Decode(ops, input)
-                    .FlatMap(v3 => _f4.Codec.Decode(ops, input)
-                        .FlatMap(v4 => _f5.Codec.Decode(ops, input)
-                            .FlatMap(v5 => _f6.Codec.Decode(ops, input)
-                                .FlatMap(v6 => _f7.Codec.Decode(ops, input)
-                                    .FlatMap(v7 => _f8.Codec.Decode(ops, input)
-                                        .FlatMap(v8 => _f9.Codec.Decode(ops, input)
-                                            .FlatMap(v9 => _f10.Codec.Decode(ops, input)
-                                                .FlatMap(v10 => _f11.Codec.Decode(ops, input)
-                                                    .FlatMap(v11 => _f12.Codec.Decode(ops, input)
-                                                        .FlatMap(v12 => _f13.Codec.Decode(ops, input)
-                                                            .FlatMap(v13 => _f14.Codec.Decode(ops, input)
-                                                                .FlatMap(v14 => _f15.Codec.Decode(ops, input).Map(v15 => _ctor(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15))))))))))))))));
+        var r1 = _f1.Codec.Decode(ops, input);
+        if (!r1.TryGet(out var v1)) return Fail(r1);
+        var r2 = _f2.Codec.Decode(ops, input);
+        if (!r2.TryGet(out var v2)) return Fail(r2);
+        var r3 = _f3.Codec.Decode(ops, input);
+        if (!r3.TryGet(out var v3)) return Fail(r3);
+        var r4 = _f4.Codec.Decode(ops, input);
+        if (!r4.TryGet(out var v4)) return Fail(r4);
+        var r5 = _f5.Codec.Decode(ops, input);
+        if (!r5.TryGet(out var v5)) return Fail(r5);
+        var r6 = _f6.Codec.Decode(ops, input);
+        if (!r6.TryGet(out var v6)) return Fail(r6);
+        var r7 = _f7.Codec.Decode(ops, input);
+        if (!r7.TryGet(out var v7)) return Fail(r7);
+        var r8 = _f8.Codec.Decode(ops, input);
+        if (!r8.TryGet(out var v8)) return Fail(r8);
+        var r9 = _f9.Codec.Decode(ops, input);
+        if (!r9.TryGet(out var v9)) return Fail(r9);
+        var r10 = _f10.Codec.Decode(ops, input);
+        if (!r10.TryGet(out var v10)) return Fail(r10);
+        var r11 = _f11.Codec.Decode(ops, input);
+        if (!r11.TryGet(out var v11)) return Fail(r11);
+        var r12 = _f12.Codec.Decode(ops, input);
+        if (!r12.TryGet(out var v12)) return Fail(r12);
+        var r13 = _f13.Codec.Decode(ops, input);
+        if (!r13.TryGet(out var v13)) return Fail(r13);
+        var r14 = _f14.Codec.Decode(ops, input);
+        if (!r14.TryGet(out var v14)) return Fail(r14);
+        var r15 = _f15.Codec.Decode(ops, input);
+        if (!r15.TryGet(out var v15)) return Fail(r15);
+        return DataResult<T>.Success(_ctor(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15));
     }
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, T value, RecordBuilder<U> builder)
@@ -827,22 +964,39 @@ internal sealed class RecordCodec16<T, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, 
 
     public override DataResult<T> Decode<U>(DynamicOps<U> ops, MapLike<U> input)
     {
-        return _f1.Codec.Decode(ops, input)
-            .FlatMap(v1 => _f2.Codec.Decode(ops, input)
-                .FlatMap(v2 => _f3.Codec.Decode(ops, input)
-                    .FlatMap(v3 => _f4.Codec.Decode(ops, input)
-                        .FlatMap(v4 => _f5.Codec.Decode(ops, input)
-                            .FlatMap(v5 => _f6.Codec.Decode(ops, input)
-                                .FlatMap(v6 => _f7.Codec.Decode(ops, input)
-                                    .FlatMap(v7 => _f8.Codec.Decode(ops, input)
-                                        .FlatMap(v8 => _f9.Codec.Decode(ops, input)
-                                            .FlatMap(v9 => _f10.Codec.Decode(ops, input)
-                                                .FlatMap(v10 => _f11.Codec.Decode(ops, input)
-                                                    .FlatMap(v11 => _f12.Codec.Decode(ops, input)
-                                                        .FlatMap(v12 => _f13.Codec.Decode(ops, input)
-                                                            .FlatMap(v13 => _f14.Codec.Decode(ops, input)
-                                                                .FlatMap(v14 => _f15.Codec.Decode(ops, input)
-                                                                    .FlatMap(v15 => _f16.Codec.Decode(ops, input).Map(v16 => _ctor(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16)))))))))))))))));
+        var r1 = _f1.Codec.Decode(ops, input);
+        if (!r1.TryGet(out var v1)) return Fail(r1);
+        var r2 = _f2.Codec.Decode(ops, input);
+        if (!r2.TryGet(out var v2)) return Fail(r2);
+        var r3 = _f3.Codec.Decode(ops, input);
+        if (!r3.TryGet(out var v3)) return Fail(r3);
+        var r4 = _f4.Codec.Decode(ops, input);
+        if (!r4.TryGet(out var v4)) return Fail(r4);
+        var r5 = _f5.Codec.Decode(ops, input);
+        if (!r5.TryGet(out var v5)) return Fail(r5);
+        var r6 = _f6.Codec.Decode(ops, input);
+        if (!r6.TryGet(out var v6)) return Fail(r6);
+        var r7 = _f7.Codec.Decode(ops, input);
+        if (!r7.TryGet(out var v7)) return Fail(r7);
+        var r8 = _f8.Codec.Decode(ops, input);
+        if (!r8.TryGet(out var v8)) return Fail(r8);
+        var r9 = _f9.Codec.Decode(ops, input);
+        if (!r9.TryGet(out var v9)) return Fail(r9);
+        var r10 = _f10.Codec.Decode(ops, input);
+        if (!r10.TryGet(out var v10)) return Fail(r10);
+        var r11 = _f11.Codec.Decode(ops, input);
+        if (!r11.TryGet(out var v11)) return Fail(r11);
+        var r12 = _f12.Codec.Decode(ops, input);
+        if (!r12.TryGet(out var v12)) return Fail(r12);
+        var r13 = _f13.Codec.Decode(ops, input);
+        if (!r13.TryGet(out var v13)) return Fail(r13);
+        var r14 = _f14.Codec.Decode(ops, input);
+        if (!r14.TryGet(out var v14)) return Fail(r14);
+        var r15 = _f15.Codec.Decode(ops, input);
+        if (!r15.TryGet(out var v15)) return Fail(r15);
+        var r16 = _f16.Codec.Decode(ops, input);
+        if (!r16.TryGet(out var v16)) return Fail(r16);
+        return DataResult<T>.Success(_ctor(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16));
     }
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, T value, RecordBuilder<U> builder)

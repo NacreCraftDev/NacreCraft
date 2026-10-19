@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+using System.Text.Json;
 using NacreCraft.Codec;
 using NacreCraft.Registry;
 
@@ -12,8 +12,18 @@ public abstract class RegistryData
     //RegistryId is the registry's own identifier, it determines the scan directory data/<namespace>/<RegistryId.Path>/
     public abstract Identifier RegistryId { get; }
 
-    //TryLoadElement decodes one element JSON and writes it into the target registry, on failure the reason is written to error
-    internal abstract bool TryLoadElement(Resource resource, Identifier elementId, RegistryAccess context, out string error);
+    //PrepareHolder creates the standalone holder for one element before any decoding
+    //Every file element gets one up front, so an element referencing a later one resolves to an unbound holder instead of failing
+    internal abstract void PrepareHolder(Identifier elementId);
+
+    //RemoveHolder drops the holder of an element that failed to decode, so freeze does not report it as unbound
+    internal abstract void RemoveHolder(Identifier elementId);
+
+    //TryDecode decodes one element without registering it, so decoding can run in parallel and registration stays on one thread
+    internal abstract bool TryDecode(JsonElement root, Identifier elementId, RegistryAccess context, out object? value, out string error);
+
+    //Register writes a decoded element into the target registry, must run on the loading thread
+    internal abstract void Register(Identifier elementId, object value);
 
     //Boxed, weakly typed registry loading, for registries declared as Registry<object> on the Registries side
     //The Registry project cannot reference the Game density function/noise settings types in reverse, those registries can only be declared with object keys
@@ -21,19 +31,13 @@ public abstract class RegistryData
     public static RegistryData Boxed<T>(WritableRegistry<object> registry, Codec<T> codec) where T : class
         => new BoxedRegistryData<T>(registry, codec);
 
-    //Decode reads an element file and decodes it with the codec, a failure throws and the caller turns it into an error string
+    //Decode decodes a parsed element with the codec, a failure throws and the caller turns it into an error string
     //RegistryData<T> and BoxedRegistryData<T> differ only in how they write to the registry, reading and decoding share this one place
-    //Goes straight through the JsonOps stream overload, which parses UTF-8 bytes and avoids the UTF-16 transcoding of ReadToEnd
-    private protected static T Decode<T>(Resource resource, RegistryAccess context, Codec<T> codec) where T : class
+    //JsonElementOps is read-only and does not build a JsonNode DOM, which keeps the data loading path small and fast
+    private protected static T Decode<T>(JsonElement root, RegistryAccess context, Codec<T> codec) where T : class
     {
-        JsonNode? node;
-        using (var stream = resource.Open())
-        {
-            node = JsonOps.Parse(stream).GetOrThrow();
-        }
-
-        var ops = new RegistryOps<JsonNode?>(JsonOps.Instance, context);
-        return codec.Parse(ops, node).GetOrThrow();
+        var ops = new RegistryOps<JsonValueRef>(JsonElementOps.Instance, context);
+        return codec.Parse(ops, new JsonValueRef(root)).GetOrThrow();
     }
 }
 
@@ -54,22 +58,40 @@ public sealed class RegistryData<T> : RegistryData where T : class
 
     public override Identifier RegistryId => Registry.Key.Identifier;
 
-    internal override bool TryLoadElement(Resource resource, Identifier elementId, RegistryAccess context, out string error)
+    internal override void PrepareHolder(Identifier elementId)
+    {
+        if (Registry is MappedRegistry<T> mapped)
+            mapped.GetOrCreateHolder(elementId);
+    }
+
+    internal override void RemoveHolder(Identifier elementId)
+    {
+        if (Registry is MappedRegistry<T> mapped)
+            mapped.RemoveHolder(elementId);
+    }
+
+    internal override bool TryDecode(JsonElement root, Identifier elementId, RegistryAccess context, out object? value, out string error)
     {
         error = string.Empty;
         try
         {
-            var value = Decode(resource, context, ElementCodec);
-            Registry.Register(ResourceKey<T>.Create(Registry.Key, elementId), value, RegistrationInfo.BuiltIn);
-            //The element's own identifier can only be backfilled from the registry name, the vanilla id lives only in the registry
-            if (value is RegistryIdentified identified) identified.SetRegistryId(elementId);
+            value = Decode(root, context, ElementCodec);
             return true;
         }
         catch (Exception ex)
         {
+            value = null;
             error = $"{elementId}: {ex.Message}";
             return false;
         }
+    }
+
+    internal override void Register(Identifier elementId, object value)
+    {
+        var typed = (T)value;
+        Registry.Register(ResourceKey<T>.Create(Registry.Key, elementId), typed, RegistrationInfo.BuiltIn);
+        //The element's own identifier can only be backfilled from the registry name, the vanilla id lives only in the registry
+        if (typed is RegistryIdentified identified) identified.SetRegistryId(elementId);
     }
 }
 
@@ -88,21 +110,38 @@ internal sealed class BoxedRegistryData<T> : RegistryData where T : class
 
     public override Identifier RegistryId => _registry.Key.Identifier;
 
-    internal override bool TryLoadElement(Resource resource, Identifier elementId, RegistryAccess context, out string error)
+    internal override void PrepareHolder(Identifier elementId)
+    {
+        if (_registry is MappedRegistry<object> mapped)
+            mapped.GetOrCreateHolder(elementId);
+    }
+
+    internal override void RemoveHolder(Identifier elementId)
+    {
+        if (_registry is MappedRegistry<object> mapped)
+            mapped.RemoveHolder(elementId);
+    }
+
+    internal override bool TryDecode(JsonElement root, Identifier elementId, RegistryAccess context, out object? value, out string error)
     {
         error = string.Empty;
         try
         {
-            var value = Decode(resource, context, _codec);
-            _registry.Register(ResourceKey<object>.Create(_registry.Key, elementId), value, RegistrationInfo.BuiltIn);
-            //The element's own identifier can only be backfilled from the registry name, the vanilla id lives only in the registry
-            if (value is RegistryIdentified identified) identified.SetRegistryId(elementId);
+            value = Decode(root, context, _codec);
             return true;
         }
         catch (Exception ex)
         {
+            value = null;
             error = $"{elementId}: {ex.Message}";
             return false;
         }
+    }
+
+    internal override void Register(Identifier elementId, object value)
+    {
+        _registry.Register(ResourceKey<object>.Create(_registry.Key, elementId), value, RegistrationInfo.BuiltIn);
+        //The element's own identifier can only be backfilled from the registry name, the vanilla id lives only in the registry
+        if (value is RegistryIdentified identified) identified.SetRegistryId(elementId);
     }
 }

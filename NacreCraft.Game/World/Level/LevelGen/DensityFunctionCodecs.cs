@@ -242,7 +242,8 @@ public sealed class DensityFunctionCodec : AbstractMapCodec<DensityFunction>
             var id = Identifier.TryParse(text);
             if (id is null)
                 return DataResult<DensityFunction>.Error(() => $"Invalid density function identifier: {text}");
-            return DensityFunctionRefs.ResolveDensityFunction(ops, id.Value);
+            return DensityFunctionRefs.ResolveDensityFunction(ops, id.Value)
+                .Map(holder => (DensityFunction)new HolderHolder(holder));
         }
         //A bare number is equivalent to constant; vanilla DIRECT_CODEC allows either(double, CODEC) and argument1 in real JSON is often written as a plain number
         var numberResult = ops.GetNumberValue(input);

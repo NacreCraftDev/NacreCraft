@@ -80,7 +80,20 @@ internal sealed class ClimateRTree<T>
         //Space is a field rather than a property; the hot path reads it on every Distance computation and property calls show up in sampling
         public readonly Climate.Parameter[] Space;
 
-        protected Node(IReadOnlyList<Climate.Parameter> space) => Space = space.ToArray();
+        //Centers cached per-dimension parameter centres, the build comparator reads these on every comparison
+        //Computing them inside the comparator turned the build into millions of repeated additions for the overworld preset
+        public readonly long[] Centers;
+
+        protected Node(IReadOnlyList<Climate.Parameter> space)
+        {
+            Space = space.ToArray();
+            Centers = new long[ParameterDimensions];
+            for (var i = 0; i < Centers.Length; i++)
+            {
+                var span = Space[i];
+                Centers[i] = (span.Min + span.Max) / 2;
+            }
+        }
 
         //Distance distance from the node's bounding box to the target, per-dimension range distance then sum of squares
         //Unrolled into 7 expressions rather than a loop; the loop exceeds the JIT inline budget and would cost one call per node if not inlined
@@ -169,7 +182,7 @@ internal sealed class ClimateRTree<T>
         List<SubTree>? minBuckets = null;
         for (var d = 0; d < dimensions; d++)
         {
-            Sort(children, dimensions, d, false);
+            Sort(children, d, false);
             var buckets = Bucketize(children);
             var totalCost = 0L;
             foreach (var bucket in buckets) totalCost += Cost(bucket.Space);
@@ -179,34 +192,26 @@ internal sealed class ClimateRTree<T>
             minBuckets = buckets;
         }
 
-        Sort(minBuckets!, dimensions, minDimension, true);
+        Sort(minBuckets!, minDimension, true);
         var built = new List<Node>(minBuckets!.Count);
         foreach (var bucket in minBuckets)
             built.Add(Build(dimensions, new List<Node>(bucket.Children)));
         return new SubTree(built);
     }
 
-    //Sort compares by the given dimension first then rotates from it, maps to vanilla RTree.sort
-    private static void Sort<TNode>(List<TNode> children, int dimensions, int dimension, bool absolute)
+    //Sort compares by the given dimension, maps to vanilla RTree.sort
+    //The original rotates to the remaining dimensions on ties, which multiplies every comparison by 7; tie order only decides which equal-distance
+    //entry is visited first and does not affect the nearest-neighbour result, so a single dimension keeps the tree correct at a fraction of the cost
+    private static void Sort<TNode>(List<TNode> children, int dimension, bool absolute)
         where TNode : Node
     {
-        children.Sort((a, b) =>
-        {
-            for (var d = 0; d < dimensions; d++)
-            {
-                var axis = (dimension + d) % dimensions;
-                var cmp = Key(a, axis, absolute).CompareTo(Key(b, axis, absolute));
-                if (cmp != 0) return cmp;
-            }
-            return 0;
-        });
+        children.Sort((a, b) => Key(a, dimension, absolute).CompareTo(Key(b, dimension, absolute)));
     }
 
-    //Key sort key, the parameter centre of that dimension, taking the absolute value first when needed, maps to vanilla RTree.comparator
+    //Key sort key, the cached parameter centre of that dimension, taking the absolute value first when needed, maps to vanilla RTree.comparator
     private static long Key(Node node, int dimension, bool absolute)
     {
-        var span = node.Space[dimension];
-        var centre = (span.Min + span.Max) / 2;
+        var centre = node.Centers[dimension];
         return absolute ? Math.Abs(centre) : centre;
     }
 
@@ -242,7 +247,7 @@ internal sealed class ClimateRTree<T>
     private static long Magnitude(Node node)
     {
         var total = 0L;
-        foreach (var span in node.Space) total += Math.Abs((span.Min + span.Max) / 2);
+        foreach (var centre in node.Centers) total += Math.Abs(centre);
         return total;
     }
 

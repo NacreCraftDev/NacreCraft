@@ -85,22 +85,23 @@ internal sealed class NoiseWiringHelper : Visitor
 
     public NoiseHolder VisitNoise(NoiseHolder noise)
     {
-        var noiseData = noise.NoiseData;
-        if (noiseData is null) return noise;
+        var holder = noise.NoiseDataHolder;
         //NacreCraft has no ResourceKey comparison for HolderData to detect the NETHER path and relies on NormalNoise.CreateLegacyNetherBiome for the Nether
         //Vanilla's is(Noises.TEMPERATURE_NETHER) takes the LegacyNetherBiome path; here everything goes through standard instantiation
-        var instantiated = _owner.GetOrCreateNoise(GetKeyForData(noiseData));
-        return new NoiseHolder(noiseData, instantiated);
+        var instantiated = _owner.GetOrCreateNoise(GetKeyForData(holder));
+        return new NoiseHolder(holder, instantiated);
     }
 
-    //GetKeyForData looks up the ResourceKey from NoiseParameters, maps to vanilla noiseData.unwrapKey().orElseThrow
-    //NacreCraft's BuiltInRegistries.NOISE provides GetKey for the reverse lookup
-    private ResourceKey<NoiseParameters> GetKeyForData(NoiseParameters data)
+    //GetKeyForData resolves the ResourceKey from the holder, falling back to the reverse lookup for an inline Direct holder
+    //Maps to vanilla noiseData.unwrapKey().orElseThrow
+    private ResourceKey<NoiseParameters> GetKeyForData(Holder<NoiseParameters> holder)
     {
-        foreach (var key in BuiltInRegistries.NOISE.RegistryKeySet)
+        if (holder.UnwrapKey() is { } key) return key;
+        var data = holder.Value;
+        foreach (var candidate in BuiltInRegistries.NOISE.RegistryKeySet)
         {
-            if (BuiltInRegistries.NOISE.GetValue(key) == data)
-                return key;
+            if (BuiltInRegistries.NOISE.GetValue(candidate) == data)
+                return candidate;
         }
         throw new InvalidOperationException("NoiseParameters not registered");
     }
@@ -154,7 +155,7 @@ internal sealed class NoiseFlattener : Visitor
     private static DensityFunction WrapNew(DensityFunction function)
     {
         if (function is HolderHolder holder)
-            return holder.Function;
+            return holder.Value;
         if (function is MarkerNode marker)
             return marker.Wrapped;
         return function;

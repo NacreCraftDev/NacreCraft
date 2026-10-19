@@ -346,22 +346,22 @@ public static class SurfaceRules
     //biome_is can be either an explicit biome list or the "#namespace:tag" form
     public sealed class BiomeCondition : ConditionSource
     {
-        //Biomes lists explicit biomes, empty in tag form
+        //Biomes lists explicit biome references, empty in tag form
         //Every block compares against it, storing an array allows index access instead of a boxing interface enumerator
-        public Biome[] Biomes { get; }
+        public Holder<Biome>[] Biomes { get; }
         //Tag is the tag reference, written as "#minecraft:is_forest" in vanilla biome_is
         public TagKey<Biome>? Tag { get; }
         //TagRegistry is the biome registry used to resolve tags, non-null in tag form
         public Registry<Biome>? TagRegistry { get; }
 
-        public BiomeCondition(IReadOnlyList<Biome> biomes)
+        public BiomeCondition(IReadOnlyList<Holder<Biome>> biomes)
         {
-            Biomes = biomes as Biome[] ?? biomes.ToArray();
+            Biomes = biomes as Holder<Biome>[] ?? biomes.ToArray();
         }
 
         public BiomeCondition(TagKey<Biome> tag, Registry<Biome> registry)
         {
-            Biomes = Array.Empty<Biome>();
+            Biomes = Array.Empty<Holder<Biome>>();
             Tag = tag;
             TagRegistry = registry;
         }
@@ -375,8 +375,8 @@ public static class SurfaceRules
                 var set = TagRegistry?.Get(Tag);
                 return set is { IsBound: true } && set.Contains(TagRegistry!.WrapAsHolder(biome));
             }
-            foreach (var b in Biomes)
-                if (b.Id == biome.Id) return true;
+            foreach (var holder in Biomes)
+                if (holder.Value.Id == biome.Id) return true;
             return false;
         }
     }

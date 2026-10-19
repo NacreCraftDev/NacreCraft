@@ -384,8 +384,9 @@ public sealed class MultiNoiseBiomeSourceParameterList
     //Preset the preset that generated this list; null means hand-built
     public MultiNoisePreset? Preset { get; }
 
-    //Index nearest-neighbour search tree; with thousands of entries a linear scan would walk the whole list on every sample
-    private readonly ClimateRTree<Holder<Biome>>? _index;
+    //Index nearest-neighbour search tree over entry indexes; with thousands of entries a linear scan would walk the whole list on every sample
+    //A preset list reuses the tree built by the preset, so constructing a parameter list no longer builds a tree during decoding
+    private readonly ClimateRTree<int>? _index;
 
     //Codec parameter list JSON codec, maps to vanilla DIRECT_CODEC
     public static readonly Codec<MultiNoiseBiomeSourceParameterList> Codec =
@@ -403,10 +404,25 @@ public sealed class MultiNoiseBiomeSourceParameterList
     {
         Preset = preset;
         Entries = entries.ToList();
-        _index = Entries.Count == 0 ? null : ClimateRTree<Holder<Biome>>.Create(Entries);
+        if (Entries.Count == 0)
+        {
+            _index = null;
+            return;
+        }
+        if (preset?.Index is { } presetIndex && Entries.Count == preset.Points.Count)
+        {
+            _index = presetIndex;
+            return;
+        }
+        var indexed = new List<(Climate.ParameterPoint Point, int Value)>(Entries.Count);
+        for (var i = 0; i < Entries.Count; i++) indexed.Add((Entries[i].Point, i));
+        _index = ClimateRTree<int>.Create(indexed);
     }
 
     //FindClosest finds the biome Holder nearest in parameter space, maps to vanilla parameterList.findValue
     public Holder<Biome> FindClosest(Climate.ParameterPoint target)
-        => _index?.Search(target) ?? throw new InvalidOperationException("parameter list is empty");
+    {
+        if (_index is null) throw new InvalidOperationException("parameter list is empty");
+        return Entries[_index.Search(target)].Biome;
+    }
 }

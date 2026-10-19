@@ -1,5 +1,6 @@
 using NacreCraft.Codec;
 using NacreCraft.Game.World.Level.LevelGen.Synth;
+using NacreCraft.Registry;
 
 namespace NacreCraft.Game.World.Level.LevelGen;
 
@@ -127,19 +128,27 @@ public sealed class SinglePointContext : FunctionContext
 }
 
 //NoiseHolder noise holder, maps to vanilla DensityFunction.NoiseHolder
-//Wraps NoiseParameters data and an optional NormalNoise instance; noise is null during data deserialisation
+//Keeps the registry reference as a Holder so data loading can resolve a noise declared later in another file
 public sealed class NoiseHolder
 {
-    public NoiseParameters? NoiseData { get; }
+    //NoiseDataHolder registry reference of the noise parameters, a Direct holder for the inline form
+    public Holder<NoiseParameters> NoiseDataHolder { get; }
     public NormalNoise? Noise { get; }
 
-    public NoiseHolder(NoiseParameters? noiseData, NormalNoise? noise)
+    public NoiseHolder(Holder<NoiseParameters> noiseData, NormalNoise? noise)
     {
-        NoiseData = noiseData;
+        NoiseDataHolder = noiseData;
         Noise = noise;
     }
 
-    public NoiseHolder(NoiseParameters? noiseData) : this(noiseData, null) { }
+    public NoiseHolder(Holder<NoiseParameters> noiseData) : this(noiseData, null) { }
+
+    public NoiseHolder(NoiseParameters noiseData, NormalNoise? noise) : this(Holder<NoiseParameters>.Direct(noiseData), noise) { }
+
+    public NoiseHolder(NoiseParameters noiseData) : this(Holder<NoiseParameters>.Direct(noiseData)) { }
+
+    //NoiseData dereferences the holder; only valid once the registry element is bound
+    public NoiseParameters? NoiseData => NoiseDataHolder.Value;
 
     //GetValue samples by coordinate and returns 0 when Noise is null, the fallback for empty data in vanilla
     public double GetValue(double x, double y, double z)

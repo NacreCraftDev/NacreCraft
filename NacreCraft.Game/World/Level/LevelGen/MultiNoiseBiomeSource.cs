@@ -7,17 +7,18 @@ namespace NacreCraft.Game.World.Level.LevelGen;
 //GetBiome samples 6-dimensional parameters by coordinate and finds the biome closest in parameter space
 public sealed class MultiNoiseBiomeSource : BiomeSource
 {
-    public MultiNoiseBiomeSourceParameterList? ParameterList { get; }
+    //ParameterList registry reference; the parameter list registry is object keyed on the Registry side
+    public Holder<object>? ParameterList { get; }
     public Climate.Sampler? Sampler { get; }
 
-    public MultiNoiseBiomeSource(MultiNoiseBiomeSourceParameterList parameterList, Climate.Sampler sampler)
+    public MultiNoiseBiomeSource(Holder<object> parameterList, Climate.Sampler sampler)
     {
         ParameterList = parameterList;
         Sampler = sampler;
     }
 
     //Single-parameter constructor reserved for data-driven assembly; the sampler is injected by NoiseBasedChunkGenerator from the noise router
-    public MultiNoiseBiomeSource(MultiNoiseBiomeSourceParameterList parameterList)
+    public MultiNoiseBiomeSource(Holder<object> parameterList)
     {
         ParameterList = parameterList;
     }
@@ -26,16 +27,21 @@ public sealed class MultiNoiseBiomeSource : BiomeSource
     //Used before Bootstrap or in test scenarios
     public MultiNoiseBiomeSource() { }
 
+    //Data dereferences the parameter list holder; only valid once the registry element is bound
+    private MultiNoiseBiomeSourceParameterList? Data
+        => ParameterList?.Value as MultiNoiseBiomeSourceParameterList;
+
     //PossibleBiomes distinct biomes seen in the parameter table; only the plains placeholder without a table
     //Unbound entries are skipped, they point at biomes not loaded yet
     public IReadOnlyList<Biome> PossibleBiomes
     {
         get
         {
-            if (ParameterList is null) return new[] { Biome.Plains };
+            var data = Data;
+            if (data is null) return new[] { Biome.Plains };
             var seen = new HashSet<Biome>(ReferenceEqualityComparer.Instance);
             var result = new List<Biome>();
-            foreach (var (_, holder) in ParameterList.Entries)
+            foreach (var (_, holder) in data.Entries)
             {
                 if (!holder.IsBound()) continue;
                 if (seen.Add(holder.Value)) result.Add(holder.Value);
@@ -48,7 +54,8 @@ public sealed class MultiNoiseBiomeSource : BiomeSource
     //Without a ParameterList/Sampler it returns the Biome.Plains singleton as a placeholder to avoid palette blow-up
     public Biome GetBiome(int x, int y, int z)
     {
-        if (ParameterList is null || Sampler is null)
+        var data = Data;
+        if (data is null || Sampler is null)
             return Biome.Plains;
 
         var target = new Climate.ParameterPoint(
@@ -59,6 +66,6 @@ public sealed class MultiNoiseBiomeSource : BiomeSource
             Sampler.Depth(x, y, z),
             Sampler.Weirdness(x, y, z),
             0L);
-        return ParameterList.FindClosest(target).Value;
+        return data.FindClosest(target).Value;
     }
 }

@@ -1,4 +1,5 @@
 using NacreCraft.Game.World.Level.LevelGen.Synth;
+using NacreCraft.Registry;
 
 namespace NacreCraft.Game.World.Level.LevelGen;
 
@@ -147,22 +148,25 @@ public static class MappedTypes
     };
 }
 
-//HolderHolder holds a DensityFunction reference directly, a simplified version of vanilla DensityFunctions.HolderHolder
-//Vanilla wraps it in Holder<DensityFunction> to support Codec references by ResourceKey; NacreCraft does not persist through Codec yet and references directly
+//HolderHolder holds a registry reference to a density function, maps to vanilla DensityFunctions.HolderHolder
+//Vanilla wraps Holder<DensityFunction>; NacreCraft declares the density function registry as Registry<object>, so the holder is Holder<object>
 //RandomState's noiseFlattener expands HolderHolder into the inner function to cut down call depth
 public sealed class HolderHolder : DensityFunction
 {
-    public DensityFunction Function { get; }
+    public Holder<object> Function { get; }
 
-    public HolderHolder(DensityFunction function) { Function = function; }
+    public HolderHolder(Holder<object> function) { Function = function; }
 
-    public double Compute(FunctionContext context) => Function.Compute(context);
+    //Value dereferences the referenced density function; only valid once the registry element is bound
+    public DensityFunction Value => (DensityFunction)Function.Value;
+
+    public double Compute(FunctionContext context) => Value.Compute(context);
 
     public void FillArray(double[] output, ContextProvider contextProvider)
-        => Function.FillArray(output, contextProvider);
+        => Value.FillArray(output, contextProvider);
 
-    public DensityFunction MapChildren(Visitor visitor) => new HolderHolder(visitor.Apply(Function));
+    public DensityFunction MapChildren(Visitor visitor) => new HolderHolder(Holder<object>.Direct(visitor.Apply(Value)));
 
-    public double MinValue => Function.MinValue;
-    public double MaxValue => Function.MaxValue;
+    public double MinValue => Function.IsBound() ? Value.MinValue : double.NegativeInfinity;
+    public double MaxValue => Function.IsBound() ? Value.MaxValue : double.PositiveInfinity;
 }

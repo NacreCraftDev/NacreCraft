@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using System.Collections.ObjectModel;
 using NacreCraft.Config;
@@ -14,10 +15,15 @@ public class MappedRegistry<T> : WritableRegistry<T>, HolderOwner<T> where T : c
     private readonly List<Reference<T>> _byId = new();
     private readonly Dictionary<T, int> _toId = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<Identifier, Reference<T>> _byLocation = new();
+    //Identifier index of every key holder, including loader placeholders
+    //GetHolder reads this one during concurrent decoding, which avoids building a ResourceKey and hitting its interning pool
+    private readonly Dictionary<Identifier, Reference<T>> _byHolderLocation = new();
     private readonly Dictionary<ResourceKey<T>, Reference<T>> _byKey = new();
     private readonly Dictionary<T, Reference<T>> _byValue = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<ResourceKey<T>, RegistrationInfo> _registrationInfos = new();
-    private readonly Dictionary<TagKey<T>, NamedHolderSet<T>> _allTags = new();
+    //Concurrent because element decoding runs in parallel and a #tag reference creates its Named set on first sight
+    //GetOrAdd keeps that creation lock-free for readers, which matters on the decode hot path
+    private readonly ConcurrentDictionary<TagKey<T>, NamedHolderSet<T>> _allTags = new();
     //Intrusive Holder cache, looked up by value reference; maps to vanilla intrusive holders
     private readonly Dictionary<T, Reference<T>> _intrusiveHolders = new(ReferenceEqualityComparer.Instance);
     private Lifecycle _registryLifecycle;
@@ -81,6 +87,7 @@ public class MappedRegistry<T> : WritableRegistry<T>, HolderOwner<T> where T : c
 
         _byKey[key] = holder;
         _byLocation[key.Identifier] = holder;
+        _byHolderLocation[key.Identifier] = holder;
         _byValue[value] = holder;
         var newId = _byId.Count;
         _byId.Add(holder);
@@ -128,6 +135,39 @@ public class MappedRegistry<T> : WritableRegistry<T>, HolderOwner<T> where T : c
 
     public Reference<T>? Get(Identifier id)
         => TryGetByLocation(id, out var holder) ? holder : null;
+
+    //GetOrCreateHolder returns the standalone Reference for a key, creating it when absent
+    //Data loading pre-creates these for every element file, so decoding an element that references a later one resolves to an unbound
+    //holder instead of failing; Register later binds the value into the same holder, maps to vanilla createRegistrationLookup/getOrCreateHolderOrThrow
+    public Reference<T> GetOrCreateHolder(Identifier id)
+    {
+        if (_byHolderLocation.TryGetValue(id, out var holder)) return holder;
+        var key = ResourceKey<T>.Create(_key, id);
+        if (TryGetByKey(key, out holder) && holder is not null)
+        {
+            _byHolderLocation[id] = holder;
+            return holder;
+        }
+        ValidateWrite(key);
+        holder = Reference<T>.CreateStandAlone(this, key);
+        _byKey[key] = holder;
+        _byHolderLocation[id] = holder;
+        return holder;
+    }
+
+    //GetHolder returns an existing holder from the identifier index without writing, the index also holds loader placeholders
+    //Concurrent decoding relies on this being read-only; only the single-threaded registration pass writes the registry
+    public Reference<T>? GetHolder(Identifier id)
+        => _byHolderLocation.TryGetValue(id, out var holder) ? holder : null;
+
+    //RemoveHolder drops a placeholder created by GetOrCreateHolder, used when its element fails to decode
+    //Only called by the data loader before freeze
+    public void RemoveHolder(Identifier id)
+    {
+        var key = ResourceKey<T>.Create(_key, id);
+        _byKey.Remove(key);
+        _byHolderLocation.Remove(id);
+    }
 
     public virtual Reference<T>? GetAny() => _byId.Count == 0 ? null : _byId[0];
 
@@ -239,14 +279,7 @@ public class MappedRegistry<T> : WritableRegistry<T>, HolderOwner<T> where T : c
 
     //GetOrCreateTagForRegistration gets or creates a Named HolderSet by TagKey
     private NamedHolderSet<T> GetOrCreateTagForRegistration(TagKey<T> tag)
-    {
-        if (!_allTags.TryGetValue(tag, out var named))
-        {
-            named = new NamedHolderSet<T>(this, tag);
-            _allTags[tag] = named;
-        }
-        return named;
-    }
+        => _allTags.GetOrAdd(tag, t => new NamedHolderSet<T>(this, t));
 
     //BindTags binds the TagKey-to-Holder-list mapping onto Named HolderSets and refreshes each Reference's tag cache
     public void BindTags(IReadOnlyDictionary<TagKey<T>, IReadOnlyList<Holder<T>>> pendingTags)

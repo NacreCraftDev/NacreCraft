@@ -62,6 +62,9 @@ pub struct Fault {
     pub stack_note: String,
     /// Which module the faulting address belongs to, when it could be resolved
     pub module: String,
+    /// Load address and image size of that module, zero when it could not be resolved
+    pub module_base: u64,
+    pub module_size: u64,
 }
 
 /// name_of gives the faults worth naming; anything else is still reported by its code alone
@@ -125,6 +128,12 @@ pub fn compose(fault: &Fault, stamp: u64, path: &std::path::Path) -> (String, St
     head.push_str(&format!("Code: 0x{code:08X}\n"));
     head.push_str(&format!("Faulting address: 0x{address:016X}\n"));
     head.push_str(&format!("Module: {}\n", fault.module));
+    if fault.module_base != 0 {
+        head.push_str(&format!(
+            "Module base: 0x{:016X}, size 0x{:X}\n",
+            fault.module_base, fault.module_size
+        ));
+    }
     head.push_str(&format!("Thread id: {}\n", fault.thread_id));
     if let Some(note) = &fault.access {
         head.push_str(&format!("Access: {note}\n"));
@@ -170,6 +179,11 @@ pub fn compose(fault: &Fault, stamp: u64, path: &std::path::Path) -> (String, St
             head.push_str(&format!("  {}\n", fault.stack_note));
         }
     }
+
+    head.push_str("\n-- System --\n");
+    // Cached at startup: the fault path must not load libraries or read files
+    head.push_str(crate::system::describe());
+    head.push('\n');
 
     head.push_str(
         "\nSymbol names are left out on purpose: resolving them loads a library and can deadlock on the state this\n\
@@ -328,6 +342,13 @@ pub mod win {
         region_type: u32,
     }
 
+    #[repr(C)]
+    struct ModuleInfo {
+        base: *mut c_void,
+        size: u32,
+        entry: *mut c_void,
+    }
+
     extern "system" {
         pub fn GetCurrentThreadId() -> u32;
         fn GetCurrentProcess() -> *mut c_void;
@@ -348,6 +369,12 @@ pub mod win {
         ) -> i32;
         fn VirtualQuery(address: *const c_void, buffer: *mut MemoryBasicInformation, length: usize) -> usize;
         fn GetModuleFileNameW(module: *mut c_void, buffer: *mut u16, size: u32) -> u32;
+        fn K32GetModuleInformation(
+            process: *mut c_void,
+            module: *mut c_void,
+            info: *mut ModuleInfo,
+            size: u32,
+        ) -> i32;
     }
 
     /// access_note turns EXCEPTION_ACCESS_VIOLATION's two parameters into something readable
@@ -365,22 +392,36 @@ pub mod win {
     }
 
     /// module_of names the module a code address falls into, using the allocation base the memory map reports
-    unsafe fn module_of(address: usize) -> String {
+    /// The image size comes from the loader: VirtualQuery only describes the region around the address
+    unsafe fn module_of(address: usize) -> (String, u64, u64) {
         let mut info: MemoryBasicInformation = std::mem::zeroed();
         if VirtualQuery(address as *const c_void, &mut info, std::mem::size_of::<MemoryBasicInformation>()) == 0
             || info.allocation_base.is_null()
         {
-            return "unknown".to_string();
+            return ("unknown".to_string(), 0, 0);
+        }
+
+        let base = info.allocation_base as usize;
+        let mut image: ModuleInfo = std::mem::zeroed();
+        let mut size = 0u64;
+        if K32GetModuleInformation(
+            GetCurrentProcess(),
+            info.allocation_base,
+            &mut image,
+            std::mem::size_of::<ModuleInfo>() as u32,
+        ) != 0
+        {
+            size = image.size as u64;
         }
 
         let mut name = [0u16; 260];
         let length = GetModuleFileNameW(info.allocation_base, name.as_mut_ptr(), name.len() as u32);
         if length == 0 {
-            return format!("0x{:016X}", info.allocation_base as usize);
+            return (format!("0x{base:016X}"), base as u64, size);
         }
 
         let stem = String::from_utf16_lossy(&name[..length as usize]);
-        format!("{stem} +0x{:X}", address - info.allocation_base as usize)
+        (format!("{stem} +0x{:X}", address - base), base as u64, size)
     }
 
     /// read_stack copies a few words around the faulting frame
@@ -447,6 +488,8 @@ pub mod win {
             None => (Vec::new(), "no register context was provided".to_string()),
         };
 
+        let (module, module_base, module_size) = module_of(address as usize);
+
         Fault {
             code,
             name: super::name_of(code).unwrap_or("an unnamed hardware exception"),
@@ -456,7 +499,9 @@ pub mod win {
             registers,
             stack,
             stack_note,
-            module: module_of(address as usize),
+            module,
+            module_base,
+            module_size,
         }
     }
 }
@@ -600,6 +645,8 @@ pub mod unix {
             stack_note,
             // Resolving this needs dladdr, which is not async-signal-safe; the mapping is in /proc/<pid>/maps
             module: "unknown (see /proc/<pid>/maps)".to_string(),
+            module_base: 0,
+            module_size: 0,
         }
     }
 }

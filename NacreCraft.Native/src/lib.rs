@@ -11,6 +11,7 @@
 //! - `rejit`: the runtime rewrite engine, driven by the managed side
 //! - `report`: the report produced once managed code can no longer run
 //! - `stack`: the vectored exception handler that catches a stack overflow
+//! - `system`: the startup fingerprint carried into a native crash report
 
 mod crash;
 mod icon;
@@ -21,6 +22,7 @@ mod report;
 #[cfg(target_os = "linux")]
 mod signals;
 mod stack;
+mod system;
 mod ui;
 
 use std::ffi::{c_char, c_void, CStr};
@@ -86,6 +88,9 @@ pub extern "C" fn ncn_on_initialize(_profiler_info_unknown: *mut c_void) -> i32 
         stack::MODULE_NAME,
         std::process::id()
     ));
+
+    // Collected here rather than on the crash path: reading versions loads libraries and faults there would be fatal
+    system::capture();
 
     // The handler is deliberately not installed here
     // Vectored handlers run newest first, and the runtime registers its own while it starts up, so a handler put in

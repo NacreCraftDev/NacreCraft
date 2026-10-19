@@ -18,6 +18,49 @@ public sealed class MultiNoisePreset
 
     private static readonly MultiNoisePreset[] All = { Overworld, Nether };
 
+    //Points/BiomeKeys/Index are static per preset and independent of registry data
+    //Building them in the static constructor lets the server warm the search tree before decoding, so the tree build
+    //no longer sits inside the decode window
+    internal IReadOnlyList<Climate.ParameterPoint> Points { get; private set; } = Array.Empty<Climate.ParameterPoint>();
+    internal IReadOnlyList<ResourceKey<Biome>> BiomeKeys { get; private set; } = Array.Empty<ResourceKey<Biome>>();
+    internal ClimateRTree<int>? Index { get; private set; }
+
+    static MultiNoisePreset()
+    {
+        foreach (var preset in All) preset.BuildIndex();
+    }
+
+    //Prewarm triggers the static constructor ahead of data loading; safe to call more than once
+    public static void Prewarm() => _ = Overworld.Index;
+
+    private void BuildIndex()
+    {
+        var points = new List<Climate.ParameterPoint>();
+        var biomes = new List<ResourceKey<Biome>>();
+        if (Id == Overworld.Id)
+        {
+            new OverworldBiomeBuilder().AddBiomes(entry =>
+            {
+                points.Add(entry.Point);
+                biomes.Add(entry.Biome);
+            });
+        }
+        else if (Id == Nether.Id)
+        {
+            foreach (var (point, biome) in OverworldBiomeBuilder.NetherBiomes())
+            {
+                points.Add(point);
+                biomes.Add(biome);
+            }
+        }
+
+        Points = points;
+        BiomeKeys = biomes;
+        var indexed = new List<(Climate.ParameterPoint Point, int Value)>(points.Count);
+        for (var i = 0; i < points.Count; i++) indexed.Add((points[i], i));
+        Index = ClimateRTree<int>.Create(indexed);
+    }
+
     //ById looks up a preset by registry name, returns null when not found
     public static MultiNoisePreset? ById(Identifier id)
     {
@@ -26,22 +69,14 @@ public sealed class MultiNoisePreset
         return null;
     }
 
-    //CreateEntries builds the parameter list entries
-    //lookup resolves a biome ResourceKey into a Holder, matching vanilla passing a HolderGetter into the preset provider
-    //Overworld is expanded on the spot through OverworldBiomeBuilder; Nether is the 5 hard-coded entries
+    //CreateEntries maps the preset's static parameter table to registry holders
+    //Only this cheap mapping runs during decoding; the search tree was already built by the static constructor
     public IReadOnlyList<(Climate.ParameterPoint Point, Holder<Biome> Biome)> CreateEntries(
         Func<ResourceKey<Biome>, Holder<Biome>> lookup)
     {
-        var entries = new List<(Climate.ParameterPoint, Holder<Biome>)>();
-        if (Id == Overworld.Id)
-        {
-            new OverworldBiomeBuilder().AddBiomes(e => entries.Add((e.Point, lookup(e.Biome))));
-        }
-        else if (Id == Nether.Id)
-        {
-            foreach (var (point, biome) in OverworldBiomeBuilder.NetherBiomes())
-                entries.Add((point, lookup(biome)));
-        }
+        var entries = new List<(Climate.ParameterPoint, Holder<Biome>)>(Points.Count);
+        for (var i = 0; i < Points.Count; i++)
+            entries.Add((Points[i], lookup(BiomeKeys[i])));
         return entries;
     }
 
@@ -70,17 +105,24 @@ public sealed class MultiNoiseBiomeSourceParameterListCodec : AbstractMapCodec<M
         var preset = presetResult.GetOrThrow();
 
         //The parameter list is expanded on the spot by the preset; biomes are resolved through the BIOME registry by ResourceKey
+        //A preset references the same few dozen biomes thousands of times, so the registry lookup is memoized for this decode
         var biomes = (ops as RegistryOps<U>)?.GetRegistry(Registries.BIOME) ?? BuiltInRegistries.BIOME;
+        var cache = new Dictionary<ResourceKey<Biome>, Holder<Biome>>();
+        Holder<Biome> Resolve(ResourceKey<Biome> key)
+        {
+            if (cache.TryGetValue(key, out var cached)) return cached;
+            var holder = Lookup(biomes, key);
+            cache[key] = holder;
+            return holder;
+        }
         return DataResult<MultiNoiseBiomeSourceParameterList>.Success(
-            new MultiNoiseBiomeSourceParameterList(preset, preset.CreateEntries(key => Lookup(biomes, key))));
+            new MultiNoiseBiomeSourceParameterList(preset, preset.CreateEntries(Resolve)));
     }
 
-    //Lookup resolves a biome by ResourceKey; a missing one throws and the loader records it as that element's error
-    //BIOME is a registry with a default value, so GetValue falls back to the default biome for unregistered keys; ContainsKey must come first or biomes silently mix up
+    //Lookup reads the biome reference from the key index; the biome files are loaded before the parameter lists
+    //A missing biome is a real error, and reading keeps concurrent decoding free of registry writes
     private static Holder<Biome> Lookup(Registry<Biome> biomes, ResourceKey<Biome> key)
-        => biomes.ContainsKey(key.Identifier) && biomes.GetValue(key.Identifier) is { } biome
-            ? Holder<Biome>.Direct(biome)
-            : throw new InvalidOperationException($"Unknown biome: {key.Identifier}");
+        => biomes.GetHolder(key.Identifier) ?? throw new InvalidOperationException($"Unknown biome: {key.Identifier}");
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, MultiNoiseBiomeSourceParameterList value,
         RecordBuilder<U> builder)

@@ -8,6 +8,7 @@ using NacreCraft.Game.DFU;
 using NacreCraft.Game.Network;
 using NacreCraft.Game.Server.Rcon;
 using NacreCraft.Game.Server.Rcon.Thread;
+using NacreCraft.Game.Server.Progress;
 using NacreCraft.Game.Util.Monitoring.Jmx;
 using NacreCraft.Network.Protocol.Configuration;
 using NacreCraft.Network.Protocol.Common;
@@ -107,6 +108,8 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
     private RconThread? _rconThread;
     //_queryThreadGs4 the GS4 query thread, non-null only with enable-query on and a valid port
     private QueryThreadGs4? _queryThreadGs4;
+    //_levelLoadListener reports level loading progress, maps to vanilla MinecraftServer.levelLoadListener
+    private readonly LevelLoadListener _levelLoadListener = LoggingLevelLoadListener.ForDedicatedServer();
 
     //RegistryAccessForConnection builds the registry access set lazily
     //It can only be built after BootstrapClass.BootStrap freezes the registries, already satisfied at server construction
@@ -121,6 +124,9 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
 
     //Overworld the overworld PersistentServerLevel hooked into RegionFileStorage
     public override PersistentServerLevel Overworld => _overworld;
+
+    //LoadListener the level loading progress listener, read by the configuration phase spawn preload
+    public LevelLoadListener LoadListener => _levelLoadListener;
 
     //Levels all dimension worlds for tick iteration and diagnostics
     public IEnumerable<PersistentServerLevel> Levels => _levels.Values;
@@ -341,8 +347,9 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
         LevelData? levelData = null,
         OpList? opList = null,
         BanList? banList = null,
-        IpBanList? ipBanList = null)
-        : base(serverThread)
+        IpBanList? ipBanList = null,
+        Stopwatch? startWatch = null)
+        : base(serverThread, startWatch)
     {
         //_settings must be assigned first, the CommandManager constructor reads nc-debug-commands to decide whether to register /debug
         _settings = settings;
@@ -492,11 +499,24 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
     //Maps to the LOAD_INITIAL_CHUNKS stage of vanilla prepareLevels: load first, then Done
     public void InitServer()
     {
+        //InitMark prints the time spent in the stage that just finished, so the Done budget can be split per step
+        var initWatch = Stopwatch.StartNew();
+        var lastMark = 0L;
+        void InitMark(string stage)
+        {
+            var now = initWatch.ElapsedMilliseconds;
+            Log.Info($"[init] {stage} {now - lastMark}ms");
+            lastMark = now;
+        }
+
         if (!_levelData.Initialized) SearchInitialSpawn();
+        InitMark("spawn-search");
         StartNetwork();
+        InitMark("network");
         //The function library is loaded by data pack, maps to the function library reload section of vanilla reloadableServerResources.loadResources
         //Once attached to the resource listener list, /reload carries the function library along
         _rsr?.AttachFunctionLibrary(Functions.Library);
+        InitMark("function-library");
         //Metrics reporting is off by default, same as vanilla enable-jmx-monitoring
         if (_settings.EnableJmxMonitoring)
         {
@@ -515,15 +535,35 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
             Log.Info("Starting remote control listener");
             _rconThread = RconThread.Create(this);
         }
+        InitMark("query+rcon");
         //Startup immediately fixes level.dat and saveddata, maps to saveEverything at the end of vanilla initServer
         //A new world seed is written to disk immediately to prevent a crash-restart within the window from changing it
         SaveLevelData();
         _dataStorage.ScheduleSave();
-        //Old save tickets may drive loading only after the world is ready, maps to activateAllDeactivatedTickets in vanilla prepareLevels
+        InitMark("save-level-data");
+        //Old save tickets may drive loading only after the world is ready, maps to ChunkLoadCounter.track in vanilla prepareLevels
         //Each dimension activates its own copy, with ticket tables isolated per dimension only one cannot be activated
-        foreach (var tickets in _chunkTickets.Values) tickets.ActivateAllDeactivatedTickets();
-        //Vanilla 26.2 prepareLevels no longer preloads the spawn, it declares ready after activating the save tickets
-        //Measured: a fresh world's prepare stage loads only the single spawn chunk and unloads it after 2 ticks, an old save loads 0
+        var chunkLoadCounter = new ChunkLoadCounter();
+        foreach (var (key, level) in _levels)
+        {
+            if (!_chunkTickets.TryGetValue(key, out var tickets)) continue;
+            chunkLoadCounter.Track(level, tickets.ActivateAllDeactivatedTickets);
+        }
+        //Vanilla 26.2 prepareLevels waits for the tracked chunks to reach FULL before declaring the server ready
+        //Only the chunk source is advanced here instead of a full tick: the main loop has not started and nothing but chunk loading has work pending
+        //The 10ms beat matches PREPARE_LEVELS_DEFAULT_DELAY_NANOS
+        _levelLoadListener.Start(LevelLoadListener.Stage.LoadInitialChunks, chunkLoadCounter.TotalChunks);
+        var loadBeat = Stopwatch.StartNew();
+        do
+        {
+            _levelLoadListener.Update(LevelLoadListener.Stage.LoadInitialChunks, chunkLoadCounter.ReadyChunks, chunkLoadCounter.TotalChunks);
+            foreach (var level in _levels.Values) level.ChunkSource.Tick();
+            var wait = 10 - (int)loadBeat.ElapsedMilliseconds;
+            if (wait > 0) Thread.Sleep(wait);
+            loadBeat.Restart();
+        } while (chunkLoadCounter.PendingChunks() > 0);
+        _levelLoadListener.Finish(LevelLoadListener.Stage.LoadInitialChunks);
+        InitMark("initial-chunks");
         //The 3x3 strong load around the spawn only exists because PrepareSpawnTask adds a PLAYER_SPAWN ticket on player login, see PrepareSpawnChunks
         Log.Info($"Done ({StartWatch.Elapsed.TotalSeconds.ToString("0.000", CultureInfo.InvariantCulture)}s)! NacreCraft server ready");
     }
@@ -534,6 +574,10 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
     {
         var watch = Stopwatch.StartNew();
         var suggestion = ResolveSpawnSuggestion();
+        //The spawn search is the global spawn stage, the focus is the candidate the climate sampler picked, maps to vanilla setInitialSpawn
+        _levelLoadListener.Start(LevelLoadListener.Stage.PrepareGlobalSpawn, 0);
+        _levelLoadListener.UpdateFocus(LevelKeys.OVERWORLD,
+            new ChunkPos((int)Math.Floor(suggestion.X / 16.0), (int)Math.Floor(suggestion.Z / 16.0)));
         var found = SpawnFinder.Find(_overworld, suggestion, _overworld.MinSectionY << 4);
         if (found is { } pos)
         {
@@ -546,6 +590,7 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
         else Log.Warning("Spawn search found nothing, keeping the default spawn");
         //Mark initialized so the next startup reuses the spawn in level.dat
         _levelData.Initialized = true;
+        _levelLoadListener.Finish(LevelLoadListener.Stage.PrepareGlobalSpawn);
     }
 
     //ResolveSpawnSuggestion the candidate spawn position, maps to findSpawnPosition in vanilla setInitialSpawn
@@ -764,23 +809,32 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
     //Vanilla does addTicketAndLoadWithRadius(PLAYER_SPAWN, spawnChunk, 3), ticket level 33-3=30 filling a 7x7
     //Previously the holder's BorderLevel was hardcoded without a ticket: the next tick of the load tracker would see "no ticket here" and reset the level to unloaded
     //During configuration the player has not entered the world and there is no load ticket, so these chunks were reclaimed and the player saw holes on entry
-    public Task[] PrepareSpawnChunks()
+    public SpawnChunkPreload PrepareSpawnChunks()
     {
         var chunkSource = Overworld.ChunkSource;
         var spawnChunk = new ChunkPos((int)Math.Floor(SpawnPos.X / 16), (int)Math.Floor(SpawnPos.Z / 16));
-        chunkSource.TicketStorage?.AddTicketWithRadius(
-            NacreCraft.Storage.TicketType.PlayerSpawn, spawnChunk, PrepareChunkRadius);
-        var tasks = new List<Task>((PrepareChunkRadius * 2 + 1) * (PrepareChunkRadius * 2 + 1));
-        for (var dx = -PrepareChunkRadius; dx <= PrepareChunkRadius; dx++)
+        //The counter records only the chunks this ticket newly pulled in, maps to vanilla PrepareSpawnTask.Preparing
+        var counter = new ChunkLoadCounter();
+        Task[] tasks = Array.Empty<Task>();
+        counter.Track(Overworld, () =>
         {
-            for (var dz = -PrepareChunkRadius; dz <= PrepareChunkRadius; dz++)
+            chunkSource.TicketStorage?.AddTicketWithRadius(
+                NacreCraft.Storage.TicketType.PlayerSpawn, spawnChunk, PrepareChunkRadius);
+            var list = new List<Task>((PrepareChunkRadius * 2 + 1) * (PrepareChunkRadius * 2 + 1));
+            for (var dx = -PrepareChunkRadius; dx <= PrepareChunkRadius; dx++)
             {
-                tasks.Add(chunkSource.GetChunkFuture(
-                    spawnChunk.X + dx, spawnChunk.Z + dz, ChunkStatus.FULL));
+                for (var dz = -PrepareChunkRadius; dz <= PrepareChunkRadius; dz++)
+                {
+                    list.Add(chunkSource.GetChunkFuture(
+                        spawnChunk.X + dx, spawnChunk.Z + dz, ChunkStatus.FULL));
+                }
             }
-        }
-        Log.Debug($"Spawn preload submitted center=({spawnChunk.X},{spawnChunk.Z}) radius={PrepareChunkRadius} total {tasks.Count} chunks");
-        return tasks.ToArray();
+            tasks = list.ToArray();
+        });
+        _levelLoadListener.Start(LevelLoadListener.Stage.LoadPlayerChunks, counter.TotalChunks);
+        _levelLoadListener.UpdateFocus(LevelKeys.OVERWORLD, spawnChunk);
+        Log.Debug($"Spawn preload submitted center=({spawnChunk.X},{spawnChunk.Z}) radius={PrepareChunkRadius} total {tasks.Length} chunks");
+        return new SpawnChunkPreload(tasks, counter);
     }
 
     //TransitionToGame switches to the Play phase, attaches ServerGamePacketListenerImpl and triggers PlayerList.PlaceNewPlayer

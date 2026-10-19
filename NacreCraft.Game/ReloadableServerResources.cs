@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using NacreCraft.Bootstrap;
 using NacreCraft.Game.Server;
 using NacreCraft.Game.World.Crafting;
@@ -48,11 +49,16 @@ public sealed class ReloadableServerResources
         rsr._listeners.Add(new RecipeReloadListener(recipes));
         //Add AdvancementListener/FunctionListener here in the future
         if (extraListeners is not null) rsr._listeners.AddRange(extraListeners);
+        //Split the reload budget: listener chain (tags/recipes/fuel) versus loot tables, the two halves have very different cost
+        var listenerWatch = Stopwatch.StartNew();
         rsr.Reload();
+        var listenerMs = listenerWatch.ElapsedMilliseconds;
         //The menu needs the recipe table to compute crafting results, so it is attached right after assembly
         RecipeManager.Active = recipes;
         //Loot tables are read after the reload finishes so the final pack list is already in place
+        var lootWatch = Stopwatch.StartNew();
         NacreCraft.Game.World.Loot.LootTables.Active = NacreCraft.Game.World.Loot.LootTables.Load(rm);
+        Log.Info($"[res] listeners={listenerMs}ms loot={lootWatch.ElapsedMilliseconds}ms");
         //Log.Debug($"ReloadableServerResources.LoadResources exit");
         return rsr;
     }

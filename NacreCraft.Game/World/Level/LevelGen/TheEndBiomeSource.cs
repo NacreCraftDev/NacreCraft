@@ -19,21 +19,21 @@ public sealed class TheEndBiomeSource : BiomeSource
     //SmallIslandsThreshold small islands upper bound, maps to vanilla heightValue < -0.21875
     public const double SmallIslandsThreshold = -0.21875;
 
-    public Biome End { get; }
-    public Biome Highlands { get; }
-    public Biome Midlands { get; }
-    public Biome SmallIslands { get; }
-    public Biome Barrens { get; }
+    public Holder<Biome> End { get; }
+    public Holder<Biome> Highlands { get; }
+    public Holder<Biome> Midlands { get; }
+    public Holder<Biome> SmallIslands { get; }
+    public Holder<Biome> Barrens { get; }
 
     //PossibleBiomes the End source always yields these five biomes, maps to vanilla TheEndBiomeSource.possibleBiomes
-    public IReadOnlyList<Biome> PossibleBiomes => new[] { End, Highlands, Midlands, SmallIslands, Barrens };
+    public IReadOnlyList<Biome> PossibleBiomes => new[] { End.Value, Highlands.Value, Midlands.Value, SmallIslands.Value, Barrens.Value };
 
     //ErosionNoise the End's end_islands density function, maps to vanilla sampler.erosion()
     //Injected by NoiseBasedChunkGenerator from the noise settings' erosion slot during assembly; without it the main island biome is always returned
     public DensityFunction? ErosionNoise { get; }
 
-    public TheEndBiomeSource(Biome end, Biome highlands, Biome midlands, Biome smallIslands, Biome barrens,
-        DensityFunction? erosionNoise = null)
+    public TheEndBiomeSource(Holder<Biome> end, Holder<Biome> highlands, Holder<Biome> midlands,
+        Holder<Biome> smallIslands, Holder<Biome> barrens, DensityFunction? erosionNoise = null)
     {
         End = end;
         Highlands = highlands;
@@ -48,15 +48,16 @@ public sealed class TheEndBiomeSource : BiomeSource
         => new(End, Highlands, Midlands, SmallIslands, Barrens, erosionNoise);
 
     //FromRegistry takes the five End biomes from the biome registry, maps to vanilla TheEndBiomeSource.create
-    //Returns null if any required biome is missing and lets the caller report it; an incomplete data pack should not fake an End out of placeholder biomes
+    //The biome files are loaded before the dimensions, so a pure key-index read resolves them without writing the registry
+    //Returns null if any required biome is missing and lets the caller report it
     public static TheEndBiomeSource? FromRegistry(Registry<Biome>? registry)
     {
         if (registry is null) return null;
-        var end = Get(registry, Biomes.THE_END);
-        var highlands = Get(registry, Biomes.END_HIGHLANDS);
-        var midlands = Get(registry, Biomes.END_MIDLANDS);
-        var smallIslands = Get(registry, Biomes.SMALL_END_ISLANDS);
-        var barrens = Get(registry, Biomes.END_BARRENS);
+        var end = registry.GetHolder(Biomes.THE_END.Identifier);
+        var highlands = registry.GetHolder(Biomes.END_HIGHLANDS.Identifier);
+        var midlands = registry.GetHolder(Biomes.END_MIDLANDS.Identifier);
+        var smallIslands = registry.GetHolder(Biomes.SMALL_END_ISLANDS.Identifier);
+        var barrens = registry.GetHolder(Biomes.END_BARRENS.Identifier);
         if (end is null || highlands is null || midlands is null || smallIslands is null || barrens is null)
             return null;
         return new TheEndBiomeSource(end, highlands, midlands, smallIslands, barrens);
@@ -69,17 +70,14 @@ public sealed class TheEndBiomeSource : BiomeSource
         var chunkX = x >> 4;
         var chunkZ = z >> 4;
         if ((long)chunkX * chunkX + (long)chunkZ * chunkZ <= IslandChunkDistanceSqr)
-            return End;
-        if (ErosionNoise is null) return End;
+            return End.Value;
+        if (ErosionNoise is null) return End.Value;
         var noiseX = ((chunkX * 2) + 1) * 8;
         var noiseZ = ((chunkZ * 2) + 1) * 8;
         var value = ErosionNoise.Compute(SinglePointContext.At(noiseX, y, noiseZ));
-        if (value > HighlandsThreshold) return Highlands;
-        if (value >= MidlandsThreshold) return Midlands;
-        if (value < SmallIslandsThreshold) return SmallIslands;
-        return Barrens;
+        if (value > HighlandsThreshold) return Highlands.Value;
+        if (value >= MidlandsThreshold) return Midlands.Value;
+        if (value < SmallIslandsThreshold) return SmallIslands.Value;
+        return Barrens.Value;
     }
-
-    private static Biome? Get(Registry<Biome> registry, ResourceKey<Biome> key)
-        => registry.GetValue(key.Identifier);
 }

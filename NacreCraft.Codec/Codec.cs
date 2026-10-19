@@ -47,6 +47,10 @@ public abstract class ScalarCodec<T> : Codec<T>
 //Subclasses only implement Decode and EncodeTo
 public abstract class AbstractMapCodec<T> : Codec<T>
 {
+    //Fail forwards a field failure to the record result, keeping the original message
+    protected static DataResult<T> Fail<R>(DataResult<R> source)
+        => DataResult<T>.Error(() => source.ErrorMessage ?? "field decode failed");
+
     //The default implementation accumulates into a builder with EncodeTo and then calls Build(empty)
     public virtual DataResult<U> EncodeStart<U>(DynamicOps<U> ops, T value)
     {

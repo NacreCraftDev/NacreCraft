@@ -130,7 +130,7 @@ public sealed class NoiseChunk : FunctionContext, ContextProvider
             //BlendDensity passes straight through in vanilla too when there is no blender
             _ => marker.Wrapped
         },
-        HolderHolder holder => holder.Function,
+        HolderHolder holder => holder.Value,
         _ => function
     };
 

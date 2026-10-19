@@ -15,6 +15,7 @@ using NacreCraft.Logging;
 using NacreCraft.Registry;
 using NacreCraft.Resources;
 using NacreCraft.Storage.Paletted;
+using System.Diagnostics;
 using WorldCarverBootstrap = NacreCraft.Game.World.Level.LevelGen.Carver.WorldCarver;
 
 namespace NacreCraft.Game.Bootstrap;
@@ -63,48 +64,85 @@ public static class GameBootstrap
             _preDataBootstrapped = true;
             //Log.Debug("BootstrapBeforeDataLoad enter");
             Log.Info("Game layer bootstrap started");
+            //Per-step timing: this block is the largest single startup section, so each registry group reports its own cost
+            var bootWatch = Stopwatch.StartNew();
+            var lastMark = 0L;
+            void Mark(string stage)
+            {
+                var now = bootWatch.ElapsedMilliseconds;
+                Log.Info($"[bootstrap] {stage} {now - lastMark}ms");
+                lastMark = now;
+            }
+
             Blocks.Bootstrap();
+            Mark("blocks");
             RegisterFluids();
+            Mark("fluids");
             //Ticket types must be registered before the registry freezes; chunk_tickets.dat restores tickets by registry name
             NacreCraft.Storage.TicketType.Bootstrap();
+            Mark("tickets");
             WorldCarverBootstrap.RegisterAll();
+            Mark("carvers");
             //Feature and placement modifier registries must be filled before data load, otherwise the whole configured_feature/placed_feature batch fails to decode
             NacreCraft.Game.World.Level.LevelGen.Features.FeatureBootstrap.RegisterAll();
+            Mark("features");
             NacreCraft.Game.World.Level.LevelGen.Placement.PlacementModifierBootstrap.RegisterAll();
+            Mark("placement-modifiers");
             //Structure placement types must be in place before worldgen/structure_set loads, otherwise placement type dispatch finds no target
             NacreCraft.Game.World.Level.LevelGen.Structure.StructureBootstrap.RegisterAll();
+            Mark("structure-placement");
             //Piece types must be in place before structure loading, otherwise a serialized piece id resolves to no implementation
             NacreCraft.Game.World.Level.LevelGen.Structure.StructurePieceBootstrap.RegisterAll();
+            Mark("structure-pieces");
             //Processor types plus rule tests/pos rules/block entity modifiers must be in place before processor_list loads
             NacreCraft.Game.World.Level.LevelGen.Structure.StructureProcessorBootstrap.RegisterAll();
+            Mark("structure-processors");
             //Pool element types must be in place before worldgen/template_pool loads, otherwise element_type dispatch finds no target
             NacreCraft.Game.World.Level.LevelGen.Structure.StructurePoolBootstrap.RegisterAll();
+            Mark("structure-pools");
             Items.Bootstrap();
+            Mark("items");
             //The dispense behavior table is registered per item instance, so it must come after items are filled
             NacreCraft.Game.World.Level.Block.Dispenser.DispenseBehaviors.Bootstrap();
+            Mark("dispense");
             GameRules.Bootstrap();
+            Mark("game-rules");
             //Particle types are registered in vanilla declaration order; commands and particle packets both encode by registry id
             NacreCraft.Game.World.Particle.ParticleTypes.Bootstrap();
+            Mark("particles");
             //Mob effects are registered in vanilla declaration order; commands and effect packets both encode by registry id
             NacreCraft.Game.World.Effect.MobEffects.Bootstrap();
+            Mark("mob-effects");
             ArgumentTypeInfos.Bootstrap();
+            Mark("argument-types");
             //Entity attributes are registered before entity types; entity construction builds its table from attributes, and this must also precede registry freeze
             NacreCraft.Registry.EntityAttribute.Attributes.Bootstrap();
+            Mark("attributes");
             EntityTypes.Bootstrap();
+            Mark("entity-types");
             //Entity sub-predicates are registered by name, for the entity predicate composite to dispatch by type name
             NacreCraft.Game.Advancements.Predicates.Entity.EntitySubPredicates.Bootstrap();
+            Mark("entity-sub-predicates");
             //Damage types are registered in vanilla declaration order; damage sources and death messages both look up by registry
             NacreCraft.Registry.DamageTypes.Bootstrap();
+            Mark("damage-types");
             //The default attribute table for entity types must be assembled before any entity is constructed
             NacreCraft.Game.World.Entity.DefaultAttributes.Bootstrap();
+            Mark("default-attributes");
             BlockEntityTypes.Bootstrap();
+            Mark("block-entity-types");
             MenuTypes.Bootstrap();
+            Mark("menus");
             WorldClocks.Bootstrap();
+            Mark("world-clocks");
             Timelines.Bootstrap();
+            Mark("timelines");
             DensityFunctionBootstrap.RegisterAll();
+            Mark("density-function-types");
             //Permission and predicate types are registered into their own MapCodec registries, used to dispatch encoding/decoding
             PermissionTypes.Bootstrap(BuiltInRegistries.PERMISSION_TYPE);
             PermissionCheckTypes.Bootstrap(BuiltInRegistries.PERMISSION_CHECK_TYPE);
+            Mark("permissions");
             //Log.Debug("BootstrapBeforeDataLoad exit");
         }
     }

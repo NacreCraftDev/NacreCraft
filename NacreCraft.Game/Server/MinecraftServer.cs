@@ -5,6 +5,7 @@ using System.Threading;
 using NacreCraft;
 using NacreCraft.Commands;
 using NacreCraft.Game.Commands;
+using NacreCraft.Game.Server.Progress;
 using NacreCraft.Game.World.Clock;
 using NacreCraft.Game.World.Level;
 using NacreCraft.Game.World.Level.Timers;
@@ -55,8 +56,9 @@ public abstract class MinecraftServer
     private long _nextTickTimeMillis;
     //_lastOverloadWarningMillis the timeline position of the last overload warning, used to throttle warnings
     private long _lastOverloadWarningMillis;
-    //StartWatch server start timing begins at construction, maps to the vanilla server start moment for the Done log
-    private readonly Stopwatch _startWatch = Stopwatch.StartNew();
+    //StartWatch server start timing; the caller passes the boot watch so resource and registry loading done before
+    //construction still counts toward the Done log, otherwise it starts here
+    private readonly Stopwatch _startWatch;
     protected Stopwatch StartWatch => _startWatch;
 
     //TickTimeSamples number of per-tick time samples, maps to the 100 samples of vanilla tickTimesNanos
@@ -164,8 +166,33 @@ public abstract class MinecraftServer
         if (_tickTimeFilled < TickTimeSamples) _tickTimeFilled++;
     }
 
-    protected MinecraftServer(Thread serverThread)
+    //CreateChunkLoadStatusView builds a status window over the chunks around a centre, maps to vanilla createChunkLoadStatusView
+    public ChunkLoadStatusView CreateChunkLoadStatusView(int radius)
+        => new ChunkLoadStatusViewImpl(this, radius);
+
+    //ChunkLoadStatusViewImpl the window returned above, maps to the anonymous view of vanilla
+    private sealed class ChunkLoadStatusViewImpl(MinecraftServer server, int radius) : ChunkLoadStatusView
     {
+        private ChunkMap? _chunkMap;
+        private int _centerChunkX;
+        private int _centerChunkZ;
+
+        public void MoveTo(ResourceKey<Level> dimension, ChunkPos chunkPos)
+        {
+            _chunkMap = server.GetLevel(dimension)?.ChunkSource.ChunkMap;
+            _centerChunkX = chunkPos.X;
+            _centerChunkZ = chunkPos.Z;
+        }
+
+        public ChunkStatus? Get(int x, int z)
+            => _chunkMap?.GetLatestStatus(ChunkPos.Pack(x + _centerChunkX - radius, z + _centerChunkZ - radius));
+
+        public int Radius => radius;
+    }
+
+    protected MinecraftServer(Thread serverThread, Stopwatch? startWatch = null)
+    {
+        _startWatch = startWatch ?? Stopwatch.StartNew();
         _serverThread = serverThread;
         //The game rules live on the server while the level needs them for explosions and mob behaviour, so the level
         //reads them through this provider, maps to vanilla Level.getGameRules delegating to the server

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using NacreCraft.Logging;
 
 namespace NacreCraft.Resources;
@@ -48,9 +49,12 @@ public sealed class SimpleReloadInstance : ReloadInstance
         var listener = _listeners[_index];
         var ctx = new ReloadContext(listener.GetType().Name, _index, _listeners.Count);
         _index++;
+        //Per-listener timing, so the reload budget can be attributed without a profiler
+        var watch = Stopwatch.StartNew();
         try
         {
             listener.Reload(_rm, ctx);
+            Log.Info($"[reload] {ctx.Name} {watch.ElapsedMilliseconds}ms");
         }
         catch (Exception ex)
         {

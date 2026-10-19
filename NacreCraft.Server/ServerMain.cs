@@ -51,6 +51,10 @@ public static class ServerMain
         //The role segment in the crash report file name, the handler shared with the kernel uses it to tell client from server
         CrashHandler.Role = "server";
         Log.Info("NacreCraft server starting");
+        //Boot timing starts here so the Done log covers kernel init, resource extraction, registry loading and world load
+        var bootWatch = System.Diagnostics.Stopwatch.StartNew();
+        //BootMark prints the cumulative boot time at a stage boundary; consecutive marks show where the seconds go
+        void BootMark(string stage) => Log.Info($"[boot] {stage} {bootWatch.ElapsedMilliseconds}ms");
 
         //GUI is enabled by default, both --nogui and bare nogui disable it, matching vanilla Main's handling of both spellings
         //nogui is declared as a kernel flag for LaunchOptions to swallow, so it does not leak into GameOptions as an unknown argument
@@ -76,6 +80,7 @@ public static class ServerMain
 
         //3. Parse the remaining pending arguments
         options.FlushPending();
+        BootMark("args+kernel");
 
         //4. Set the --output-dir override base, AppContext.BaseDirectory when not passed
         //   Downstream reads everything from AppPaths to avoid relative paths being interpreted against the runtime working directory
@@ -95,32 +100,49 @@ public static class ServerMain
         //    The kernel has already extracted language files to lang/, the kernel load used the default code and this step pins it down
         NcLanguage.Load(settings.NcLanguage);
         Log.Info($"Server settings port {settings.ServerPort} level {settings.LevelName} gamemode {settings.Gamemode} difficulty {settings.Difficulty} language {settings.NcLanguage}");
+        BootMark("config+language");
+
+        //4.3 Warm the multi-noise preset search tree in the background
+        //    The parameter table and its tree are registry-independent and take ~170ms to build
+        //    Overlapping them with resource extraction and bootstrap keeps that build out of the decode window
+        var presetWarmup = Task.Run(MultiNoisePreset.Prewarm);
 
         //5. Extract jar resources to assets/ and data/ and copy pack.mcmeta to the root
         //   Aligned with step 5 of ClientMain so the server can also load vanilla resources and data-driven content
         //   Must precede BootstrapClass.BootStrap since the latter freezes registries and they can no longer be written to after freezing
         AssetsExtractor.Extract(options);
+        BootMark("assets");
 
         //6. Build the pack repository and the ResourceManager off it, mirroring the client
         //   The built-in server pack reads the data/ subtree rooted at BaseDirectory
         var registryAccess = BuiltInRegistries.CreateRegistryAccess();
         var packRepository = new PackRepository(new ServerPacksSource(AppPaths.BaseDirectory));
         packRepository.Reload();
+        //The vanilla pack is not marked required, so an empty selection would leave no pack at all and every data-driven registry would load zero elements
+        //Selecting everything discovered mirrors vanilla configurePackRepository, which enables the built-in pack plus the data packs
+        packRepository.SetSelected(packRepository.AvailableIds);
         var resourceManager = new ResourceManager();
         resourceManager.SetPacks(packRepository.Selected);
 
         //6.1 Load again after attaching the resource pack, this time vanilla translations are picked up too
         //    NC's own text is still the batch under lang/, both sides merge into one table
         LanguageTable.Load(resourceManager, settings.NcLanguage);
+        BootMark("packs+language-table");
 
         //7. The first half of Game layer bootstrap, must precede data-driven loading
         //   The density function type table and blocks are codec dependencies of element JSON, missing them fails the whole batch of decoding
         //   The environment attribute table must also be registered first for the biome attributes field to look up by key
         DataComponents.Bootstrap();
+        BootMark("data-components");
         GameBootstrap.BootstrapBeforeDataLoad();
+        BootMark("game-bootstrap-before-data");
         EnvironmentAttributes.RegisterAll();
+        BootMark("environment-attributes");
 
         //8. Data-driven loading of registry elements, must precede Freeze
+        //   The preset warmup must finish first: decoding maps its parameter table to biome holders
+        try { presetWarmup.Wait(); }
+        catch (Exception ex) { Log.Warning($"[preset] search tree warmup failed: {ex.Message}"); }
         //   With a jar, biomes/density functions/noise/noise settings take the vanilla true values under data/minecraft/worldgen/
         //   Without a jar, 0 items are loaded and step 9 Noises.Bootstrap and NoiseGeneratorSettings.Overworld fall back
         //   The worldgen registries are object-keyed on the Registries side, Boxed boxes elements decoded by the strongly typed codec for loading
@@ -165,6 +187,7 @@ public static class ServerMain
         });
         Log.Info($"Registry data loaded: {registryLoad.LoadedCount} elements, {registryLoad.Errors.Count} errors");
         foreach (var error in registryLoad.Errors) Log.Warning($"Registry element failed to load: {error}");
+        BootMark("registry-data");
 
         //8.1 Dimension type fallback and level definition loading
         //    dimension_type is loaded by step 8's data-driven pass, without a data pack the three required dimensions are filled in from built-in constants
@@ -174,6 +197,7 @@ public static class ServerMain
         Log.Info(loadedDimensions.Count == 0
             ? "Level definitions not loaded (resource pack lacks world_preset), dimension setup falls back to built-ins"
             : $"Level definitions loaded: {loadedDimensions.Count} dimensions {string.Join(",", loadedDimensions)}");
+        BootMark("dimensions");
 
         //9. The second half of Game layer bootstrap and the built-in registry freeze
         //   Noises.Bootstrap skips keys already filled by step 8's data-driven pass, ensuring the vanilla true values in JSON win
@@ -182,12 +206,14 @@ public static class ServerMain
         //9.1 Structure template manager injection, must come after the structure series is loaded, otherwise it cannot get the loaded jigsaw structure instances
         GameBootstrap.InjectStructureTemplates(resourceManager);
         BootstrapClass.BootStrap();
+        BootMark("freeze");
 
         //10. Trigger data-driven reloads such as Tags
         //    Must come after BootstrapClass.BootStrap since BindAll requires the registries to be frozen
         //    LoadResources registers TagsReloadListener which calls LoadBuiltinTags+BindAll
         var rsr = ReloadableServerResources.LoadResources(resourceManager, registryAccess);
         Log.Info($"Server resources loaded: {rsr.Listeners.Count} listeners, {resourceManager.Packs.Count} packs");
+        BootMark("server-resources");
 
         //12. Initialize world storage
         //   Follows native LevelStorageSource.createWorldStorage to load anvil region files
@@ -220,6 +246,7 @@ public static class ServerMain
         {
             seed = ParseLevelSeed(settings.LevelSeed);
         }
+        BootMark("level-data");
 
         //13. Build the DataFixer and DedicatedServer instances and start the main loop
         //   GameDataFixers.BuildV1_21Fixer registers 13 Schemas and 18 Fixes covering the 1.20.2 to 1.21.4 upgrade chain
@@ -256,7 +283,9 @@ public static class ServerMain
             random: random,
             rsr: rsr,
             worldSeed: seed,
-            levelData: levelData);
+            levelData: levelData,
+            startWatch: bootWatch);
+        BootMark("server-ctor");
 
         //BuildFallbackOverworldGenerator, the overworld generator when there is no data pack
         //Equivalent to the data-driven path, only noise settings and the parameter list come from hardcoded constants
@@ -266,7 +295,7 @@ public static class ServerMain
                 .GetValue(Identifier.WithDefaultNamespace("overworld")) as NoiseGeneratorSettings;
             var noiseSettings = loadedSettings ?? NoiseGeneratorSettings.Overworld();
             var parameterList = BuiltInRegistries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST
-                .GetValue(Identifier.WithDefaultNamespace("overworld")) as MultiNoiseBiomeSourceParameterList;
+                .Get(Identifier.WithDefaultNamespace("overworld"));
             var biomeSource = parameterList is not null
                 ? new MultiNoiseBiomeSource(parameterList)
                 : new MultiNoiseBiomeSource();

@@ -23,6 +23,15 @@ internal static class StructurePoolCodecs
 
     internal static Tag? RecallSourceTag(object value)
         => SourceTags.TryGetValue(value, out var tag) ? tag : null;
+
+    //ResolveRef reads an existing holder during data loading; the loader pre-creates one for every element file
+    //Decoding runs concurrently, so this must not create holders or otherwise write the registry
+    internal static Holder<T>? ResolveRef<U, T>(DynamicOps<U> ops, Registry<T> builtin, Identifier id) where T : class
+    {
+        if (ops is RegistryOps<U> registryOps && registryOps.GetRegistry(builtin.Key) is { } registry)
+            return registry.GetHolder(id);
+        return builtin.GetHolder(id) ?? builtin.Get(id);
+    }
     //TemplateLocation template reference codec; in vanilla this is the string side of an Either, and the runtime template form does not go through JSON
     public static readonly Codec<Identifier> TemplateLocation = new IdentifierScalarCodec();
 
@@ -106,7 +115,7 @@ internal sealed class ProcessorListRefCodec : ScalarCodec<Holder<RegistryProcess
         {
             var id = Identifier.TryParse(text.GetOrThrow());
             if (id is null) return DataResult<Holder<RegistryProcessorList>>.Error(() => $"invalid processor list name: {text.GetOrThrow()}");
-            var holder = BuiltInRegistries.PROCESSOR_LIST.Get(id.Value);
+            var holder = ResolveRef(ops, BuiltInRegistries.PROCESSOR_LIST, id.Value);
             return holder is null
                 ? DataResult<Holder<RegistryProcessorList>>.Error(() => $"processor list {id} is not loaded yet")
                 : DataResult<Holder<RegistryProcessorList>>.Success(holder);
@@ -147,7 +156,7 @@ internal sealed class PlacedFeatureRefCodec : ScalarCodec<Holder<RegistryPlacedF
         {
             var id = Identifier.TryParse(text.GetOrThrow());
             if (id is null) return DataResult<Holder<RegistryPlacedFeature>>.Error(() => $"invalid placed feature name: {text.GetOrThrow()}");
-            var holder = BuiltInRegistries.PLACED_FEATURE.Get(id.Value);
+            var holder = ResolveRef(ops, BuiltInRegistries.PLACED_FEATURE, id.Value);
             return holder is null
                 ? DataResult<Holder<RegistryPlacedFeature>>.Error(() => $"placed feature {id} is not loaded yet")
                 : DataResult<Holder<RegistryPlacedFeature>>.Success(holder);
@@ -187,8 +196,8 @@ internal sealed class StructureTemplatePoolRefCodec : ScalarCodec<Holder<Registr
         {
             var id = Identifier.TryParse(text.GetOrThrow());
             if (id is null) return DataResult<Holder<RegistryPool>>.Error(() => $"invalid template pool name: {text.GetOrThrow()}");
-            var holder = BuiltInRegistries.TEMPLATE_POOL.Get(id.Value);
-            //A pool can reference itself or a pool loaded later; vanilla defers binding via a registry lookup, so here the holder resolves on access
+            var holder = ResolveRef(ops, BuiltInRegistries.TEMPLATE_POOL, id.Value);
+            //A pool can reference itself or a pool loaded later; vanilla defers binding via a registry lookup
             if (holder is not null) return DataResult<Holder<RegistryPool>>.Success(holder);
             return DataResult<Holder<RegistryPool>>.Success(new StructurePoolReferenceHolder(id.Value));
         }

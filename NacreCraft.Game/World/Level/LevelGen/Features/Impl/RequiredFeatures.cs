@@ -1027,7 +1027,7 @@ internal static class PlacedFeatureHelpers
 }
 
 //PlacedFeatureRefCodec placed feature reference codec, the string form of vanilla PlacedFeature.CODEC
-//The element must already be in the PLACED_FEATURE registry; report an error when unregistered so the loader can retry
+//During data loading a placed feature declared later resolves to its placeholder holder, which Register binds afterwards
 internal sealed class PlacedFeatureRefCodec : ScalarCodec<Holder<RegistryPlacedFeature>>
 {
     public static readonly PlacedFeatureRefCodec Instance = new();
@@ -1040,7 +1040,12 @@ internal sealed class PlacedFeatureRefCodec : ScalarCodec<Holder<RegistryPlacedF
         var id = Identifier.TryParse(text.GetOrThrow());
         if (id is null)
             return DataResult<Holder<RegistryPlacedFeature>>.Error(() => $"invalid identifier: {text.GetOrThrow()}");
-        var holder = BuiltInRegistries.PLACED_FEATURE.Get(id.Value);
+        //A pure read of the key index, safe under concurrent decoding; the loader pre-creates a holder per element file
+        Holder<RegistryPlacedFeature>? holder = null;
+        if (ops is RegistryOps<U> registryOps
+            && registryOps.GetRegistry(Registries.PLACED_FEATURE) is { } registry)
+            holder = registry.GetHolder(id.Value);
+        holder ??= BuiltInRegistries.PLACED_FEATURE.GetHolder(id.Value);
         return holder is null
             ? DataResult<Holder<RegistryPlacedFeature>>.Error(() => $"PLACED_FEATURE does not have {id} yet")
             : DataResult<Holder<RegistryPlacedFeature>>.Success(holder);

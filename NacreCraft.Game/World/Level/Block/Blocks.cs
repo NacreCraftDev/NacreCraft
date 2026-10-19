@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using NacreCraft.Logging;
 using NacreCraft.Registry;
 using NacreCraft.Registry.State;
 using NacreCraft.Storage.Paletted;
@@ -198,9 +200,16 @@ public static partial class Blocks
         RegisterFurnaces(real);
         //The extension sections of the table carry the default state overrides from vanilla registerDefaultState, the placement facing category and light occlusion
         //Real block classes are injected too, so placeholders and implementations do not end up with two different sets of default states
+        //Block registration is the largest startup step; split its budget into table parsing, property application,
+        //state building, registry writes and palette registration
+        var watch = Stopwatch.StartNew();
+        var all = BlockTable.Load().ToList();
+        var tableMs = watch.ElapsedMilliseconds;
+        long applyTicks = 0, stateTicks = 0, registryTicks = 0, factoryTicks = 0;
         foreach (var (id, properties, defaults, placement, canOcclude, pushReaction, conductor, explosionResistance)
-            in BlockTable.Load())
+            in all)
         {
+            var applyStart = Stopwatch.GetTimestamp();
             var block = real.TryGetValue(id.Path, out var implemented)
                 ? implemented
                 : new PlaceholderBlock(id.Path, properties);
@@ -213,17 +222,24 @@ public static partial class Blocks
             block.ApplyTableExplosionResistance(explosionResistance);
             //Note block base instrument table, see BlockInstruments
             block.ApplyInstrument(BlockInstruments.Lookup(id.Path));
-            Register(block);
-        }
-    }
+            applyTicks += Stopwatch.GetTimestamp() - applyStart;
 
-    //Register registers a block into the BLOCK registry and triggers state building
-    private static void Register(BlockBehaviour block)
-    {
-        //Accessing DefaultBlockState triggers BlockStateDefinition building
-        _ = block.DefaultBlockState;
-        Registry<NacreCraft.Registry.Block>.Register(BuiltInRegistries.BLOCK, block.Id, block);
-        //Synced into the container factory; the chunk save codec depends on the default block, saving a chunk would throw without registration
-        PalettedContainerFactory.Default.RegisterBlock(block);
+            //Accessing DefaultBlockState triggers BlockStateDefinition building
+            var stateStart = Stopwatch.GetTimestamp();
+            _ = block.DefaultBlockState;
+            var registryStart = Stopwatch.GetTimestamp();
+            Registry<NacreCraft.Registry.Block>.Register(BuiltInRegistries.BLOCK, block.Id, block);
+            var factoryStart = Stopwatch.GetTimestamp();
+            //Synced into the container factory; the chunk save codec depends on the default block, saving a chunk would throw without registration
+            PalettedContainerFactory.Default.RegisterBlock(block);
+            var end = Stopwatch.GetTimestamp();
+            stateTicks += registryStart - stateStart;
+            registryTicks += factoryStart - registryStart;
+            factoryTicks += end - factoryStart;
+        }
+
+        static double ToMs(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
+        Log.Info($"[blocks] table={tableMs}ms apply={(long)ToMs(applyTicks)}ms states={(long)ToMs(stateTicks)}ms "
+                 + $"register={(long)ToMs(registryTicks)}ms factory={(long)ToMs(factoryTicks)}ms count={all.Count}");
     }
 }

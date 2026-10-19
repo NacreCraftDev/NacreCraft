@@ -34,58 +34,49 @@ public sealed class BlockStateDefinition
         return new List<BlockState> { state };
     }
 
-    //Enumerate all states via Cartesian product and build neighbors using int indexes
+    //Enumerate all states via a mixed-radix index and build neighbors by arithmetic
+    //The index packs the per-property value digits, so neither the state table nor the neighbor table needs a
+    //dictionary lookup or a temporary value list; this was the dominant allocation in block registration
     private static IReadOnlyList<BlockState> CreateMultiPropertyStates(Block owner, SortedDictionary<string, PropertyBase> propertiesByName)
     {
         var propertyKeys = propertiesByName.Values.ToArray();
-        var valuesPerProperty = propertyKeys.Select(p => p.PossibleValuesAsObjects).ToList();
-        var statesByValues = new Dictionary<ValueList, int>(ValueListComparer.Instance);
-        var states = new List<BlockState>();
-
-        foreach (var combination in CartesianProduct(valuesPerProperty))
+        var propertyCount = propertyKeys.Length;
+        var counts = new int[propertyCount];
+        var strides = new int[propertyCount];
+        var total = 1;
+        for (var i = propertyCount - 1; i >= 0; i--)
         {
-            var values = combination.ToList();
-            var state = BlockStateRegistry.Register(owner, propertyKeys, values.ToArray());
-            statesByValues[new ValueList(values)] = state.Id;
-            states.Add(state);
+            var count = propertyKeys[i].PossibleValuesAsObjects.Count;
+            counts[i] = count;
+            strides[i] = total;
+            total *= count;
         }
 
-        //Build the neighbors for each state using int indexes to avoid BlockState references
-        foreach (var (values, stateId) in statesByValues)
+        var states = new List<BlockState>(total);
+        //BlockStateData keeps the value array, so every state still needs its own instance
+        for (var index = 0; index < total; index++)
         {
-            var neighbors = new int[propertyKeys.Length][];
-            for (var i = 0; i < propertyKeys.Length; i++)
+            var values = new object?[propertyCount];
+            for (var i = 0; i < propertyCount; i++)
+                values[i] = propertyKeys[i].PossibleValuesAsObjects[(index / strides[i]) % counts[i]];
+            states.Add(BlockStateRegistry.Register(owner, propertyKeys, values));
+        }
+
+        for (var index = 0; index < total; index++)
+        {
+            var neighbors = new int[propertyCount][];
+            for (var i = 0; i < propertyCount; i++)
             {
-                var propValues = propertyKeys[i].PossibleValuesAsObjects;
-                neighbors[i] = new int[propValues.Count];
-                for (var j = 0; j < propValues.Count; j++)
-                {
-                    var newValues = values.Values.ToList();
-                    newValues[i] = propValues[j];
-                    neighbors[i][j] = statesByValues[new ValueList(newValues)];
-                }
+                var current = (index / strides[i]) % counts[i];
+                var baseIndex = index - current * strides[i];
+                var values = new int[counts[i]];
+                for (var j = 0; j < counts[i]; j++)
+                    values[j] = states[baseIndex + j * strides[i]].Id;
+                neighbors[i] = values;
             }
-            BlockStateRegistry.InitializeNeighbors(stateId, neighbors);
+            BlockStateRegistry.InitializeNeighbors(states[index].Id, neighbors);
         }
         return states;
-    }
-
-    //Cartesian product enumeration
-    private static IEnumerable<IEnumerable<object>> CartesianProduct(IReadOnlyList<IReadOnlyList<object>> sequences)
-    {
-        var result = new List<List<object>> { new() };
-        foreach (var sequence in sequences)
-        {
-            var next = new List<List<object>>();
-            foreach (var existing in result)
-                foreach (var item in sequence)
-                {
-                    var copy = new List<object>(existing) { item };
-                    next.Add(copy);
-                }
-            result = next;
-        }
-        return result;
     }
 
     public Block Owner => _owner;
@@ -99,39 +90,6 @@ public sealed class BlockStateDefinition
 
     public override string ToString()
         => $"BlockStateDefinition(owner={_owner}, properties=[{string.Join(",", _propertiesByName.Values.Select(p => p.Name))}])";
-
-    //Value list wrapper used as a dictionary key
-    private sealed class ValueList : IEquatable<ValueList>
-    {
-        public IReadOnlyList<object> Values { get; }
-        private readonly int _hash;
-
-        public ValueList(IReadOnlyList<object> values)
-        {
-            Values = values;
-            var hash = new HashCode();
-            foreach (var v in values) hash.Add(v);
-            _hash = hash.ToHashCode();
-        }
-
-        public bool Equals(ValueList? other)
-        {
-            if (other is null || other.Values.Count != Values.Count) return false;
-            for (var i = 0; i < Values.Count; i++)
-                if (!Equals(Values[i], other.Values[i])) return false;
-            return true;
-        }
-
-        public override bool Equals(object? obj) => obj is ValueList vl && Equals(vl);
-        public override int GetHashCode() => _hash;
-    }
-
-    private sealed class ValueListComparer : IEqualityComparer<ValueList>
-    {
-        public static readonly ValueListComparer Instance = new();
-        public bool Equals(ValueList? x, ValueList? y) => x?.Equals(y) ?? y is null;
-        public int GetHashCode(ValueList obj) => obj.GetHashCode();
-    }
 
     //Builder, maps to vanilla StateDefinition.Builder
     public class Builder

@@ -109,8 +109,7 @@ public static class HolderSetCodecs
 }
 
 //HolderRefCodec single-element registry reference codec, the string form of vanilla RegistryFileCodec
-//The element must already be in the registry; an unregistered one errors out and is retried by the loader
-//It cannot fall back to an unbound Reference: Register only finds an existing holder in _byKey and never reuses a detached instance, so the reference would break permanently
+//During data loading a forward reference resolves to the standalone holder created for that element file, matching vanilla createRegistrationLookup
 internal sealed class HolderRefCodec<T> : ScalarCodec<Holder<T>> where T : class
 {
     private readonly Registry<T> _registry;
@@ -125,10 +124,19 @@ internal sealed class HolderRefCodec<T> : ScalarCodec<Holder<T>> where T : class
         var id = Identifier.TryParse(text.GetOrThrow());
         if (id is null)
             return DataResult<Holder<T>>.Error(() => $"Invalid identifier: {text.GetOrThrow()}");
-        var holder = _registry.Get(id.Value);
+        var holder = ResolveHolder(ops, id.Value);
         return holder is null
-            ? DataResult<Holder<T>>.Error(() => $"Registry {_registry.Key.Identifier} does not have {id} yet")
+            ? DataResult<Holder<T>>.Error(() => $"Registry {_registry.Key.Identifier} does not have {id}")
             : DataResult<Holder<T>>.Success(holder);
+    }
+
+    //ResolveHolder prefers the registry carried by RegistryOps so a forward reference finds its loader placeholder
+    //Only reads the key index; concurrent decoding must not create holders, a missing one is reported as an error
+    private Holder<T>? ResolveHolder<U>(DynamicOps<U> ops, Identifier id)
+    {
+        if (ops is RegistryOps<U> registryOps && registryOps.GetRegistry(_registry.Key) is { } registry)
+            return registry.GetHolder(id);
+        return _registry.GetHolder(id) ?? _registry.Get(id);
     }
 
     public override DataResult<U> EncodeStart<U>(DynamicOps<U> ops, Holder<T> value)
@@ -152,7 +160,7 @@ internal sealed class HolderSetCodec<T> : ScalarCodec<HolderSet<T>> where T : cl
     {
         var text = ops.GetStringValue(input);
         if (text.Result().IsPresent)
-            return ParseOne(text.GetOrThrow());
+            return ParseOne(ops, text.GetOrThrow());
         var stream = ops.GetStream(input);
         if (!stream.Result().IsPresent)
             return DataResult<HolderSet<T>>.Error(() => "HolderSet requires a string or a list of strings");
@@ -162,13 +170,17 @@ internal sealed class HolderSetCodec<T> : ScalarCodec<HolderSet<T>> where T : cl
             var elementText = ops.GetStringValue(element);
             if (!elementText.Result().IsPresent)
                 return DataResult<HolderSet<T>>.Error(() => "HolderSet element must be a string");
-            holders.Add(Resolve(elementText.GetOrThrow()));
+            var holder = Resolve(ops, elementText.GetOrThrow());
+            if (holder is null)
+                return DataResult<HolderSet<T>>.Error(
+                    () => $"Registry {_registry.Key.Identifier} does not have {elementText.GetOrThrow()}");
+            holders.Add(holder);
         }
         return DataResult<HolderSet<T>>.Success(new DirectHolderSet<T>(holders));
     }
 
     //ParseOne single-string form; a # prefix decodes to a tag set, otherwise to a single-element direct set
-    private DataResult<HolderSet<T>> ParseOne(string text)
+    private DataResult<HolderSet<T>> ParseOne<U>(DynamicOps<U> ops, string text)
     {
         if (text.StartsWith('#'))
         {
@@ -179,14 +191,21 @@ internal sealed class HolderSetCodec<T> : ScalarCodec<HolderSet<T>> where T : cl
             HolderSet<T> set = _registry.GetOrCreate(tag);
             return DataResult<HolderSet<T>>.Success(set);
         }
-        return DataResult<HolderSet<T>>.Success(new DirectHolderSet<T>(new[] { Resolve(text) }));
+        var holder = Resolve(ops, text);
+        return holder is null
+            ? DataResult<HolderSet<T>>.Error(() => $"Registry {_registry.Key.Identifier} does not have {text}")
+            : DataResult<HolderSet<T>>.Success(new DirectHolderSet<T>(new[] { holder }));
     }
 
-    //Resolve gets a registered Holder by registry name; a missing entry degrades to an unbound Reference keeping the registry name
-    private Holder<T> Resolve(string text)
+    //Resolve reads an existing holder during data loading, a pure read that concurrent decoding can do without locks
+    //Outside RegistryOps it keeps the detached fallback so runtime decoding of a missing element never writes a frozen registry
+    private Holder<T>? Resolve<U>(DynamicOps<U> ops, string text)
     {
         var id = Identifier.Parse(text);
-        return _registry.Get(id)
+        if (ops is RegistryOps<U> registryOps && registryOps.GetRegistry(_registry.Key) is { } registry)
+            return registry.GetHolder(id);
+        return _registry.GetHolder(id)
+            ?? _registry.Get(id)
             ?? Reference<T>.CreateStandAlone((HolderOwner<T>)_registry, ResourceKey<T>.Create(_registry.Key, id));
     }
 

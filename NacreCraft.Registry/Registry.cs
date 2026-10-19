@@ -47,6 +47,15 @@ public interface Registry<T> : IdMap<T>, HolderLookup<T> where T : class
     //Look up a Holder by registry name; returns null if not found
     Reference<T>? Get(Identifier id);
 
+    //GetOrCreateHolder returns the standalone Holder for id, creating it when absent, maps to vanilla getOrCreateHolderOrThrow
+    //Data loading resolves forward references through it; Register later reuses the same Holder and binds the value
+    Reference<T> GetOrCreateHolder(Identifier id);
+
+    //GetHolder looks up an existing holder by Identifier without creating one
+    //The key index also holds the placeholders created for every element file, so decoding can resolve a forward reference
+    //through a pure read; Get(Identifier) only sees registered elements because it indexes by location
+    Reference<T>? GetHolder(Identifier id);
+
     //Wrap a value as a Holder; returns Reference if registered, otherwise Direct
     Holder<T> WrapAsHolder(T value);
 

@@ -2,6 +2,8 @@ using NacreCraft.Network.Protocol.Cookie;
 using NacreCraft.Network.Protocol.Login;
 using NacreCraft.Logging;
 using NacreCraft.Network;
+using NacreCraft.Game.Server.Progress;
+using NacreCraft.Storage;
 
 namespace NacreCraft.Network.Protocol.Configuration;
 
@@ -15,8 +17,8 @@ public sealed class ServerConfigurationPacketListenerImpl : ServerConfigurationP
     private readonly Connection _connection;
     private readonly ServerConfigurationContext _context;
     private readonly GameProfile _profile;
-    //Spawn preload tasks, maps to chunkLoadFuture in vanilla PrepareSpawnTask
-    private Task[]? _spawnChunkTasks;
+    //Spawn preload submitted for this connection, maps to chunkLoadFuture and ChunkLoadCounter in vanilla PrepareSpawnTask
+    private SpawnChunkPreload? _spawnPreload;
 
     public ServerConfigurationPacketListenerImpl(Connection connection, GameProfile profile, ServerConfigurationContext context)
     {
@@ -42,8 +44,8 @@ public sealed class ServerConfigurationPacketListenerImpl : ServerConfigurationP
         try
         {
             _context.SendSynchronizedRegistries(_connection);
-            _spawnChunkTasks = _context.PrepareSpawnChunks();
-            Log.Debug($"HandleSelectKnownPacks sent registry_data and submitted spawn preload for {_spawnChunkTasks.Length} chunks");
+            _spawnPreload = _context.PrepareSpawnChunks();
+            Log.Debug($"HandleSelectKnownPacks sent registry_data and submitted spawn preload for {_spawnPreload.Value.Tasks.Length} chunks");
         }
         catch (Exception e)
         {
@@ -56,14 +58,17 @@ public sealed class ServerConfigurationPacketListenerImpl : ServerConfigurationP
     //A failed load is also released, the play phase ChunkSender drops it by IsChunkFailed
     public void TickListener()
     {
-        if (_spawnChunkTasks is null) return;
+        if (_spawnPreload is not { } preload) return;
         //Tickets time out after only 20 ticks, they must be renewed while loading is unfinished, maps to vanilla PrepareSpawnTask.Ready.keepAlive
         //Without renewal the chunks are reclaimed once the ticket expires and the player still sees holes when entering the world
         _context.KeepAliveSpawnTickets();
-        foreach (var task in _spawnChunkTasks)
+        _context.LoadListener.Update(LevelLoadListener.Stage.LoadPlayerChunks, preload.Counter.ReadyChunks, preload.Counter.TotalChunks);
+        if (preload.Counter.PendingChunks() > 0) return;
+        foreach (var task in preload.Tasks)
             if (!task.IsCompleted) return;
+        _context.LoadListener.Finish(LevelLoadListener.Stage.LoadPlayerChunks);
         _connection.Send(ClientboundFinishConfigurationPacket.Instance);
-        _spawnChunkTasks = null;
+        _spawnPreload = null;
         Log.Debug("Spawn preload finished, finish_configuration sent");
     }
 
@@ -100,9 +105,15 @@ public interface ServerConfigurationContext
     //SendSynchronizedRegistries sends registry_data for all SYNCHRONIZED_REGISTRIES
     void SendSynchronizedRegistries(Connection connection);
 
-    //PrepareSpawnChunks submits chunk loading around the spawn point and returns the task list, maps to the PLAYER_SPAWN ticket in vanilla PrepareSpawnTask
-    Task[] PrepareSpawnChunks();
+    //PrepareSpawnChunks submits chunk loading around the spawn point, maps to the PLAYER_SPAWN ticket in vanilla PrepareSpawnTask
+    SpawnChunkPreload PrepareSpawnChunks();
 
     //KeepAliveSpawnTickets renews the spawn preload tickets, maps to vanilla PrepareSpawnTask.Ready.keepAlive
     void KeepAliveSpawnTickets();
+
+    //LoadListener the level loading progress listener, maps to vanilla PrepareSpawnTask.loadListener
+    LevelLoadListener LoadListener { get; }
 }
+
+//SpawnChunkPreload the result of one spawn preload, each configuration connection holds its own
+public readonly record struct SpawnChunkPreload(Task[] Tasks, ChunkLoadCounter Counter);

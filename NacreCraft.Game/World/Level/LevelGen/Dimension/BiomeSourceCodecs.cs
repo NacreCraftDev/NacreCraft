@@ -53,9 +53,14 @@ public static class BiomeSourceCodecs
         if (presetId is null)
             return DataResult<BiomeSource>.Error(() => $"invalid parameter list preset id {presetText}");
         //The parameter list must already be loaded by data; if missing, the pack lacks worldgen/multi_noise_biome_source_parameter_list
-        if (ParameterListRegistry(ops)?.GetValue(presetId.Value) is not MultiNoiseBiomeSourceParameterList parameterList)
-            return DataResult<BiomeSource>.Error(() => $"parameter list preset {presetId} not found");
-        return DataResult<BiomeSource>.Success(new MultiNoiseBiomeSource(parameterList));
+        var registry = ParameterListRegistry(ops);
+        if (registry is null)
+            return DataResult<BiomeSource>.Error(() => "parameter list registry is missing");
+        //A pure read of the key index; decoding is concurrent and must not create holders
+        var holder = registry.GetHolder(presetId.Value);
+        return holder is null
+            ? DataResult<BiomeSource>.Error(() => $"parameter list preset {presetId} not found")
+            : DataResult<BiomeSource>.Success(new MultiNoiseBiomeSource(holder));
     }
 
     //ParameterListRegistry prefer the registry carried by RegistryOps; fall back to the built-in one for plain ops

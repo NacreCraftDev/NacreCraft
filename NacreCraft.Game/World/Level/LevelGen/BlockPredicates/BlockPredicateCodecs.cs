@@ -130,11 +130,12 @@ internal sealed class RegistryHolderSetCodec<T> : ScalarCodec<HolderSet<T>> wher
         return DataResult<HolderSet<T>>.Success(new DirectHolderSet<T>(new[] { Resolve(text) }));
     }
 
-    //Resolve look up a registered Holder by name; an unregistered one degrades to an unbound Reference
+    //Resolve look up a registered Holder by name; an unregistered one degrades to a detached Reference
+    //Reading keeps concurrent decoding free of registry writes, and the detached holder never touches shared state
     private Holder<T> Resolve(string text)
     {
         var id = Identifier.Parse(text);
-        return _registry.Get(id)
+        return _registry.GetHolder(id)
             ?? Reference<T>.CreateStandAlone((HolderOwner<T>)_registry, ResourceKey<T>.Create(_registry.Key, id));
     }
 

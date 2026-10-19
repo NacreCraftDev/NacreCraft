@@ -3,7 +3,8 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+    <!--Nullable analysis on the nested FlatMap lambdas of RecordCodecBuilder takes minutes, disabling it keeps the build fast; generic nullable annotations carry no value here-->
+    <Nullable>disable</Nullable>
   </PropertyGroup>
 
 </Project>

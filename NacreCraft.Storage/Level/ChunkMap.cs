@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using NacreCraft.Primitives;
+using NacreCraft.Registry;
 
 namespace NacreCraft.Storage;
 
@@ -46,6 +47,18 @@ public sealed class ChunkMap
 
     //TryRemoveHolder removes a holder and returns whether it existed
     public bool TryRemoveHolder(long packedPos) => _chunks.TryRemove(packedPos, out _);
+
+    //AllChunksWithAtLeastStatus holders whose latest status reached the given one, maps to vanilla allChunksWithAtLeastStatus
+    public IEnumerable<ChunkHolder> AllChunksWithAtLeastStatus(ChunkStatus status)
+    {
+        foreach (var holder in _chunks.Values)
+            if (holder.Status.IsOrAfter(status))
+                yield return holder;
+    }
+
+    //GetLatestStatus latest status of one chunk, null when no holder exists, maps to vanilla getLatestStatus
+    public ChunkStatus? GetLatestStatus(long packedPos)
+        => _chunks.TryGetValue(packedPos, out var holder) ? holder.Status : null;
 
     //ClearHolders clears all holders
     public void ClearHolders() => _chunks.Clear();
