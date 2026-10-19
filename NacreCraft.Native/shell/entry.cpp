@@ -19,6 +19,14 @@
 
 #include "com_base.h"
 
+//Wide literals have to match the platform's WCHAR: wchar_t is two bytes on Windows and four elsewhere, while the
+//coreclr PAL spells WCHAR as char16_t outside Windows
+#ifdef _WIN32
+#define NC_WIDE(text) L##text
+#else
+#define NC_WIDE(text) u##text
+#endif
+
 //The CLSID the CORECLR_PROFILER variable must carry
 //ProfilerRelaunch writes the same value on the managed side and the two have to stay in step
 static const GUID ClsidNacreCraftNative = {
@@ -157,9 +165,9 @@ static const unsigned int IlCallSize = 5;
 //call, so once the stack is short it keeps firing while the exception is unwound and handled, and the process ends up
 //dying on its way to reporting the problem; the kernel entry wraps it with a quiet period instead
 static const unsigned char StackCheckSignature[] = {0x00, 0x00, 0x01};
-static const wchar_t StackCheckTypeName[] = L"NacreCraft.Util.NativeStackGuard";
-static const wchar_t StackCheckMethodName[] = L"EnsureStack";
-static const wchar_t StackCheckAssemblyName[] = L"NacreCraft.Util";
+static const WCHAR StackCheckTypeName[] = NC_WIDE("NacreCraft.Util.NativeStackGuard");
+static const WCHAR StackCheckMethodName[] = NC_WIDE("EnsureStack");
+static const WCHAR StackCheckAssemblyName[] = NC_WIDE("NacreCraft.Util");
 
 static const IID IidMetaDataAssemblyEmit = {
     0x211EF15B, 0x5317, 0x4438, {0xB1, 0x96, 0xDE, 0xC8, 0x7B, 0x88, 0x76, 0x93}};
@@ -232,7 +240,7 @@ static mdMemberRef FindOrCreateStackCheckRef(ModuleID moduleId, IMetaDataEmit* e
 }
 
 //The prefix every assembly of this ecosystem carries
-static const wchar_t EcosystemNamePrefix[] = L"NacreCraft";
+static const WCHAR EcosystemNamePrefix[] = NC_WIDE("NacreCraft");
 static const size_t EcosystemNamePrefixLength = 8;
 
 //How much room is given to one referenced assembly name while the reference table is walked
@@ -279,7 +287,7 @@ static bool HasEcosystemReference(ModuleID moduleId)
             {
                 for (ULONG i = 0; i < count; i++)
                 {
-                    wchar_t refName[AssemblyRefNameCapacity];
+                    WCHAR refName[AssemblyRefNameCapacity];
                     ULONG refNameLength = 0;
                     if (FAILED(assemblyImport->GetAssemblyRefProps(
                             refs[i], nullptr, nullptr, refName, AssemblyRefNameCapacity, &refNameLength,
@@ -316,7 +324,7 @@ static bool HasEcosystemReference(ModuleID moduleId)
 //which leaves the module with no path at all, while its assembly name is present however it was loaded
 static bool IsRewritableModule(AssemblyID assemblyId)
 {
-    wchar_t assemblyName[512];
+    WCHAR assemblyName[512];
     ULONG nameLength = 0;
     AppDomainID appDomainId = 0;
     ModuleID moduleId = 0;
@@ -327,7 +335,7 @@ static bool IsRewritableModule(AssemblyID assemblyId)
     //Assembly names are ASCII; anything else is written as a placeholder rather than mistranslated
     char simpleName[256];
     int length = 0;
-    for (const wchar_t* cursor = assemblyName; *cursor != L'\0' && length < 255; cursor++)
+    for (const WCHAR* cursor = assemblyName; *cursor != NC_WIDE('\0') && length < 255; cursor++)
     {
         simpleName[length++] = (*cursor < 128) ? static_cast<char>(*cursor) : '?';
     }
