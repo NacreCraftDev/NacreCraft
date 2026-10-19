@@ -294,7 +294,12 @@ static bool HasEcosystemReference(ModuleID moduleId)
                             nullptr, nullptr, nullptr, nullptr)))
                         continue;
 
-                    if (wcsncmp(refName, EcosystemNamePrefix, EcosystemNamePrefixLength) == 0)
+                    //Compared by hand: wcsncmp takes wchar_t, while WCHAR is char16_t outside Windows
+                    bool samePrefix = refNameLength >= EcosystemNamePrefixLength;
+                    for (size_t k = 0; samePrefix && k < EcosystemNamePrefixLength; k++)
+                        samePrefix = refName[k] == EcosystemNamePrefix[k];
+
+                    if (samePrefix)
                     {
                         referenced = true;
                         break;
