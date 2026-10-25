@@ -13,9 +13,13 @@ public sealed record ServerboundSetCommandMinecartPacket(int Entity, string Comm
     private sealed class SetCommandMinecartCodec : StreamCodec<FriendlyByteBuf, ServerboundSetCommandMinecartPacket>
     {
         public ServerboundSetCommandMinecartPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => new(buf.ReadVarInt(), buf.ReadString(), buf.ReadBoolean());
 
         public void Encode(FriendlyByteBuf buf, ServerboundSetCommandMinecartPacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            buf.WriteVarInt(value.Entity);
+            buf.WriteString(value.Command);
+            buf.WriteBoolean(value.TrackOutput);
+        }
     }
 }

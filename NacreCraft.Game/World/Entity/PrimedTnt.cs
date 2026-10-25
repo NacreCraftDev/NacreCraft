@@ -1,3 +1,5 @@
+using System.Globalization;
+using NacreCraft.Logging;
 using NacreCraft.Primitives;
 using NacreCraft.Registry;
 using NacreCraft.Util.Random;
@@ -59,6 +61,9 @@ public sealed class PrimedTnt : NacreCraft.Registry.Entity
     //Owner the entity credited for the ignition, maps to vanilla getOwner
     public NacreCraft.Registry.Entity? Owner { get; set; }
 
+    //_lastTraceTick throttles the motion trace to one line per 20 ticks per TNT
+    private int _lastTraceTick = int.MinValue;
+
     //Tick falls and counts the fuse down, then goes off, maps to vanilla PrimedTnt.tick
     //The portal and fluid interaction branches are skipped: this project has neither
     public override void Tick()
@@ -72,11 +77,33 @@ public sealed class PrimedTnt : NacreCraft.Registry.Entity
             Velocity = new Vec3(Velocity.X * GroundHorizontalFactor, Velocity.Y * BounceFactor,
                 Velocity.Z * GroundHorizontalFactor);
 
+        TraceMotion();
         Fuse--;
         if (Fuse > 0) return;
         Discard();
         Explode();
     }
+
+    //TraceMotion prints only suspicious TNT motion, at most once per 20 ticks
+    //Piston/slime pushing, entering a block and standing with residual speed are the cases that desync client prediction
+    private void TraceMotion()
+    {
+        var speed = Velocity.LengthSqr();
+        var moved = Pos.DistanceToSqr(PreviousPos);
+        var suspicious = speed > 1.0 || moved > 1.0 || (OnGround && speed > 0.05);
+        if (!suspicious || TickCount - _lastTraceTick < 20) return;
+        _lastTraceTick = TickCount;
+        var blockPos = new BlockPos((int)Math.Floor(Pos.X), (int)Math.Floor(Pos.Y), (int)Math.Floor(Pos.Z));
+        var block = (Level as NacreCraft.Storage.ServerLevel)?.GetBlockState(blockPos);
+        var blockName = block is { } state && !state.Owner.IsAir ? state.Owner.Id.Path : "air";
+        Log.Info($"[tnt-trace] id={EntityId} tick={TickCount} pos={Format(Pos)} prev={Format(PreviousPos)} "
+                 + $"vel={Format(Velocity)} onGround={OnGround} hcol={HorizontalCollision} "
+                 + $"vcol={VerticalCollision} block={blockName} fuse={Fuse}");
+    }
+
+    private static string Format(Vec3 value)
+        => string.Format(CultureInfo.InvariantCulture, "{0:0.###},{1:0.###},{2:0.###}",
+            value.X, value.Y, value.Z);
 
     //Explode runs the blast, maps to vanilla PrimedTnt.explode
     //The blast is skipped outright when tnt_explodes is off, which is what lets a server disable TNT without a restart

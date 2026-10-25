@@ -456,6 +456,26 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
         _defaultGameType = GameType.ByName(settings.Gamemode) ?? GameType.Survival;
         _levelData.GameTypeId = DefaultGameType.Id;
         WorldSeed = worldSeed ?? 0;
+        //Command blocks dispatch through the server command manager; injected once so the block entity never needs a server reference
+        NacreCraft.Game.World.Level.Block.CommandBlockEntity.Executor = ExecuteCommandBlock;
+        //Structure blocks write saved templates under the world's generated folder, maps to vanilla getStructureManager
+        NacreCraft.Game.Bootstrap.GameBootstrap.StructureTemplates?.SetSaveDirectory(
+            Path.Combine(_levelAccess.WorldDir, "generated"));
+    }
+
+    //ExecuteCommandBlock runs a command block command at its block position, maps to vanilla CommandBlockEntity.execute
+    //The captured output is stored by the block entity when track_output is on; the console line follows command_block_output
+    private (int Success, string Output) ExecuteCommandBlock(ServerLevel level, BlockPos pos, string command)
+    {
+        using var writer = new StringWriter();
+        var source = NacreCraft.Game.Commands.ServerCommandSource.CommandBlock(this, level,
+            new Vec3(pos.X + 0.5, pos.Y + 0.5, pos.Z + 0.5), writer);
+        var success = Commands.Execute(source, command);
+        var output = writer.ToString().TrimEnd();
+        if (output.Length > 0
+            && GameRules.GetInt(NacreCraft.Game.World.Level.GameRules.CommandBlockOutput) != 0)
+            Log.Info($"[CommandBlock] {pos}: {output}");
+        return (success, output);
     }
 
     //BuildServerStatus builds the StatusRequest response data

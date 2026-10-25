@@ -12,10 +12,34 @@ public sealed record ClientboundSetScorePacket(string Owner, string ObjectiveNam
 
     private sealed class SetScoreCodec : StreamCodec<FriendlyByteBuf, ClientboundSetScorePacket>
     {
+        //Vanilla order: owner, objective, score, optional display component, optional number format
         public ClientboundSetScorePacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            var owner = buf.ReadString();
+            var objective = buf.ReadString();
+            var score = buf.ReadVarInt();
+            var display = buf.ReadBoolean() ? ComponentSerialization.StreamCodec.Decode(buf) : null;
+            object? numberFormat = null;
+            if (buf.ReadBoolean())
+            {
+                var id = buf.ReadVarInt();
+                if (id == 1) buf.ReadNbt();
+                else if (id == 2) ComponentSerialization.StreamCodec.Decode(buf);
+                numberFormat = id;
+            }
+            return new ClientboundSetScorePacket(owner, objective, score, display!, numberFormat!);
+        }
 
         public void Encode(FriendlyByteBuf buf, ClientboundSetScorePacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            buf.WriteString(value.Owner);
+            buf.WriteString(value.ObjectiveName);
+            buf.WriteVarInt(value.Score);
+            buf.WriteBoolean(value.Display is Component);
+            if (value.Display is Component display)
+                ComponentSerialization.StreamCodec.Encode(buf, display);
+            //The number format payload is kept as its registry id only, so it is not written back
+            buf.WriteBoolean(false);
+        }
     }
 }

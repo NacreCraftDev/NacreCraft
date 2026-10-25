@@ -28,6 +28,19 @@ public sealed class SurfaceSystem
     private readonly NormalNoise? _surfaceNoise;
     private readonly NormalNoise? _surfaceSecondaryNoise;
     private readonly NormalNoise? _badlandsPillarNoise;
+
+    //Temporary surface profiling, reported every fifty chunk builds
+    [ThreadStatic] private static long[]? _profLocal;
+    private static long _profBiomeTicks;
+    private static long _profUpdateTicks;
+    private static long _profRuleTicks;
+    private static long _profStateTicks;
+    private static long _profBlocks;
+    private static long _profGetBiomeTicks;
+    private static long _profGetBiomeCalls;
+    private static long _profNoiseTicks;
+    private static long _profNoiseCalls;
+    private static int _profBuilds;
     private readonly NormalNoise? _badlandsPillarRoofNoise;
     private readonly NormalNoise? _badlandsSurfaceNoise;
     private readonly NormalNoise? _icebergPillarNoise;
@@ -113,6 +126,7 @@ public sealed class SurfaceSystem
         var minBlockX = chunk.Pos.X * 16;
         var minBlockZ = chunk.Pos.Z * 16;
         var context = new SurfaceRules.Context(this, chunk, noiseChunk, biomeGetter, minY, height);
+        var local = _profLocal ??= new long[9];
         var endY = minY;
 
         for (var x = 0; x < 16; x++)
@@ -122,21 +136,27 @@ public sealed class SurfaceSystem
                 var blockX = minBlockX + x;
                 var blockZ = minBlockZ + z;
                 var startingHeight = chunk.GetHeight(HeightmapRegistry.Types.WorldSurfaceWg, x, z) + 1;
+                var biomeStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 var surfaceBiome = biomeGetter(blockX, useLegacyRandomSource ? 0 : startingHeight, blockZ);
+                local[0] += System.Diagnostics.Stopwatch.GetTimestamp() - biomeStart;
                 var surfaceBiomeId = surfaceBiome.Id;
                 if (surfaceBiomeId == ErodedBadlandsId)
                     ErodedBadlandsExtension(chunk, blockX, blockZ, startingHeight, endY);
 
                 //The badlands extension mutates blocks so the height must be re-read
                 var columnHeight = chunk.GetHeight(HeightmapRegistry.Types.WorldSurfaceWg, x, z) + 1;
+                var updateStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 context.UpdateXZ(blockX, blockZ);
+                local[1] += System.Diagnostics.Stopwatch.GetTimestamp() - updateStart;
                 var stoneAboveDepth = 0;
                 var waterHeight = int.MinValue;
                 var nextCeilingStoneY = int.MaxValue;
 
                 for (var y = columnHeight; y >= endY; y--)
                 {
+                    var stateStart = System.Diagnostics.Stopwatch.GetTimestamp();
                     var old = chunk.GetBlockState(blockX, y, blockZ);
+                    local[2] += System.Diagnostics.Stopwatch.GetTimestamp() - stateStart;
                     if (IsAir(old))
                     {
                         stoneAboveDepth = 0;
@@ -163,7 +183,10 @@ public sealed class SurfaceSystem
                     var stoneBelowDepth = y - nextCeilingStoneY + 1;
                     context.UpdateY(stoneAboveDepth, stoneBelowDepth, waterHeight, y);
                     if (old != _defaultBlock) continue;
+                    var ruleStart = System.Diagnostics.Stopwatch.GetTimestamp();
                     var replaced = ruleSource.Apply(context, old);
+                    local[3] += System.Diagnostics.Stopwatch.GetTimestamp() - ruleStart;
+                    local[4]++;
                     if (replaced is not null) SetBlock(chunk, blockX, y, blockZ, replaced.Value);
                 }
 
@@ -172,6 +195,46 @@ public sealed class SurfaceSystem
                         startingHeight, endY);
             }
         }
+        var ruleProf = SurfaceRules.Context.Profiling;
+        if (ruleProf is not null)
+        {
+            local[5] += ruleProf[0];
+            local[6] += ruleProf[1];
+            local[7] += ruleProf[2];
+            local[8] += ruleProf[3];
+            Array.Clear(ruleProf);
+        }
+        Interlocked.Add(ref _profBiomeTicks, local[0]);
+        Interlocked.Add(ref _profUpdateTicks, local[1]);
+        Interlocked.Add(ref _profStateTicks, local[2]);
+        Interlocked.Add(ref _profRuleTicks, local[3]);
+        Interlocked.Add(ref _profBlocks, local[4]);
+        Interlocked.Add(ref _profGetBiomeTicks, local[5]);
+        Interlocked.Add(ref _profGetBiomeCalls, local[6]);
+        Interlocked.Add(ref _profNoiseTicks, local[7]);
+        Interlocked.Add(ref _profNoiseCalls, local[8]);
+        Array.Clear(local);
+        if (Interlocked.Increment(ref _profBuilds) % 50 == 0) ReportSurfaceProfile();
+    }
+
+    //Temporary: reports the average wall time split of the last fifty chunk builds
+    private static void ReportSurfaceProfile()
+    {
+        var toMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        var biome = Interlocked.Exchange(ref _profBiomeTicks, 0);
+        var update = Interlocked.Exchange(ref _profUpdateTicks, 0);
+        var rule = Interlocked.Exchange(ref _profRuleTicks, 0);
+        var state = Interlocked.Exchange(ref _profStateTicks, 0);
+        var blocks = Interlocked.Exchange(ref _profBlocks, 0);
+        var getBiome = Interlocked.Exchange(ref _profGetBiomeTicks, 0);
+        var biomeCalls = Interlocked.Exchange(ref _profGetBiomeCalls, 0);
+        var noise = Interlocked.Exchange(ref _profNoiseTicks, 0);
+        var noiseCalls = Interlocked.Exchange(ref _profNoiseCalls, 0);
+        const int builds = 50;
+        NacreCraft.Logging.Log.Info($"[surface] per-chunk biome={(long)(biome * toMs / builds)}ms updateXZ={(long)(update * toMs / builds)}ms "
+            + $"state={(long)(state * toMs / builds)}ms rule={(long)(rule * toMs / builds)}ms blocks={blocks / builds} "
+            + $"getBiome={(long)(getBiome * toMs / builds)}ms/{biomeCalls / builds} "
+            + $"noise={(long)(noise * toMs / builds)}ms/{noiseCalls / builds}");
     }
 
     //TopMaterial recomputes a cell's top material, maps to vanilla topMaterial

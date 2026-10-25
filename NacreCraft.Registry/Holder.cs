@@ -37,10 +37,7 @@ public interface Holder<T> where T : class
 
     //Directly wrap a value
     static Holder<T> Direct(T value)
-    {
-        NacreCraft.Util.SiteCounters.CountHolderDirect(typeof(T).Name);
-        return new Direct<T>(value, DataComponentMap.Empty);
-    }
+        => new Direct<T>(value, DataComponentMap.Empty);
 
     //Directly wrap a value with components
     static Holder<T> Direct(T value, DataComponentMap components) => new Direct<T>(value, components);

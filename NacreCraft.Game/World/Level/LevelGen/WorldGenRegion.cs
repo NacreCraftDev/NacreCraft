@@ -2,6 +2,7 @@ using NacreCraft.Primitives;
 using NacreCraft.Registry.State;
 using NacreCraft.Storage;
 using NacreCraft.Storage.Chunk;
+using NacreCraft.Storage.Updates;
 
 namespace NacreCraft.Game.World.Level.LevelGen;
 
@@ -91,12 +92,23 @@ public sealed class WorldGenRegion : LevelHeightAccessor
 
     //SetBlockState sets a block state by world coordinate and returns the old state
     //Delegates to the chunk's section; returns default if the chunk is missing or out of range
+    //When wrapped around a loaded level and the chunk is already a LevelChunk, the write goes through ServerLevel.SetBlock
+    //so structure blocks and jigsaw generation land in the live world instead of a ProtoChunk
     public BlockState SetBlockState(int worldX, int worldY, int worldZ, BlockState state)
     {
         var chunkX = worldX >> 4;
         var chunkZ = worldZ >> 4;
         if (!EnsureCanWrite(chunkX, chunkZ)) return default;
-        if (GetChunk(chunkX, chunkZ) is not ProtoChunk proto) return default;
+        var chunk = GetChunk(chunkX, chunkZ);
+        if (_level is not null && chunk is not ProtoChunk)
+        {
+            if (worldY < _level.MinBuildHeight || worldY > _level.MaxBuildHeight - 1) return default;
+            var pos = new BlockPos(worldX, worldY, worldZ);
+            var previous = _level.GetBlockState(pos) ?? default;
+            _level.SetBlock(pos, state, UpdateFlags);
+            return previous;
+        }
+        if (chunk is not ProtoChunk proto) return default;
         //Out-of-range heights are dropped, matching the height check in vanilla WorldGenRegion.setBlock
         //Feature placement can produce Y outside the world height; without this guard GetOrCreateSection throws and blows up the whole chunk
         if (worldY < proto.MinSectionY * 16 || worldY > proto.MaxSectionY * 16 + 15) return default;
@@ -106,6 +118,10 @@ public sealed class WorldGenRegion : LevelHeightAccessor
         var localY = worldY & 0xF;
         return proto.SetBlockState(sectionY, localX, localY, localZ, state);
     }
+
+    //UpdateFlags the side-effect flags used when writing through a loaded level
+    //Structure placement turns off neighbor updates and drops but keeps the client sync
+    public int UpdateFlags { get; set; } = BlockUpdateFlags.All;
 
     //GetHeight returns the height of the given heightmap at that column, maps to vanilla getHeight
     //The heightmap placement modifier uses it to turn xz into y; falls back to the range floor when the chunk is outside the region

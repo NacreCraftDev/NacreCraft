@@ -20,7 +20,13 @@ public sealed class StructureTemplateManager
     //Wrapping in Lazy: a template is parsed only once even when requested concurrently, and failures are cached too
     private readonly ConcurrentDictionary<Identifier, Lazy<StructureTemplate?>> _cache = new();
 
+    //_saveDirectory the world's generated directory; structure blocks write <namespace>/structure/<path>.nbt under it
+    private string? _saveDirectory;
+
     public StructureTemplateManager(ResourceManager resources) => _resources = resources;
+
+    //SetSaveDirectory points template saving at the world's generated folder, injected once the world storage is ready
+    public void SetSaveDirectory(string? directory) => _saveDirectory = directory;
 
     //GetOrLoad returns the template for an id, or null when absent; the failure is cached to avoid rescanning resource packs
     public StructureTemplate? GetOrLoad(Identifier id)
@@ -28,6 +34,40 @@ public sealed class StructureTemplateManager
             static (key, self) => new Lazy<StructureTemplate?>(
                 () => self.Load(key), LazyThreadSafetyMode.ExecutionAndPublication),
             this).Value;
+
+    //GetOrCreate returns the cached template, building an empty one in memory when neither the cache nor the packs have it
+    //Structure block saving relies on this: the named template may not exist on disk yet
+    public StructureTemplate GetOrCreate(Identifier id)
+    {
+        if (GetOrLoad(id) is { } existing) return existing;
+        var created = new StructureTemplate();
+        _cache[id] = new Lazy<StructureTemplate?>(
+            () => created, LazyThreadSafetyMode.ExecutionAndPublication);
+        return created;
+    }
+
+    //Save writes a cached template to the generated directory, maps to vanilla StructureTemplateManager.save
+    public bool Save(Identifier id)
+    {
+        if (_saveDirectory is null) return false;
+        if (!_cache.TryGetValue(id, out var lazy) || lazy.Value is not { } template) return false;
+        var file = Path.Combine(_saveDirectory, id.Namespace, Directory, $"{id.Path}{Extension}");
+        try
+        {
+            var folder = Path.GetDirectoryName(file);
+            if (folder is not null) System.IO.Directory.CreateDirectory(folder);
+            NbtIo.WriteCompressed(template.Save(new CompoundTag()), file);
+            return true;
+        }
+        catch (Exception e)
+        {
+            Log.Warning($"Structure template {id} failed to save: {e.Message}");
+            return false;
+        }
+    }
+
+    //Remove drops a template from the cache, maps to vanilla StructureTemplateManager.remove
+    public void Remove(Identifier id) => _cache.TryRemove(id, out _);
 
     //Load builds the template path and reads the NBT
     private StructureTemplate? Load(Identifier id)

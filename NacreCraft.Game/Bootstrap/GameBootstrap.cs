@@ -196,6 +196,7 @@ public static class GameBootstrap
         foreach (var holder in BuiltInRegistries.STRUCTURE.ListElements())
         {
             if (holder.Value is JigsawStructure jigsaw) jigsaw.TemplateManager = manager;
+            else if (holder.Value is SimpleStructure simple) simple.TemplateManager = manager;
         }
         FossilFeature.TemplateManager = manager;
         TemplateFeature.TemplateManager = manager;

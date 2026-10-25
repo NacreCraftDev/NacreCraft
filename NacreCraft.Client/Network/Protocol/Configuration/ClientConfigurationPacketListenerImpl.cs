@@ -3,6 +3,7 @@ using NacreCraft.Network.Protocol.Cookie;
 //The configuration packet KnownPack and the registry KnownPack share a name; this file means the packet one
 using KnownPack = NacreCraft.Network.Protocol.Configuration.KnownPack;
 using NacreCraft.Game.Network.Protocol.Game;
+using NacreCraft.Client.Network.Protocol.Game;
 using NacreCraft.Logging;
 using NacreCraft.Network;
 
@@ -30,7 +31,7 @@ public sealed class ClientConfigurationPacketListenerImpl : ClientConfigurationP
         Log.Info("Configuration finished, sending FinishConfiguration and switching to Play phase");
         _connection.Send(ServerboundFinishConfigurationPacket.Instance);
         _connection.SetupInboundProtocol(GameProtocols.Clientbound, _gameListener);
-        _connection.SetupOutboundProtocol(GameProtocols.Serverbound);
+        _connection.SetupOutboundProtocol(ClientGameProtocols.Serverbound);
     }
 
     //HandleConfigurationFinished the server proactively sends the finish packet; aligns with vanilla flow, switching to Play on receipt

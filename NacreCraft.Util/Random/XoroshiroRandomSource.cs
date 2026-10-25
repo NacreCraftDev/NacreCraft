@@ -123,6 +123,15 @@ public sealed class XoroshiroRandomSource : RandomSource
             return new XoroshiroRandomSource(randomSeed, _seedHi);
         }
 
+        //NextFloatAt the first float at these coordinates without building a full random source
+        //Same value as At(x,y,z).NextFloat(): seed from the position then take the top 24 bits of the first draw
+        public float NextFloatAt(int x, int y, int z)
+        {
+            var positionalSeed = Mth.GetSeed(x, y, z) ^ _seedLo;
+            var generator = new Xoroshiro128PlusPlus(positionalSeed, _seedHi);
+            return (generator.NextLong() >>> 40) * FloatUnit;
+        }
+
         //fromHashOf derives a random source from a string hash, maps to vanilla fromHashOf(String)
         public RandomSource FromHashOf(string name)
         {

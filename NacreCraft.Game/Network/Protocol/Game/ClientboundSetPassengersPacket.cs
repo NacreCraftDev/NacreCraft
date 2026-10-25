@@ -1,8 +1,8 @@
 namespace NacreCraft.Game.Network.Protocol.Game;
 
 //ClientboundSetPassengersPacket set passengers packet, maps to vanilla ClientboundSetPassengersPacket
-//Field: Vehicle(int)
-public sealed record ClientboundSetPassengersPacket(int Vehicle) : Packet<ClientGamePacketListener>
+//Fields: Vehicle(int), Passengers(int[]); an empty array detaches every passenger
+public sealed record ClientboundSetPassengersPacket(int Vehicle, int[] Passengers) : Packet<ClientGamePacketListener>
 {
     public static StreamCodec<FriendlyByteBuf, ClientboundSetPassengersPacket> StreamCodec { get; } = new SetPassengersCodec();
 
@@ -12,10 +12,21 @@ public sealed record ClientboundSetPassengersPacket(int Vehicle) : Packet<Client
 
     private sealed class SetPassengersCodec : StreamCodec<FriendlyByteBuf, ClientboundSetPassengersPacket>
     {
+        //Vanilla order: VAR_INT vehicle, VAR_INT count, count VAR_INT passenger ids
         public ClientboundSetPassengersPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            var vehicle = buf.ReadVarInt();
+            var count = buf.ReadVarInt();
+            var passengers = new int[count];
+            for (var i = 0; i < count; i++) passengers[i] = buf.ReadVarInt();
+            return new ClientboundSetPassengersPacket(vehicle, passengers);
+        }
 
         public void Encode(FriendlyByteBuf buf, ClientboundSetPassengersPacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            buf.WriteVarInt(value.Vehicle);
+            buf.WriteVarInt(value.Passengers.Length);
+            foreach (var id in value.Passengers) buf.WriteVarInt(id);
+        }
     }
 }

@@ -37,6 +37,8 @@ public static class SurfaceRules
         private int _minSurfaceLevel;
         private bool _hasMinSurfaceLevel;
         private Biome? _biome;
+        //_biomeHolder the cached registry holder of _biome; biome conditions test tags per block and used to wrap the value every time
+        private Holder<Biome>? _biomeHolder;
 
         public int MinY { get; }
         public int Height { get; }
@@ -71,7 +73,7 @@ public static class SurfaceRules
             _hasMinSurfaceLevel = false;
         }
 
-        //UpdateY is called when switching blocks; the biome varies with y and is invalidated too
+        //UpdateY is called when switching blocks; the biome varies with y, matching vanilla invalidating it every block
         public void UpdateY(int stoneDepthAbove, int stoneDepthBelow, int waterHeight, int blockY)
         {
             BlockY = blockY;
@@ -79,6 +81,7 @@ public static class SurfaceRules
             StoneDepthBelow = stoneDepthBelow;
             StoneDepthAbove = stoneDepthAbove;
             _biome = null;
+            _biomeHolder = null;
         }
 
         //GetSurfaceSecondary lazily computes the secondary surface noise per column, maps to vanilla getSurfaceSecondary
@@ -119,10 +122,22 @@ public static class SurfaceRules
         //GetBiome is the biome at the current block, lazily fetched by y, maps to vanilla getBiome
         public Biome GetBiome()
         {
-            if (_biome is null)
-                _biome = _biomeGetter?.Invoke(BlockX, BlockY, BlockZ) ?? Biome.Plains;
+            if (_biome is not null) return _biome;
+            //Temporary: per-thread profile of biome lookups and noise sampling inside the rule tree
+            var start = System.Diagnostics.Stopwatch.GetTimestamp();
+            _biome = _biomeGetter?.Invoke(BlockX, BlockY, BlockZ) ?? Biome.Plains;
+            var prof = Profiling ??= new long[4];
+            prof[0] += System.Diagnostics.Stopwatch.GetTimestamp() - start;
+            prof[1]++;
             return _biome;
         }
+
+        //Temporary: thread local profiler slots shared with SurfaceSystem, [0]=biome ticks, [1]=biome calls, [2]=noise ticks, [3]=noise calls
+        [ThreadStatic] internal static long[]? Profiling;
+
+        //GetBiomeHolder is the registry holder of the current biome, computed once per block column instead of per condition test
+        public Holder<Biome> GetBiomeHolder()
+            => _biomeHolder ??= NacreCraft.Registry.BuiltInRegistries.BIOME.WrapAsHolder(GetBiome());
 
         public int GetSeaLevel() => _system.SeaLevel;
 
@@ -137,7 +152,12 @@ public static class SurfaceRules
                 sampler = new NoiseSampler(this, noise, is3d);
                 _samplers[noise] = sampler;
             }
-            return sampler.Value;
+            var start = System.Diagnostics.Stopwatch.GetTimestamp();
+            var value = sampler.Value;
+            var prof = Profiling ??= new long[4];
+            prof[2] += System.Diagnostics.Stopwatch.GetTimestamp() - start;
+            prof[3]++;
+            return value;
         }
 
         //GetRandomFactory gets the named positional random factory used by vertical_gradient to roll a probability
@@ -325,7 +345,8 @@ public static class SurfaceRules
             var probability = Mth.Map(y, trueAt, falseAt, 1.0, 0.0);
             var factory = context.GetRandomFactory(RandomName);
             if (factory is null) return probability >= 0.5;
-            return factory.At(context.BlockX, y, context.BlockZ).NextFloat() < probability;
+            //One float per block; the helper computes it without allocating a random source
+            return factory.NextFloatAt(context.BlockX, y, context.BlockZ) < probability;
         }
     }
 

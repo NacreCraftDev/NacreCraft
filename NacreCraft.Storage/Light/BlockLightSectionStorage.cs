@@ -32,6 +32,7 @@ public class BlockLightSectionStorage : LayerLightSectionStorage<BlockLightSecti
 
         private BlockDataLayerStorageMap(Dictionary<long, DataLayer> map) : base(map) { }
 
-        public override BlockDataLayerStorageMap Copy() => new(CopyEntries());
+        //Copy shares the backing map, maps to vanilla DataLayerStorageMap.copy
+        public override BlockDataLayerStorageMap Copy() => new(SharedEntries);
     }
 }

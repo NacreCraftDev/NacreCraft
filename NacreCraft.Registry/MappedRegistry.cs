@@ -184,7 +184,6 @@ public class MappedRegistry<T> : WritableRegistry<T>, HolderOwner<T> where T : c
     public Holder<T> WrapAsHolder(T value)
     {
         if (TryGetByValue(value, out var holder)) return holder!;
-        NacreCraft.Util.SiteCounters.CountMappedRegistryMiss();
         return Holder<T>.Direct(value);
     }
 

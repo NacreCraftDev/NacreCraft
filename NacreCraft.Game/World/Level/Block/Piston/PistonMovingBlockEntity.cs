@@ -1,4 +1,5 @@
 using NacreCraft.Game.World.Phys.Collision;
+using NacreCraft.Game.World.Entity;
 using NacreCraft.Logging;
 using NacreCraft.Nbt;
 using NacreCraft.Primitives;
@@ -230,6 +231,10 @@ public sealed class PistonMovingBlockEntity : BlockEntity
                 else if (axis == Axis.Y) dy = movement.StepY;
                 else if (axis == Axis.Z) dz = movement.StepZ;
                 entity.Velocity = new Vec3(dx, dy, dz);
+                //Slime bounce is the exact case a TNT entity gets a sudden velocity change, log it for the motion desync trace
+                if (entity is PrimedTnt tnt)
+                    Log.Info($"[tnt-piston] id={tnt.EntityId} pos={Format(tnt.Pos)} oldVel={Format(velocity)} "
+                             + $"newVel={Format(tnt.Velocity)} dir={movement}");
             }
             var delta = 0.0;
             foreach (var shapeAabb in shapeAabbs)
@@ -274,10 +279,17 @@ public sealed class PistonMovingBlockEntity : BlockEntity
     private static void MoveEntityByPiston(Direction pistonDirection, NacreCraft.Registry.Entity entity,
         double delta, Direction movement)
     {
+        if (entity is PrimedTnt tnt)
+            Log.Info($"[tnt-piston-move] id={tnt.EntityId} pos={Format(tnt.Pos)} vel={Format(tnt.Velocity)} "
+                     + $"delta={delta.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)} dir={movement}");
         Noclip.Value = pistonDirection;
         entity.Move(new Vec3(delta * movement.StepX, delta * movement.StepY, delta * movement.StepZ));
         Noclip.Value = null;
     }
+
+    private static string Format(Vec3 value)
+        => string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:0.###},{1:0.###},{2:0.###}",
+            value.X, value.Y, value.Z);
 
     //GetMovement how much the entity must move to get out of the given box, maps to vanilla getMovement
     private static double GetMovement(AABB boxToBeOutsideOf, Direction movement, AABB box)

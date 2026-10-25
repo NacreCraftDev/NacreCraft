@@ -14,14 +14,20 @@ public sealed class BiomeManager
     private readonly ChunkAccess _chunk;
     //_fallback full sampling when out of bounds; arguments are the block coordinates of the quart, matching those written into the palette during BIOMES
     private readonly Func<int, int, int, Biome> _fallback;
+    //_region neighbouring chunks around the generating one; their palettes answer edge lookups without a climate sample
+    private readonly WorldGenRegion? _region;
+    //_borderCache memoises out-of-chunk quart lookups; a climate sample depends only on the quart, so repeats are pure waste
+    private readonly Dictionary<(int X, int Y, int Z), Biome> _borderCache = new();
     private readonly long _biomeZoomSeed;
     private readonly int _minQuartY;
     private readonly int _maxQuartY;
 
-    public BiomeManager(ChunkAccess chunk, Func<int, int, int, Biome> fallback, long seed)
+    public BiomeManager(ChunkAccess chunk, Func<int, int, int, Biome> fallback, long seed,
+        WorldGenRegion? region = null)
     {
         _chunk = chunk;
         _fallback = fallback;
+        _region = region;
         _biomeZoomSeed = ObfuscateSeed(seed);
         _minQuartY = chunk.MinSectionY * 4;
         _maxQuartY = (chunk.MinSectionY + chunk.SectionsCount) * 4;
@@ -85,7 +91,15 @@ public sealed class BiomeManager
         if (quartX >> 2 == _chunk.Pos.X && quartZ >> 2 == _chunk.Pos.Z
             && quartY >= _minQuartY && quartY < _maxQuartY)
             return _chunk.GetNoiseBiome(quartX, quartY, quartZ).Value;
-        return _fallback(quartX * 4, quartY * 4, quartZ * 4);
+        //Neighbouring chunks past BIOMES already hold a filled biome palette; reading it avoids a full climate sample per edge block
+        if (_region?.GetChunk(quartX >> 2, quartZ >> 2) is { } neighbour
+            && neighbour.ChunkStatus is { } status && status.IsOrAfter(ChunkStatus.BIOMES))
+            return neighbour.GetNoiseBiome(quartX, quartY, quartZ).Value;
+        var key = (quartX, quartY, quartZ);
+        if (_borderCache.TryGetValue(key, out var memoised)) return memoised;
+        var sampled = _fallback(quartX * 4, quartY * 4, quartZ * 4);
+        _borderCache[key] = sampled;
+        return sampled;
     }
 
     //FiddledDistance squared distance with a fiddled offset, maps to vanilla getFiddledDistance

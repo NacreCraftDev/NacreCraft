@@ -1,5 +1,7 @@
 <Project>
 
+  <!--The native layer copy rules live on their own so a mod project can import them without the kernel split-->
+  <Import Project="$(MSBuildThisFileDirectory)NacreCraft.Native.targets" />
 
   <PropertyGroup>
     <KernelDirectoryName Condition="'$(KernelDirectoryName)' == ''">kernel</KernelDirectoryName>
@@ -44,21 +46,6 @@
           Condition="'$(OS)' == 'Windows_NT' And Exists('$(PublishDir)$(AssemblyName).deps.json')" />
     <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildThisFileDirectory)NacreCraft.StripKernelDeps.ps1&quot; -DepsPath &quot;$(PublishDir)$(AssemblyName).deps.json&quot; -Keep &quot;$(KernelKeepAssemblies)&quot;"
           Condition="'$(OS)' != 'Windows_NT' And Exists('$(PublishDir)$(AssemblyName).deps.json')" />
-  </Target>
-
-  <!--
-    The native layer is a Rust artifact outside the NuGet graph, so publish never collects it. Copy the build output when
-    it exists; NativeStackGuard looks for it under runtimes/<rid>/native.
-  -->
-  <Target Name="DeployNativeLayerToPublish" AfterTargets="Publish" Condition="'$(RuntimeIdentifier)' != ''">
-    <ItemGroup>
-      <PublishedNativeLayer Include="$(MSBuildThisFileDirectory)NacreCraft.Native\out\$(RuntimeIdentifier)\nacrecraft_native.*" />
-      <PublishedNativeLayer Include="$(MSBuildThisFileDirectory)NacreCraft.Native\out\$(RuntimeIdentifier)\libnacrecraft_native.*" />
-    </ItemGroup>
-    <Copy SourceFiles="@(PublishedNativeLayer)"
-          DestinationFolder="$(PublishDir)runtimes\$(RuntimeIdentifier)\native"
-          SkipUnchangedFiles="true"
-          Condition="'@(PublishedNativeLayer)' != ''" />
   </Target>
 
   <Target Name="CleanKernelAssemblies" AfterTargets="Clean">

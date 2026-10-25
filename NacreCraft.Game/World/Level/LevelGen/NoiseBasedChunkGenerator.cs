@@ -37,6 +37,9 @@ public class NoiseBasedChunkGenerator : ChunkGenerator
     //A weak table avoids leaking NoiseChunk after the chunk unloads
     private readonly ConditionalWeakTable<ChunkAccess, NoiseChunk> _noiseChunks = new();
 
+    //Temporary: per-thread noise stage split, [0]=NoiseChunk build ticks, [1]=fill loop ticks, [2]=builds
+    [ThreadStatic] private static long[]? _noiseProf;
+
     //SamplerHeightNoise is the NormalNoise placeholder for terrain base height sampling
     //The real wiring derives it from RandomState; here it is simplified to a nullable field
     public NormalNoise? HeightNoise { get; private set; }
@@ -136,9 +139,10 @@ public class NoiseBasedChunkGenerator : ChunkGenerator
             ? GameBeardifier.ForStructuresInChunk(manager, chunk.Pos)
             : GameBeardifier.Empty;
         //Temporary instrumentation, splits the noise stage so an allocation type can be placed on the chunk build or the fill loop
-        var marker = GC.GetTotalAllocatedBytes();
+        var noiseProf = _noiseProf ??= new long[4];
+        var createStart = System.Diagnostics.Stopwatch.GetTimestamp();
         var noiseChunk = GetOrCreateNoiseChunk(chunk, randomState, beardifier);
-        NacreCraft.Util.SiteCounters.Stage("noise.create", GC.GetTotalAllocatedBytes() - marker);
+        noiseProf[0] += System.Diagnostics.Stopwatch.GetTimestamp() - createStart;
         var defaultBlock = Settings.DefaultBlock;
 
         var cellWidth = noiseChunk.CellWidth;
@@ -150,7 +154,7 @@ public class NoiseBasedChunkGenerator : ChunkGenerator
         var chunkStartBlockZ = chunk.Pos.MinBlockZ;
 
         noiseChunk.InitializeForFirstCellX();
-        marker = GC.GetTotalAllocatedBytes();
+        var fillStart = System.Diagnostics.Stopwatch.GetTimestamp();
         for (var cellXIndex = 0; cellXIndex < cellCountXZ; cellXIndex++)
         {
             noiseChunk.AdvanceCellX(cellXIndex);
@@ -173,7 +177,9 @@ public class NoiseBasedChunkGenerator : ChunkGenerator
                                 var posZ = chunkStartBlockZ + cellZIndex * cellWidth + zInCell;
                                 noiseChunk.UpdateForZ(posZ, zInCell / (double)cellWidth);
                                 var state = noiseChunk.GetInterpolatedState() ?? defaultBlock;
+                                var stateStart = System.Diagnostics.Stopwatch.GetTimestamp();
                                 proto.SetBlockState(sectionY, posX & 15, posY & 15, posZ & 15, state);
+                                noiseProf[3] += System.Diagnostics.Stopwatch.GetTimestamp() - stateStart;
                             }
                         }
                     }
@@ -181,8 +187,21 @@ public class NoiseBasedChunkGenerator : ChunkGenerator
             }
             noiseChunk.SwapSlices();
         }
-        NacreCraft.Util.SiteCounters.Stage("noise.fill", GC.GetTotalAllocatedBytes() - marker);
         noiseChunk.StopInterpolation();
+        noiseProf[1] += System.Diagnostics.Stopwatch.GetTimestamp() - fillStart;
+        noiseProf[2]++;
+        //Per-thread profiling: fourteen generation threads share the batch, so the window must stay small enough to be reached
+        if (noiseProf[2] % 10 == 0) ReportNoiseProfile(noiseProf);
+    }
+
+    //Temporary: reports the average NoiseChunk build and fill time of the last ten chunks on this thread
+    private static void ReportNoiseProfile(long[] prof)
+    {
+        var toMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        var builds = prof[2];
+        NacreCraft.Logging.Log.Info($"[noise] per-chunk create={(long)(prof[0] * toMs / builds)}ms "
+            + $"fill={(long)(prof[1] * toMs / builds)}ms set={(long)(prof[3] * toMs / builds)}ms builds={builds}");
+        Array.Clear(prof);
     }
 
     //GetOrCreateRandomState creates and caches RandomState by world seed, maps to vanilla's world-level singleton
@@ -236,19 +255,12 @@ public class NoiseBasedChunkGenerator : ChunkGenerator
             return;
         }
         var randomState = GetOrCreateRandomState();
-        //The noise stage already built a NoiseChunk from structures, so this usually hits the cache; a zero marker is used on the fallback path
-        var marker = GC.GetTotalAllocatedBytes();
         var noiseChunk = GetOrCreateNoiseChunk(chunk, randomState, BeardifierMarker.Instance);
-        NacreCraft.Util.SiteCounters.Stage("surface.create", GC.GetTotalAllocatedBytes() - marker);
         //Surface-stage biome lookups go through BiomeManager: a palette hit in this chunk is a single table lookup, only out-of-bounds falls back to full sampling
         //Passing GetBiome directly would run a 6D climate sample per block and slow chunk generation to the point of connection timeouts
-        marker = GC.GetTotalAllocatedBytes();
-        var biomeManager = new BiomeManager(chunk, GetBiome, randomState.Seed);
-        NacreCraft.Util.SiteCounters.Stage("surface.biome", GC.GetTotalAllocatedBytes() - marker);
-        marker = GC.GetTotalAllocatedBytes();
+        var biomeManager = new BiomeManager(chunk, GetBiome, randomState.Seed, region as WorldGenRegion);
         randomState.SurfaceSystem.BuildSurface(chunk, noiseChunk, ruleSource, biomeManager.GetBiome,
             chunk.MinSectionY * 16, GetGenDepth(), Settings.UseLegacyRandomSource);
-        NacreCraft.Util.SiteCounters.Stage("surface.rules", GC.GetTotalAllocatedBytes() - marker);
         //Log.Debug("BuildSurface exit");
     }
 

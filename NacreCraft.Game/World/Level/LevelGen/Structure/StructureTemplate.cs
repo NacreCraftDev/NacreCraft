@@ -2,8 +2,10 @@ using System.Runtime.CompilerServices;
 using NacreCraft.Game.World.Level.Block;
 using NacreCraft.Nbt;
 using NacreCraft.Primitives;
+using NacreCraft.Primitives.Phys;
 using NacreCraft.Registry;
 using NacreCraft.Registry.State;
+using NacreCraft.Storage;
 using NacreCraft.Util.Random;
 using FrontAndTopEnum = NacreCraft.Registry.Enums.FrontAndTop;
 using RegBlock = NacreCraft.Registry.Block;
@@ -325,10 +327,177 @@ public sealed class StructureTemplate
                 StructureBlockTransforms.ApplyMirror(info.State, settings.Mirror), settings.Rotation);
             level.SetBlockState(info.Pos.X, info.Pos.Y, info.Pos.Z, state);
             if (info.Nbt is null) continue;
+            //Writing into a live level creates the block entity already; the generation path has no level and uses the sink instead
+            if (level.Level is { } loaded)
+            {
+                if (loaded.GetBlockEntity<BlockEntity>(info.Pos) is not { } blockEntity) continue;
+                blockEntity.LoadCustomOnly(info.Nbt);
+                loaded.BlockEntityChanged(info.Pos);
+                continue;
+            }
             BlockEntitySink?.Invoke(info.Pos, state, info.Nbt);
         }
         //Entity spawning waits for the entity factory and mob spawn wiring to be ready; the template already parsed its entity list, pending stage 4
         return true;
+    }
+
+    //PlaceInWorld writes the template into a loaded level, maps to vanilla placeInWorld with a ServerLevel
+    //The generation path writes into a ProtoChunk; here the blocks go through ServerLevel.SetBlock so clients see them at once
+    public bool PlaceInWorld(ServerLevel level, BlockPos position, BlockPos referencePos,
+        StructurePlaceSettings settings, RandomSource random, int updateFlags)
+    {
+        if (_palettes.Count == 0) return false;
+        var blockInfoList = settings.GetRandomPalette(_palettes, position).Blocks;
+        if (Size.X < 1 || Size.Y < 1 || Size.Z < 1) return false;
+
+        var boundingBox = settings.BoundingBox;
+        var processed = ProcessBlockInfos(null, position, referencePos, settings, blockInfoList);
+        foreach (var info in processed)
+        {
+            if (boundingBox is not null && !Contains(boundingBox, info.Pos)) continue;
+            var state = StructureBlockTransforms.ApplyRotation(
+                StructureBlockTransforms.ApplyMirror(info.State, settings.Mirror), settings.Rotation);
+            level.SetBlock(info.Pos, state, updateFlags);
+            if (info.Nbt is null) continue;
+            //The block entity is created by the block write; writing the template tag into it restores chest contents and the like
+            if (level.GetBlockEntity<BlockEntity>(info.Pos) is { } blockEntity)
+            {
+                blockEntity.LoadCustomOnly(info.Nbt);
+                level.BlockEntityChanged(info.Pos);
+            }
+            else BlockEntitySink?.Invoke(info.Pos, state, info.Nbt);
+        }
+        return true;
+    }
+
+    //SetAuthor records the author a loaded structure info shows
+    public void SetAuthor(string author) => Author = author;
+
+    //FillFromWorld captures a box of the loaded world into this template, maps to vanilla fillFromWorld
+    //ignoreBlocks are skipped entirely, structure_void is appended by the caller as in vanilla
+    public void FillFromWorld(ServerLevel level, BlockPos position, Vec3i size, bool includeEntities,
+        IReadOnlyList<RegBlock> ignoreBlocks)
+    {
+        if (size.X < 1 || size.Y < 1 || size.Z < 1) return;
+        var secondCorner = position.Offset(size.X - 1, size.Y - 1, size.Z - 1);
+        var minX = Math.Min(position.X, secondCorner.X);
+        var minY = Math.Min(position.Y, secondCorner.Y);
+        var minZ = Math.Min(position.Z, secondCorner.Z);
+        var maxX = Math.Max(position.X, secondCorner.X);
+        var maxY = Math.Max(position.Y, secondCorner.Y);
+        var maxZ = Math.Max(position.Z, secondCorner.Z);
+        Size = size;
+
+        var fullBlocks = new List<StructureBlockInfo>();
+        var blockEntities = new List<StructureBlockInfo>();
+        var otherBlocks = new List<StructureBlockInfo>();
+        for (var y = minY; y <= maxY; y++)
+        for (var x = minX; x <= maxX; x++)
+        for (var z = minZ; z <= maxZ; z++)
+        {
+            var pos = new BlockPos(x, y, z);
+            if (level.GetBlockState(pos) is not { } state) continue;
+            var ignored = false;
+            foreach (var block in ignoreBlocks)
+            {
+                if (!ReferenceEquals(state.Owner, block)) continue;
+                ignored = true;
+                break;
+            }
+            if (ignored) continue;
+            var relative = new BlockPos(x - minX, y - minY, z - minZ);
+            var nbt = level.GetBlockEntity<BlockEntity>(pos)?.SaveWithFullMetadata();
+            var info = new StructureBlockInfo(relative, state, nbt);
+            if (nbt is not null) blockEntities.Add(info);
+            else if (state.Owner.CanOcclude) fullBlocks.Add(info);
+            else otherBlocks.Add(info);
+        }
+        _palettes.Clear();
+        _palettes.Add(new StructureTemplatePalette(BuildInfoList(fullBlocks, otherBlocks, blockEntities)));
+
+        _entityInfoList.Clear();
+        if (!includeEntities) return;
+        var box = new AABB(minX, minY, minZ, maxX + 1, maxY + 1, maxZ + 1);
+        foreach (var entity in level.EntitiesInBox(box))
+        {
+            //Players are never stored in a template, maps to the vanilla filter
+            if (entity is NacreCraft.Game.Server.ServerPlayer) continue;
+            var relativePos = new Vec3i((int)(entity.Pos.X - minX), (int)(entity.Pos.Y - minY), (int)(entity.Pos.Z - minZ));
+            var blockPos = new BlockPos(relativePos.X, relativePos.Y, relativePos.Z);
+            var nbt = NacreCraft.Game.World.Entity.EntityPersister.Save(entity);
+            _entityInfoList.Add(new StructureEntityInfo(relativePos, blockPos, nbt));
+        }
+    }
+
+    //Save writes the template back to NBT, maps to vanilla save
+    //Only the first palette is written, which is what fillFromWorld produces; the loaded multi-palette form is never saved again
+    public CompoundTag Save(CompoundTag tag)
+    {
+        var blocks = new ListTag();
+        var palette = new ListTag();
+        var stateIds = new Dictionary<int, int>();
+        if (_palettes.Count > 0)
+        {
+            foreach (var info in _palettes[0].Blocks)
+            {
+                if (!stateIds.TryGetValue(info.State.Id, out var stateId))
+                {
+                    stateId = stateIds.Count;
+                    stateIds[info.State.Id] = stateId;
+                    palette.Add(WriteBlockState(info.State));
+                }
+                var blockTag = new CompoundTag();
+                blockTag.Put(BlockTagPos, IntList(info.Pos.X, info.Pos.Y, info.Pos.Z));
+                blockTag.PutInt(BlockTagState, stateId);
+                if (info.Nbt is not null) blockTag.Put(BlockTagNbt, info.Nbt.Copy());
+                blocks.Add(blockTag);
+            }
+        }
+        tag.Put(BlocksTag, blocks);
+        tag.Put(PaletteTag, palette);
+
+        var entities = new ListTag();
+        foreach (var info in _entityInfoList)
+        {
+            var entityTag = new CompoundTag();
+            entityTag.Put(EntityTagPos, DoubleList(info.Pos.X, info.Pos.Y, info.Pos.Z));
+            entityTag.Put(EntityTagBlockPos, IntList(info.BlockPos.X, info.BlockPos.Y, info.BlockPos.Z));
+            entityTag.Put(EntityTagNbt, info.Nbt.Copy());
+            entities.Add(entityTag);
+        }
+        tag.Put(EntitiesTag, entities);
+        tag.Put(SizeTag, IntList(Size.X, Size.Y, Size.Z));
+        return tag;
+    }
+
+    //WriteBlockState writes one block state, maps to vanilla NbtUtils.writeBlockState
+    //The value name comes from the property itself so the round trip through ReadBlockState is exact
+    private static CompoundTag WriteBlockState(BlockState state)
+    {
+        var tag = new CompoundTag();
+        tag.PutString("Name", state.Owner.Id.ToString());
+        var properties = new CompoundTag();
+        foreach (var value in state.GetValues()) properties.PutString(value.Property.Name, value.ValueName);
+        tag.Put("Properties", properties);
+        return tag;
+    }
+
+    private static ListTag IntList(int x, int y, int z)
+    {
+        var list = new ListTag();
+        list.Add(new IntTag(x));
+        list.Add(new IntTag(y));
+        list.Add(new IntTag(z));
+        return list;
+    }
+
+    private static ListTag DoubleList(double x, double y, double z)
+    {
+        var list = new ListTag();
+        list.Add(new DoubleTag(x));
+        list.Add(new DoubleTag(y));
+        list.Add(new DoubleTag(z));
+        return list;
     }
 
     //ProcessBlockInfos runs the processor chain block by block, maps to vanilla processBlockInfos

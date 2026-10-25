@@ -140,10 +140,23 @@ public sealed class CubicSplineMultipoint : CubicSpline
 
     public CubicSpline MapCoordinates(Func<DensityFunction, DensityFunction> mapper)
     {
+        //Temporary: spline rebuild time, reported by the noise chunk construction probe
+        //Only the outermost call records the time, otherwise every level would add its children's time on top
+        var top = _rebuildDepth++ == 0;
+        var start = System.Diagnostics.Stopwatch.GetTimestamp();
         var newCoordinate = mapper(_coordinate);
         var newValues = _values.Select(v => v.MapCoordinates(mapper)).ToList();
-        return new CubicSplineMultipoint(newCoordinate, _locations, newValues, _derivatives);
+        var result = new CubicSplineMultipoint(newCoordinate, _locations, newValues, _derivatives);
+        var prof = RebuildProfile ??= new long[2];
+        if (top) prof[0] += System.Diagnostics.Stopwatch.GetTimestamp() - start;
+        prof[1]++;
+        _rebuildDepth--;
+        return result;
     }
+
+    //Temporary: [0]=rebuild ticks, [1]=rebuilt spline nodes
+    [ThreadStatic] internal static long[]? RebuildProfile;
+    [ThreadStatic] private static int _rebuildDepth;
 
     //LinearExtend endpoint linear extrapolation, maps to vanilla Multipoint.linearExtend
     //Returns the value itself when derivative is 0, otherwise extrapolates along the slope

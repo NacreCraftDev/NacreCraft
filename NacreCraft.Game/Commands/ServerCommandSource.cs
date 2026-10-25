@@ -6,6 +6,7 @@ using NacreCraft.Logging;
 using NacreCraft.Network.Chat;
 using NacreCraft.Primitives;
 using NacreCraft.Registry;
+using NacreCraft.Storage;
 
 namespace NacreCraft.Game.Commands;
 
@@ -13,21 +14,31 @@ namespace NacreCraft.Game.Commands;
 //Two kinds: a player-initiated one holding the executing player and replying via the system chat packet; a console-initiated one with no player and full permission, replying via the log
 public sealed class ServerCommandSource : CommandSourceStack
 {
+    //_position falls back to this when there is no player; command blocks execute at their own block position
+    private readonly Vec3 _position;
+
+    //_level falls back to this when there is no player; command blocks keep the level they live in
+    private readonly ServerLevel? _level;
+
     //Player-initiated; the permission level is the player's current level 0-4 from the ops.json list
     public ServerCommandSource(ServerPlayer player, MinecraftServer server)
         : base(player.Profile.Name, player.PermissionLevel, TextWriter.Null)
     {
         Player = player;
         Server = server;
+        _position = player.Position;
+        _level = player.Level;
     }
 
     //Console-initiated; name and permission are given by the caller
     private ServerCommandSource(string name, int permissionLevel, MinecraftServer server, TextWriter? output = null,
-        bool acceptsSuccess = true, bool acceptsFailure = true)
+        bool acceptsSuccess = true, bool acceptsFailure = true, Vec3 position = default, ServerLevel? level = null)
         : base(name, permissionLevel, output ?? TextWriter.Null, acceptsSuccess, acceptsFailure)
     {
         Player = null;
         Server = server;
+        _position = position;
+        _level = level;
     }
 
     //Console the console command source, for cases with no executing entity such as the server GUI input box
@@ -45,6 +56,12 @@ public sealed class ServerCommandSource : CommandSourceStack
     public static ServerCommandSource Rcon(MinecraftServer server, TextWriter output)
         => new("Rcon", (int)NacreCraft.Registry.PermissionLevel.Owners, server, output);
 
+    //CommandBlock the command block command source, maps to vanilla CommandBlockEntity.createCommandSourceStack
+    //Executes at the block position with game master permission and captures output into the caller's writer
+    public static ServerCommandSource CommandBlock(MinecraftServer server, ServerLevel level, Vec3 position, TextWriter output)
+        => new("CommandBlock", (int)NacreCraft.Registry.PermissionLevel.Gamemasters, server, output,
+            position: position, level: level);
+
     //Player the command executor, null when console-initiated
     public ServerPlayer? Player { get; }
 
@@ -61,8 +78,11 @@ public sealed class ServerCommandSource : CommandSourceStack
     public MinecraftServer Server { get; }
 
     //Position the command source coordinate, maps to vanilla CommandSourceStack.getPosition
-    //A console source has no entity, so the origin is used
-    public Vec3 Position => Player?.Position ?? new Vec3(0, 0, 0);
+    //A player source follows the player; a command block source uses the block position
+    public Vec3 Position => Player?.Position ?? _position;
+
+    //Level the level this source executes in; command blocks pass their own level, player sources follow the player
+    public ServerLevel? Level => Player?.Level ?? _level;
 
     public override void SendSuccess(string message)
         => Send(message, AcceptsSuccess);

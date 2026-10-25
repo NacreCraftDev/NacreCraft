@@ -158,22 +158,37 @@ public static class Climate
     //The quantisation precision matches vanilla Climate.quantize, mapping a double into long space
     public sealed class NoiseRouterSampler : Sampler
     {
-        private readonly NoiseRouter _router;
+        private readonly DensityFunction _temperature;
+        private readonly DensityFunction _vegetation;
+        private readonly DensityFunction _continents;
+        private readonly DensityFunction _erosion;
+        private readonly DensityFunction _depth;
+        private readonly DensityFunction _ridges;
 
-        public NoiseRouterSampler(NoiseRouter router) => _router = router;
+        //A flattener strips the HolderHolder/Marker pass-through layers from the six climate functions, matching vanilla RandomState
+        //Sampling runs per biome quart, so every removed level is a virtual call saved on the hottest path
+        public NoiseRouterSampler(NoiseRouter router, Visitor? flattener = null)
+        {
+            _temperature = flattener is null ? router.Temperature : router.Temperature.MapAll(flattener);
+            _vegetation = flattener is null ? router.Vegetation : router.Vegetation.MapAll(flattener);
+            _continents = flattener is null ? router.Continents : router.Continents.MapAll(flattener);
+            _erosion = flattener is null ? router.Erosion : router.Erosion.MapAll(flattener);
+            _depth = flattener is null ? router.Depth : router.Depth.MapAll(flattener);
+            _ridges = flattener is null ? router.Ridges : router.Ridges.MapAll(flattener);
+        }
 
         public Parameter Temperature(int x, int y, int z)
-            => Parameter.Single(Quantize(_router.Temperature, x, y, z));
+            => Parameter.Single(Quantize(_temperature, x, y, z));
         public Parameter Humidity(int x, int y, int z)
-            => Parameter.Single(Quantize(_router.Vegetation, x, y, z));
+            => Parameter.Single(Quantize(_vegetation, x, y, z));
         public Parameter Continentalness(int x, int y, int z)
-            => Parameter.Single(Quantize(_router.Continents, x, y, z));
+            => Parameter.Single(Quantize(_continents, x, y, z));
         public Parameter Erosion(int x, int y, int z)
-            => Parameter.Single(Quantize(_router.Erosion, x, y, z));
+            => Parameter.Single(Quantize(_erosion, x, y, z));
         public Parameter Depth(int x, int y, int z)
-            => Parameter.Single(Quantize(_router.Depth, x, y, z));
+            => Parameter.Single(Quantize(_depth, x, y, z));
         public Parameter Weirdness(int x, int y, int z)
-            => Parameter.Single(Quantize(_router.Ridges, x, y, z));
+            => Parameter.Single(Quantize(_ridges, x, y, z));
 
         //Quantize samples the density and quantises it to long, maps to vanilla Climate.quantizeCoord
         //The factor must match QuantizeCoord; vanilla uses ×10000, and ×1000 would shrink every sample tenfold and skew all distances

@@ -23,7 +23,6 @@ public interface HolderLookup<T> where T : class
         var holder = Get(key);
         if (holder is not null) return holder;
         if (defaultValue is null) return null;
-        NacreCraft.Util.SiteCounters.CountHolderLookupMiss();
         return Holder<T>.Direct(defaultValue);
     }
 }

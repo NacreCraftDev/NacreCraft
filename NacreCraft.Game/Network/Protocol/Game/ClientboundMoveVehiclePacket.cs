@@ -1,3 +1,5 @@
+using NacreCraft.Primitives;
+
 namespace NacreCraft.Game.Network.Protocol.Game;
 
 //ClientboundMoveVehiclePacket move vehicle packet, maps to vanilla ClientboundMoveVehiclePacket
@@ -12,10 +14,18 @@ public sealed record ClientboundMoveVehiclePacket(object Position, float YRot, f
 
     private sealed class MoveVehicleCodec : StreamCodec<FriendlyByteBuf, ClientboundMoveVehiclePacket>
     {
+        //Vanilla order: three doubles for the position, then yRot and xRot floats
         public ClientboundMoveVehiclePacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => new(new Vec3(buf.ReadDouble(), buf.ReadDouble(), buf.ReadDouble()), buf.ReadFloat(), buf.ReadFloat());
 
         public void Encode(FriendlyByteBuf buf, ClientboundMoveVehiclePacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            var pos = value.Position is Vec3 vec ? vec : default;
+            buf.WriteDouble(pos.X);
+            buf.WriteDouble(pos.Y);
+            buf.WriteDouble(pos.Z);
+            buf.WriteFloat(value.YRot);
+            buf.WriteFloat(value.XRot);
+        }
     }
 }

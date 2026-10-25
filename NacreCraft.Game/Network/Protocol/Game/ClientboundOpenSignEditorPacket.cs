@@ -1,3 +1,5 @@
+using NacreCraft.Primitives;
+
 namespace NacreCraft.Game.Network.Protocol.Game;
 
 //ClientboundOpenSignEditorPacket open sign editor packet, maps to vanilla ClientboundOpenSignEditorPacket
@@ -13,9 +15,12 @@ public sealed record ClientboundOpenSignEditorPacket(object Pos, bool IsFrontTex
     private sealed class OpenSignEditorCodec : StreamCodec<FriendlyByteBuf, ClientboundOpenSignEditorPacket>
     {
         public ClientboundOpenSignEditorPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => new(buf.ReadBlockPos(), buf.ReadBoolean());
 
         public void Encode(FriendlyByteBuf buf, ClientboundOpenSignEditorPacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            buf.WriteBlockPos(value.Pos is BlockPos pos ? pos : default);
+            buf.WriteBoolean(value.IsFrontText);
+        }
     }
 }

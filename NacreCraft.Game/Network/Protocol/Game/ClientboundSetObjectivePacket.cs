@@ -12,10 +12,42 @@ public sealed record ClientboundSetObjectivePacket(string ObjectiveName, Compone
 
     private sealed class SetObjectiveCodec : StreamCodec<FriendlyByteBuf, ClientboundSetObjectivePacket>
     {
+        //Vanilla order: name, method byte, then displayName/renderType/numberFormat only for add and change
         public ClientboundSetObjectivePacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            var name = buf.ReadString();
+            var method = buf.ReadByte();
+            if (method is 0 or 2)
+            {
+                var displayName = ComponentSerialization.StreamCodec.Decode(buf);
+                var renderType = buf.ReadVarInt();
+                var numberFormat = ReadNumberFormat(buf);
+                return new ClientboundSetObjectivePacket(name, displayName, renderType, numberFormat ?? 0, method);
+            }
+            return new ClientboundSetObjectivePacket(name, CommonComponents.Empty, 0, 0, method);
+        }
 
         public void Encode(FriendlyByteBuf buf, ClientboundSetObjectivePacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            buf.WriteString(value.ObjectiveName);
+            buf.WriteByte((byte)value.Method);
+            if (value.Method is 0 or 2)
+            {
+                ComponentSerialization.StreamCodec.Encode(buf, value.DisplayName);
+                buf.WriteVarInt(value.RenderType is int renderType ? renderType : 0);
+                //The number format payload is kept as its registry id only, so it is not written back
+                buf.WriteBoolean(false);
+            }
+        }
+
+        //ReadNumberFormat reads the optional number format: registry id 1 is styled (NBT), 2 is fixed (component)
+        private static object? ReadNumberFormat(FriendlyByteBuf buf)
+        {
+            if (!buf.ReadBoolean()) return null;
+            var id = buf.ReadVarInt();
+            if (id == 1) buf.ReadNbt();
+            else if (id == 2) ComponentSerialization.StreamCodec.Decode(buf);
+            return id;
+        }
     }
 }

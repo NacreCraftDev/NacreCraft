@@ -43,11 +43,8 @@ public sealed class NoiseChunk : FunctionContext, ContextProvider
     private bool _interpolating;
     private bool _fillingCell;
 
-    //Wrapped nodes, one entry per node of the density tree. Measured at 4096 to 8191 entries per chunk, so a capacity of
-    //256 was an order of magnitude short and only removed the first few doublings: the chain still resized through
-    //2048 and 4096, and that entry array is what the allocation profile shows as Entry[DensityFunction, DensityFunction][]
-    //8192 clears the measured range, so the array is built once
-    private readonly Dictionary<DensityFunction, DensityFunction> _wrapped = new(8192);
+    //Temporary: how many chunks already reported their construction split
+    private static int _wrapReports;
     private readonly List<NoiseInterpolator> _interpolators = new();
     private readonly List<NoiseCacheAllInCell> _cellCaches = new();
     private readonly DensityFunction _preliminarySurfaceLevel;
@@ -88,13 +85,33 @@ public sealed class NoiseChunk : FunctionContext, ContextProvider
         _sliceFillingContextProvider = new SliceFillingContextProvider(this);
 
         //Wrap the whole density tree into interpolator/cache nodes by Marker type
-        var wrappedRouter = randomState.Router.MapAll(new WrapVisitor(this));
+        var mapAllStart = System.Diagnostics.Stopwatch.GetTimestamp();
+        var wrapVisitor = new WrapVisitor(this);
+        var wrappedRouter = randomState.Router.MapAll(wrapVisitor);
+        var mapAllTicks = System.Diagnostics.Stopwatch.GetTimestamp() - mapAllStart;
         _preliminarySurfaceLevel = wrappedRouter.PreliminarySurfaceLevel;
+        var aquiferStart = System.Diagnostics.Stopwatch.GetTimestamp();
         Aquifer = CreateAquifer(settings, this, wrappedRouter, chunk.Pos, randomState,
             clampedMinY, clampedMaxY - clampedMinY);
+        var aquiferTicks = System.Diagnostics.Stopwatch.GetTimestamp() - aquiferStart;
+        var fullStart = System.Diagnostics.Stopwatch.GetTimestamp();
         //The structure terrain adjustment is added to the final density; a placeholder marker constant 0 is used when no structures are passed
         FullNoiseDensity = Wrap(new MarkerNode(DensityFunctionsExtra.MarkerType.CacheAllInCell,
             new Ap2(Ap2.OpType.Add, wrappedRouter.FinalDensity, beardifier ?? BeardifierMarker.Instance)));
+        var fullTicks = System.Diagnostics.Stopwatch.GetTimestamp() - fullStart;
+        //Temporary: construction split, printed for the first chunks and then once every twenty five to show the steady state
+        var report = Interlocked.Increment(ref _wrapReports);
+        if (report <= 8 || report % 25 == 0)
+        {
+            var toMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            var spline = NacreCraft.Game.Util.CubicSplineMultipoint.RebuildProfile;
+            var splineMs = spline is null ? 0 : (long)(spline[0] * toMs);
+            var splineNodes = spline is null ? 0 : spline[1];
+            if (spline is not null) Array.Clear(spline);
+            NacreCraft.Logging.Log.Info($"[create] mapAll={(long)(mapAllTicks * toMs)}ms "
+                + $"aquifer={(long)(aquiferTicks * toMs)}ms full={(long)(fullTicks * toMs)}ms "
+                + $"calls={wrapVisitor.Applies} spline={splineMs}ms/{splineNodes}");
+        }
     }
 
     //CreateAquifer picks the full aquifer or the disabled one from settings.AquifersEnabled, matching the branch in the vanilla NoiseChunk constructor
@@ -109,14 +126,9 @@ public sealed class NoiseChunk : FunctionContext, ContextProvider
 
     //Wrap builds the wrapper node for a Marker type, maps to vanilla NoiseChunk.wrap
     //Non-Marker nodes are returned as-is; their children were already wrapped recursively during the traversal
-    private DensityFunction Wrap(DensityFunction function)
-    {
-        if (_wrapped.TryGetValue(function, out var cached)) return cached;
-        var result = WrapNew(function);
-        _wrapped[function] = result;
-        NacreCraft.Util.SiteCounters.Wrapped("noiseChunk", _wrapped.Count);
-        return result;
-    }
+    //Vanilla's reference keyed memo is left out on purpose: every mapped node is a fresh instance, so the memo only ever hits
+    //for the stateless nodes whose mapChildren returns itself, and hashing those identities cost far more than wrapping them again
+    private DensityFunction Wrap(DensityFunction function) => WrapNew(function);
 
     private DensityFunction WrapNew(DensityFunction function) => function switch
     {
@@ -307,9 +319,16 @@ public sealed class NoiseChunk : FunctionContext, ContextProvider
     {
         private readonly NoiseChunk _chunk;
 
+        //Temporary: how many nodes the traversal actually visits, to compare against the deduplicated wrap count
+        public long Applies;
+
         public WrapVisitor(NoiseChunk chunk) => _chunk = chunk;
 
-        public DensityFunction Apply(DensityFunction input) => _chunk.Wrap(input);
+        public DensityFunction Apply(DensityFunction input)
+        {
+            Applies++;
+            return _chunk.Wrap(input);
+        }
 
         public NoiseHolder VisitNoise(NoiseHolder noise) => noise;
     }

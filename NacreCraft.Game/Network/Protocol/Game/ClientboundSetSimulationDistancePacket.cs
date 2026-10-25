@@ -13,9 +13,9 @@ public sealed record ClientboundSetSimulationDistancePacket(int SimulationDistan
     private sealed class SetSimulationDistanceCodec : StreamCodec<FriendlyByteBuf, ClientboundSetSimulationDistancePacket>
     {
         public ClientboundSetSimulationDistancePacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => new(buf.ReadVarInt());
 
         public void Encode(FriendlyByteBuf buf, ClientboundSetSimulationDistancePacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => buf.WriteVarInt(value.SimulationDistance);
     }
 }

@@ -23,6 +23,7 @@ public sealed class SystemReport
         SetDetail("Protocol Version", SharedConstants.ProtocolVersion.ToString());
         SetDetail("World Data Version", SharedConstants.WorldDataVersion.ToString());
         SetDetail("Operating System", $"{RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})");
+        SetDetail("Compatibility Warnings", HardwareCompatibility.DescribeWarnings);
         SetDetail("Windows Build", DescribeWindowsBuild);
         SetDetail("Emulation", DescribeEmulation);
         SetDetail("Runtime", RuntimeInformation.FrameworkDescription);

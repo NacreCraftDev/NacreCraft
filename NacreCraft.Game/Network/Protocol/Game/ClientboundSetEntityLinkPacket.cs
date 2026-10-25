@@ -12,10 +12,14 @@ public sealed record ClientboundSetEntityLinkPacket(int SourceId, int DestId) : 
 
     private sealed class SetEntityLinkCodec : StreamCodec<FriendlyByteBuf, ClientboundSetEntityLinkPacket>
     {
+        //Vanilla order: two fixed-length ints, not var ints
         public ClientboundSetEntityLinkPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => new(buf.ReadInt(), buf.ReadInt());
 
         public void Encode(FriendlyByteBuf buf, ClientboundSetEntityLinkPacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            buf.WriteInt(value.SourceId);
+            buf.WriteInt(value.DestId);
+        }
     }
 }

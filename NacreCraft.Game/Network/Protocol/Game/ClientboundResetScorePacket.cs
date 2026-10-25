@@ -12,10 +12,19 @@ public sealed record ClientboundResetScorePacket(string Owner, string ObjectiveN
 
     private sealed class ResetScoreCodec : StreamCodec<FriendlyByteBuf, ClientboundResetScorePacket>
     {
+        //Vanilla order: owner string, then a nullable objective name
         public ClientboundResetScorePacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            var owner = buf.ReadString();
+            var objective = buf.ReadBoolean() ? buf.ReadString() : null;
+            return new ClientboundResetScorePacket(owner, objective!);
+        }
 
         public void Encode(FriendlyByteBuf buf, ClientboundResetScorePacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            buf.WriteString(value.Owner);
+            buf.WriteBoolean(value.ObjectiveName is not null);
+            if (value.ObjectiveName is not null) buf.WriteString(value.ObjectiveName);
+        }
     }
 }

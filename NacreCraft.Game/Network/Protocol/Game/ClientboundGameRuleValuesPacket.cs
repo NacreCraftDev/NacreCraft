@@ -12,10 +12,26 @@ public sealed record ClientboundGameRuleValuesPacket(object Values) : Packet<Cli
 
     private sealed class GameRuleValuesCodec : StreamCodec<FriendlyByteBuf, ClientboundGameRuleValuesPacket>
     {
+        //Vanilla format: map of game rule key to its string value
         public ClientboundGameRuleValuesPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Map ResourceKey GameRule String business type not yet implemented");
+        {
+            var count = buf.ReadVarInt();
+            var values = new Dictionary<NacreCraft.Registry.Identifier, string>(count);
+            for (var i = 0; i < count; i++)
+                values[buf.ReadIdentifier()] = buf.ReadString();
+            return new ClientboundGameRuleValuesPacket(values);
+        }
 
         public void Encode(FriendlyByteBuf buf, ClientboundGameRuleValuesPacket value)
-            => throw new NotImplementedException("Map ResourceKey GameRule String business type not yet implemented");
+        {
+            var values = value.Values as IReadOnlyDictionary<NacreCraft.Registry.Identifier, string>
+                ?? new Dictionary<NacreCraft.Registry.Identifier, string>();
+            buf.WriteVarInt(values.Count);
+            foreach (var pair in values)
+            {
+                buf.WriteIdentifier(pair.Key);
+                buf.WriteString(pair.Value);
+            }
+        }
     }
 }

@@ -1,8 +1,8 @@
 namespace NacreCraft.Game.Network.Protocol.Game;
 
 //ClientboundServerDataPacket server data packet, maps to vanilla ClientboundServerDataPacket
-//Field: Motd(Component)
-public sealed record ClientboundServerDataPacket(Component Motd) : Packet<ClientGamePacketListener>
+//Fields: Motd(Component), IconBytes(byte[]?, optional server icon)
+public sealed record ClientboundServerDataPacket(Component Motd, byte[]? IconBytes) : Packet<ClientGamePacketListener>
 {
     public static StreamCodec<FriendlyByteBuf, ClientboundServerDataPacket> StreamCodec { get; } = new ServerDataCodec();
 
@@ -13,9 +13,17 @@ public sealed record ClientboundServerDataPacket(Component Motd) : Packet<Client
     private sealed class ServerDataCodec : StreamCodec<FriendlyByteBuf, ClientboundServerDataPacket>
     {
         public ClientboundServerDataPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            var motd = ComponentSerialization.StreamCodec.Decode(buf);
+            var icon = buf.ReadBoolean() ? buf.ReadByteArray() : null;
+            return new ClientboundServerDataPacket(motd, icon);
+        }
 
         public void Encode(FriendlyByteBuf buf, ClientboundServerDataPacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            ComponentSerialization.StreamCodec.Encode(buf, value.Motd);
+            buf.WriteBoolean(value.IconBytes is not null);
+            if (value.IconBytes is not null) buf.WriteByteArray(value.IconBytes);
+        }
     }
 }

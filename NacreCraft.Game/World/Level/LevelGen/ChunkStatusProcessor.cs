@@ -60,10 +60,45 @@ public sealed class ChunkStatusProcessor
     //profile can be attributed to a stage. The profile says what grows, never where, and allocation ticks carry no stack
     public bool ProcessChunk(ChunkAccess chunk, ChunkStatus status)
     {
-        var before = GC.GetTotalAllocatedBytes();
+        var start = System.Diagnostics.Stopwatch.GetTimestamp();
         var handled = RunStatus(chunk, status);
-        NacreCraft.Util.SiteCounters.Stage(status.Name, GC.GetTotalAllocatedBytes() - before);
+        var elapsed = System.Diagnostics.Stopwatch.GetTimestamp() - start;
+        var timing = StageTimings.GetOrAdd(status.Name, static _ => new StageTiming());
+        Interlocked.Add(ref timing.Ticks, elapsed);
+        Interlocked.Increment(ref timing.Count);
+        long max;
+        while (elapsed > (max = Interlocked.Read(ref timing.MaxTicks)))
+        {
+            if (Interlocked.CompareExchange(ref timing.MaxTicks, elapsed, max) == max) break;
+        }
         return handled;
+    }
+
+    //Temporary: per-status wall time, printed every fifty completed chunks
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, StageTiming> StageTimings = new();
+    private static long _timedBlocks;
+
+    private sealed class StageTiming
+    {
+        public long Ticks;
+        public long MaxTicks;
+        public long Count;
+    }
+
+    private static void ReportStageTimings()
+    {
+        var toMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        var parts = new List<string>();
+        foreach (var pair in StageTimings)
+        {
+            var timing = pair.Value;
+            var count = Interlocked.Exchange(ref timing.Count, 0);
+            if (count == 0) continue;
+            var ticks = Interlocked.Exchange(ref timing.Ticks, 0);
+            var max = Interlocked.Exchange(ref timing.MaxTicks, 0);
+            parts.Add($"{pair.Key}={ticks * toMs / count:F1}/{max * toMs:F0}");
+        }
+        NacreCraft.Logging.Log.Info("[gen-stage] avg/max ms: " + string.Join(" ", parts));
     }
 
     //RunStatus the stage dispatch itself
@@ -102,8 +137,8 @@ public sealed class ChunkStatusProcessor
                             var wy = sectionY * 16 + qY * 4;
                             var wz = posZ * 16 + qZ * 4;
                             var biome = biomeSource.GetBiome(wx, wy, wz);
-                            NacreCraft.Util.SiteCounters.CountBiomeChunkStatus();
-                            chunk.SetBiome(wx, wy, wz, Holder<Biome>.Direct(biome));
+                            //The registry holder is shared; wrapping the value directly built one holder per quart cell
+                            chunk.SetBiome(wx, wy, wz, BuiltInRegistries.BIOME.WrapAsHolder(biome));
                         }
                     }
                 }
@@ -118,8 +153,20 @@ public sealed class ChunkStatusProcessor
         }
         if (status == ChunkStatus.SURFACE)
         {
-            //The surface stage calls BuildSurface to apply surface rules
-            _generator.BuildSurface(new object(), structures, chunk, _random);
+            //Surface rules sample biomes just outside the chunk edge; passing the neighbouring palettes keeps those lookups off the climate sampler
+            var biomeRegion = new WorldGenRegion(chunk.MinSectionY, chunk.SectionsCount);
+            biomeRegion.AddChunk(chunk);
+            if (_chunkProvider is not null)
+            {
+                for (var offsetX = -1; offsetX <= 1; offsetX++)
+                for (var offsetZ = -1; offsetZ <= 1; offsetZ++)
+                {
+                    if (offsetX == 0 && offsetZ == 0) continue;
+                    var neighbour = _chunkProvider(chunk.Pos.X + offsetX, chunk.Pos.Z + offsetZ);
+                    if (neighbour is not null) biomeRegion.AddChunk(neighbour);
+                }
+            }
+            _generator.BuildSurface(biomeRegion, structures, chunk, _random);
             return true;
         }
         if (status == ChunkStatus.CARVERS)
@@ -193,6 +240,7 @@ public sealed class ChunkStatusProcessor
             ProcessChunk(chunk, next);
             current = next;
         }
+        if (Interlocked.Increment(ref _timedBlocks) % 50 == 0) ReportStageTimings();
     }
 
     //StatusOrder stage advance order, made static to avoid allocating an array on every NextStatus

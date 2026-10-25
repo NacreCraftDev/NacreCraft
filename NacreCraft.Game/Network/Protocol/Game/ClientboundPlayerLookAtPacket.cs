@@ -13,10 +13,31 @@ public sealed record ClientboundPlayerLookAtPacket(object FromAnchor, double X, 
 
     private sealed class PlayerLookAtCodec : StreamCodec<FriendlyByteBuf, ClientboundPlayerLookAtPacket>
     {
+        //Vanilla order: from anchor enum, target position, at-entity flag, then entity id + to anchor when at an entity
         public ClientboundPlayerLookAtPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("EntityAnchorArgument.Anchor business type not yet implemented");
+        {
+            var fromAnchor = buf.ReadVarInt();
+            var x = buf.ReadDouble();
+            var y = buf.ReadDouble();
+            var z = buf.ReadDouble();
+            var atEntity = buf.ReadBoolean();
+            var entity = atEntity ? buf.ReadVarInt() : 0;
+            var toAnchor = atEntity ? buf.ReadVarInt() : 0;
+            return new ClientboundPlayerLookAtPacket(fromAnchor, x, y, z, atEntity, entity, toAnchor);
+        }
 
         public void Encode(FriendlyByteBuf buf, ClientboundPlayerLookAtPacket value)
-            => throw new NotImplementedException("EntityAnchorArgument.Anchor business type not yet implemented");
+        {
+            buf.WriteVarInt(value.FromAnchor is int from ? from : 0);
+            buf.WriteDouble(value.X);
+            buf.WriteDouble(value.Y);
+            buf.WriteDouble(value.Z);
+            buf.WriteBoolean(value.AtEntity);
+            if (value.AtEntity)
+            {
+                buf.WriteVarInt(value.Entity);
+                buf.WriteVarInt(value.ToAnchor is int to ? to : 0);
+            }
+        }
     }
 }

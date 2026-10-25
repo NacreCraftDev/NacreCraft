@@ -1,3 +1,5 @@
+using NacreCraft.Primitives;
+
 namespace NacreCraft.Game.Network.Protocol.Game;
 
 //ServerboundBlockEntityTagQueryPacket block entity tag query packet, maps to vanilla ServerboundBlockEntityTagQueryPacket
@@ -13,9 +15,12 @@ public sealed record ServerboundBlockEntityTagQueryPacket(int TransactionId, obj
     private sealed class BlockEntityTagQueryCodec : StreamCodec<FriendlyByteBuf, ServerboundBlockEntityTagQueryPacket>
     {
         public ServerboundBlockEntityTagQueryPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => new(buf.ReadVarInt(), buf.ReadBlockPos());
 
         public void Encode(FriendlyByteBuf buf, ServerboundBlockEntityTagQueryPacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            buf.WriteVarInt(value.TransactionId);
+            buf.WriteBlockPos(value.Pos is BlockPos pos ? pos : default);
+        }
     }
 }

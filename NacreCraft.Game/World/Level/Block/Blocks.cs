@@ -168,6 +168,11 @@ public static partial class Blocks
         RegisterPiston(real);
         //Dispenser and dropper, see Blocks.Dispenser.cs
         RegisterDispenser(real);
+        //Command blocks, see Blocks.CommandBlock.cs
+        RegisterCommandBlocks(real);
+        //Structure block and jigsaw, see Blocks.StructureBlock.cs and Blocks.Jigsaw.cs
+        RegisterStructureBlock(real);
+        RegisterJigsaw(real);
         //TNT, see Blocks.Tnt.cs
         RegisterTnt(real);
         //Sculk family, see Blocks.Sculk.cs

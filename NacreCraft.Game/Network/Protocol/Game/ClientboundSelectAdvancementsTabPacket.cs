@@ -12,10 +12,15 @@ public sealed record ClientboundSelectAdvancementsTabPacket(object Tab) : Packet
 
     private sealed class SelectAdvancementsTabCodec : StreamCodec<FriendlyByteBuf, ClientboundSelectAdvancementsTabPacket>
     {
+        //Vanilla order: nullable tab identifier
         public ClientboundSelectAdvancementsTabPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => new(buf.ReadBoolean() ? buf.ReadIdentifier() : null!);
 
         public void Encode(FriendlyByteBuf buf, ClientboundSelectAdvancementsTabPacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            var hasTab = value.Tab is NacreCraft.Registry.Identifier;
+            buf.WriteBoolean(hasTab);
+            if (hasTab) buf.WriteIdentifier((NacreCraft.Registry.Identifier)value.Tab!);
+        }
     }
 }

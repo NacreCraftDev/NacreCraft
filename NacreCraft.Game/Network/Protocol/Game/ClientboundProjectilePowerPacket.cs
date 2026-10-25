@@ -13,9 +13,12 @@ public sealed record ClientboundProjectilePowerPacket(int Id, double Acceleratio
     private sealed class ProjectilePowerCodec : StreamCodec<FriendlyByteBuf, ClientboundProjectilePowerPacket>
     {
         public ClientboundProjectilePowerPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => new(buf.ReadVarInt(), buf.ReadDouble());
 
         public void Encode(FriendlyByteBuf buf, ClientboundProjectilePowerPacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            buf.WriteVarInt(value.Id);
+            buf.WriteDouble(value.AccelerationPower);
+        }
     }
 }

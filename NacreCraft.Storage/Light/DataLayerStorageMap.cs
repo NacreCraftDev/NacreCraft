@@ -42,6 +42,10 @@ public abstract class DataLayerStorageMap<TSelf> where TSelf : DataLayerStorageM
     //Entries exposes all layer data for subclasses to copy
     protected IEnumerable<KeyValuePair<long, DataLayer>> Entries => _map;
 
+    //SharedEntries the backing dictionary itself, handed to a copy so both maps see the same layers
+    //Vanilla copy shares the map; duplicating it on every light update copied every section once per tick
+    protected Dictionary<long, DataLayer> SharedEntries => _map;
+
     //CopyEntries shallow-copies the backing dictionary for subclass Copy
     protected Dictionary<long, DataLayer> CopyEntries() => new(_map);
 }

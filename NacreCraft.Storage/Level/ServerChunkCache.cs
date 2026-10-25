@@ -65,6 +65,14 @@ public sealed class ServerChunkCache : ChunkSource
     //Chunks whose light is already built; the sender must not hand a chunk to a client before this, the client would render it pitch black
     //Concurrent because the sender reads it on its own thread while TickLight writes it under the gate
     private readonly ConcurrentDictionary<long, byte> _lightReady = new();
+
+    //Temporary instrumentation: generation pipeline depth, reported once every five seconds
+    private int _generating;
+    private int _generateWaiting;
+    private long _generatedTotal;
+    private int _statsTick;
+    private int _lastStatsTick;
+    private long _lastGeneratedTotal;
     //Set while the light thread builds light for freshly loaded chunks; their section changes are covered by the full light
     //block of the chunk packet, so they must not enter the pending set and be broadcast to every player
     [ThreadStatic] private static bool _suppressLightDispatch;
@@ -208,20 +216,33 @@ public sealed class ServerChunkCache : ChunkSource
         if (_chunkMap.GetHolder(key) is { IsDone: true } holder)
         {
             var result = holder.Future.Result;
-            if (result.IsSuccess)
-            {
-                _loaded[key] = result.Chunk!;
-                return result.Chunk;
-            }
+            if (result.IsSuccess) return MergeLoadedChunk(key, result.Chunk!);
             if (require) throw result.Error!;
             return null;
         }
         if (require)
-            return GetChunkFuture(x, z, status).GetAwaiter().GetResult().OrElse(null);
+        {
+            var chunk = GetChunkFuture(x, z, status).GetAwaiter().GetResult().OrElse(null);
+            //A synchronously awaited chunk takes the same merge path, or it would never enter the light queue
+            return chunk is null ? null : MergeLoadedChunk(key, chunk);
+        }
         //The non-blocking path must also submit the async load, or the chunk stays unloaded forever
         //The caller retries next tick; generation advances in the background without blocking the main loop
         _ = GetChunkFuture(x, z, status);
         return null;
+    }
+
+    //MergeLoadedChunk publishes a finished chunk into the cache and queues its light build, maps to the merge step of vanilla ChunkMap
+    //Every path that first sees a finished chunk must go through here: writing only _loaded used to skip the light queue, the chunk
+    //then never got a ready mark, and the sender skipped it forever (a few scattered chunks never rendering until restart)
+    private ChunkAccess MergeLoadedChunk(long key, ChunkAccess chunk)
+    {
+        if (_loaded.TryGetValue(key, out var existing)) return existing;
+        _loaded[key] = chunk;
+        _pendingLight.Enqueue(chunk);
+        _lightWork.Release();
+        ChunkLoaded?.Invoke(chunk.Pos);
+        return chunk;
     }
 
     //IsChunkFailed, whether the chunk is confirmed to have failed loading, as opposed to not yet ready
@@ -292,9 +313,21 @@ public sealed class ServerChunkCache : ChunkSource
             if (chunk is null && _generator is not null)
             {
                 //Generation is a CPU-bound synchronous process; the gate caps concurrency at core count so the thread pool is not saturated at once
+                Interlocked.Increment(ref _generateWaiting);
                 await _generateGate.WaitAsync().ConfigureAwait(false);
+                Interlocked.Decrement(ref _generateWaiting);
+                Interlocked.Increment(ref _generating);
+                //Generation threads must never outrank the tick and network threads, otherwise the main loop stalls for the whole batch
+                var previousPriority = Thread.CurrentThread.Priority;
+                Thread.CurrentThread.Priority = ThreadPriority.BelowNormal;
                 try { chunk = _generator(holder.Pos); }
-                finally { _generateGate.Release(); }
+                finally
+                {
+                    Thread.CurrentThread.Priority = previousPriority;
+                    Interlocked.Decrement(ref _generating);
+                    Interlocked.Increment(ref _generatedTotal);
+                    _generateGate.Release();
+                }
             }
             if (chunk is null)
             {
@@ -578,16 +611,7 @@ public sealed class ServerChunkCache : ChunkSource
             if (holder.IsDone)
             {
                 var result = holder.Future.Result;
-                if (result.IsSuccess && !_loaded.ContainsKey(key))
-                {
-                    _loaded[key] = result.Chunk!;
-                    //Light is built by the light thread, not here and not on the generating thread
-                    //Building it on a generating thread meant holding the gate across five full sky column scans per chunk, with the main thread
-                    //blocked on that gate once per tick; the chunk is held back from the sender until the light is ready
-                    _pendingLight.Enqueue(result.Chunk!);
-                    _lightWork.Release();
-                    ChunkLoaded?.Invoke(result.Chunk!.Pos);
-                }
+                if (result.IsSuccess) MergeLoadedChunk(key, result.Chunk!);
             }
             //Holders whose tickets no longer require loading to FULL are reclaimed; loaded chunks stay in _loaded and remain usable
             //One currently loading is kept for now; dropping it means its future has nowhere to backfill the cache on completion
@@ -613,6 +637,15 @@ public sealed class ServerChunkCache : ChunkSource
             }
         }
         //Log.Debug($"Tick exit");
+        //Temporary: one generation pipeline line every thirty seconds at 20 tps
+        _statsTick++;
+        if (_statsTick - _lastStatsTick < 600) return;
+        _lastStatsTick = _statsTick;
+        var generated = Interlocked.Read(ref _generatedTotal);
+        Log.Info($"[gen] generating={Volatile.Read(ref _generating)} waiting={Volatile.Read(ref _generateWaiting)} " +
+            $"gateFree={_generateGate.CurrentCount} done=+{generated - _lastGeneratedTotal} total={generated} " +
+            $"loaded={_loaded.Count} pendingLight={_pendingLight.Count} holders={_chunkMap.HoldersCount}");
+        _lastGeneratedTotal = generated;
     }
 
     //ReadyForSaving: whether the chunk's holder can safely drop tickets, matching the holder test of vanilla canTicketExpire

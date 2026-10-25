@@ -12,10 +12,14 @@ public sealed record ClientboundCooldownPacket(object CooldownGroup, int Duratio
 
     private sealed class CooldownCodec : StreamCodec<FriendlyByteBuf, ClientboundCooldownPacket>
     {
+        //Vanilla order: cooldown group identifier + VAR_INT duration in ticks
         public ClientboundCooldownPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => new(buf.ReadIdentifier(), buf.ReadVarInt());
 
         public void Encode(FriendlyByteBuf buf, ClientboundCooldownPacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            buf.WriteIdentifier(value.CooldownGroup is NacreCraft.Registry.Identifier id ? id : NacreCraft.Registry.Identifier.WithDefaultNamespace("empty"));
+            buf.WriteVarInt(value.Duration);
+        }
     }
 }

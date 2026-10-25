@@ -745,7 +745,23 @@ public sealed class ServerGamePacketListenerImpl : ServerGamePacketListener, Tic
         player.Connection.Send(new ClientboundCommandSuggestionsPacket(
             packet.Id, suggestions.Range.Start, suggestions.Range.Length, entries));
     }
-    public void HandleSetCommandBlock(ServerboundSetCommandBlockPacket packet) { }
+    //HandleSetCommandBlock applies a command block edit, maps to vanilla handleSetCommandBlock
+    //Only game masters may edit; a missing block entity means the block was replaced, so the packet is dropped silently
+    public void HandleSetCommandBlock(ServerboundSetCommandBlockPacket packet)
+    {
+        var player = Player;
+        if (player is null || !player.HasPermissions((int)NacreCraft.Registry.PermissionLevel.Gamemasters)) return;
+        if (player.Level is not PersistentServerLevel level) return;
+        if (level.GetBlockEntity<NacreCraft.Game.World.Level.Block.CommandBlockEntity>(packet.Pos) is not { } entity)
+            return;
+        entity.SetCommand(packet.Command);
+        entity.SetTrackOutput(packet.TrackOutput);
+        entity.SetConditional(packet.Conditional);
+        entity.SetAutomatic(packet.Automatic);
+        entity.SetMode(packet.Mode);
+        //Echo the updated state back so the editing client sees the stored values
+        level.BlockEntityChanged(packet.Pos);
+    }
     public void HandleSetCommandMinecart(ServerboundSetCommandMinecartPacket packet) { }
     //HandlePickItemFromBlock middle-click pick block, maps to vanilla handlePickItemFromBlock following tryPickItem
     //The IncludeData variant carrying block entity data will be extended once block entity component serialization is complete
@@ -781,7 +797,60 @@ public sealed class ServerGamePacketListenerImpl : ServerGamePacketListener, Tic
     public void HandleRenameItem(ServerboundRenameItemPacket packet) { }
     public void HandleSetBeaconPacket(ServerboundSetBeaconPacket packet) { }
     public void HandleSetGameRule(ServerboundSetGameRulePacket packet) { }
-    public void HandleSetStructureBlock(ServerboundSetStructureBlockPacket packet) { }
+    //HandleSetStructureBlock writes the fields the structure block screen sent, then runs the requested action
+    //Maps to vanilla handleSetStructureBlock; the save/load/scan results go back as the same translation keys
+    public void HandleSetStructureBlock(ServerboundSetStructureBlockPacket packet)
+    {
+        var player = Player;
+        if (player is null || !player.HasPermissions((int)NacreCraft.Registry.PermissionLevel.Gamemasters)) return;
+        if (player.Level is not PersistentServerLevel level) return;
+        if (level.GetBlockEntity<StructureBlockEntity>(packet.Pos) is not { } structure) return;
+
+        structure.SetMode(packet.Mode);
+        structure.SetStructureName(packet.Name);
+        structure.SetOffset(packet.Offset);
+        structure.SetSize(packet.Size);
+        structure.SetMirror(packet.Mirror);
+        structure.SetRotation(packet.Rotation);
+        structure.SetMetaData(packet.Data);
+        structure.SetIgnoreEntities(packet.IgnoreEntities);
+        structure.SetStrict(packet.Strict);
+        structure.SetShowAir(packet.ShowAir);
+        structure.SetShowBoundingBox(packet.ShowBoundingBox);
+        structure.SetIntegrity(packet.Integrity);
+        structure.SetSeed(packet.Seed);
+
+        if (!structure.HasStructureName)
+        {
+            player.SendSystemMessage(Component.Translatable("structure_block.invalid_structure_name", packet.Name));
+        }
+        else
+        {
+            var name = structure.Name;
+            switch (packet.UpdateType)
+            {
+                case StructureBlockEntity.UpdateType.SaveArea:
+                    player.SendSystemMessage(structure.SaveStructure(true)
+                        ? Component.Translatable("structure_block.save_success", name)
+                        : Component.Translatable("structure_block.save_failure", name));
+                    break;
+                case StructureBlockEntity.UpdateType.LoadArea:
+                    if (!structure.IsStructureLoadable())
+                        player.SendSystemMessage(Component.Translatable("structure_block.load_not_found", name));
+                    else if (structure.PlaceStructureIfSameSize(level))
+                        player.SendSystemMessage(Component.Translatable("structure_block.load_success", name));
+                    else
+                        player.SendSystemMessage(Component.Translatable("structure_block.load_prepare", name));
+                    break;
+                case StructureBlockEntity.UpdateType.ScanArea:
+                    player.SendSystemMessage(structure.DetectSize()
+                        ? Component.Translatable("structure_block.size_success", name)
+                        : Component.Translatable("structure_block.size_failure"));
+                    break;
+            }
+        }
+        level.BlockEntityChanged(packet.Pos);
+    }
     public void HandleSetTestBlock(ServerboundSetTestBlockPacket packet) { }
     public void HandleTestInstanceBlockAction(ServerboundTestInstanceBlockActionPacket packet) { }
     public void HandleSelectTrade(ServerboundSelectTradePacket packet) { }
@@ -789,8 +858,32 @@ public sealed class ServerGamePacketListenerImpl : ServerGamePacketListener, Tic
     public void HandleEntityTagQuery(ServerboundEntityTagQueryPacket packet) { }
     public void HandleContainerSlotStateChanged(ServerboundContainerSlotStateChangedPacket packet) { }
     public void HandleBlockEntityTagQuery(ServerboundBlockEntityTagQueryPacket packet) { }
-    public void HandleSetJigsawBlock(ServerboundSetJigsawBlockPacket packet) { }
-    public void HandleJigsawGenerate(ServerboundJigsawGeneratePacket packet) { }
+
+    //HandleSetJigsawBlock writes the connection fields the jigsaw screen sent, maps to vanilla handleSetJigsawBlock
+    public void HandleSetJigsawBlock(ServerboundSetJigsawBlockPacket packet)
+    {
+        var player = Player;
+        if (player is null || !player.HasPermissions((int)NacreCraft.Registry.PermissionLevel.Gamemasters)) return;
+        if (player.Level is not PersistentServerLevel level) return;
+        if (level.GetBlockEntity<JigsawBlockEntity>(packet.Pos) is not { } jigsaw) return;
+        jigsaw.SetName(packet.Name);
+        jigsaw.SetTarget(packet.Target);
+        jigsaw.SetPool(packet.Pool);
+        jigsaw.SetFinalState(packet.FinalState);
+        jigsaw.SetJoint(packet.Joint);
+        jigsaw.SetPlacementPriority(packet.PlacementPriority);
+        jigsaw.SetSelectionPriority(packet.SelectionPriority);
+        level.BlockEntityChanged(packet.Pos);
+    }
+
+    //HandleJigsawGenerate assembles the pool into the world from that block, maps to vanilla handleJigsawGenerate
+    public void HandleJigsawGenerate(ServerboundJigsawGeneratePacket packet)
+    {
+        var player = Player;
+        if (player is null || !player.HasPermissions((int)NacreCraft.Registry.PermissionLevel.Gamemasters)) return;
+        if (player.Level is not PersistentServerLevel level) return;
+        level.GetBlockEntity<JigsawBlockEntity>(packet.Pos)?.Generate(level, packet.Levels, packet.KeepJigsaws);
+    }
     public void HandleChangeDifficulty(ServerboundChangeDifficultyPacket packet) { }
     //HandleChangeGameMode client switching game mode with F3+F4, requires permission level 2
     //The client entry is disabled by permission level; this is the server-side check against spoofing

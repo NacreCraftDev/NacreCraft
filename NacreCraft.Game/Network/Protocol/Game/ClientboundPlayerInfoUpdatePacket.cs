@@ -4,7 +4,8 @@ using NacreCraft.Network.Chat;
 
 namespace NacreCraft.Game.Network.Protocol.Game;
 
-//PlayerInfoAction player info update action bitmask, maps to vanilla ClientboundPlayerInfoUpdatePacket.Action
+//PlayerInfoAction player info update action bit positions, maps to vanilla ClientboundPlayerInfoUpdatePacket.Action
+//The bit index is the declaration order, which is the order the actions are written in
 public enum PlayerInfoAction : byte
 {
     AddPlayer = 0,
@@ -12,11 +13,17 @@ public enum PlayerInfoAction : byte
     UpdateGameMode = 2,
     UpdateListed = 3,
     UpdateLatency = 4,
-    UpdateDisplayName = 5
+    UpdateDisplayName = 5,
+    UpdateListOrder = 6,
+    UpdateHat = 7
 }
 
+//ChatSessionData the player's chat session public key, maps to vanilla RemoteChatSession.Data
+//ExpiresAt is epoch milliseconds, Key is the encoded public key, Signature signs the profile id plus expiry
+public readonly record struct ChatSessionData(Guid SessionId, long ExpiresAt, byte[] Key, byte[] Signature);
+
 //PlayerInfoEntry player info entry, maps to vanilla ClientboundPlayerInfoUpdatePacket.Entry
-//S2 supports AddPlayer (no properties) + UpdateGameMode/UpdateListed/UpdateLatency/UpdateDisplayName (null)
+//Only the actions present in the packet bitmask are written; the rest keep their previous or default value
 public sealed record PlayerInfoEntry(
     Guid ProfileId,
     string Name,
@@ -25,20 +32,31 @@ public sealed record PlayerInfoEntry(
     int Latency,
     Component? DisplayName)
 {
-    public static StreamCodec<FriendlyByteBuf, PlayerInfoEntry> StaticCodec { get; } = new EntryCodec();
+    public bool ShowHat { get; init; } = true;
+    public int ListOrder { get; init; }
+    public ChatSessionData? ChatSession { get; init; }
 
-    //EncodeEntry writes entry data in the order of the actions bitmask
+    //EncodeEntry writes entry data in action declaration order
     public static void EncodeEntry(FriendlyByteBuf buf, PlayerInfoEntry entry, int actions)
     {
         buf.WriteUuid(entry.ProfileId);
         if ((actions & (1 << (int)PlayerInfoAction.AddPlayer)) != 0)
         {
             buf.WriteString(entry.Name);
-            //properties list of 0; S2 does not implement signed properties
+            //Properties list of 0; the client does not consume texture/skin properties yet
             buf.WriteVarInt(0);
         }
         if ((actions & (1 << (int)PlayerInfoAction.InitializeChat)) != 0)
-            throw new NotSupportedException("InitializeChat is not implemented");
+        {
+            buf.WriteBoolean(entry.ChatSession is not null);
+            if (entry.ChatSession is { } chat)
+            {
+                buf.WriteUuid(chat.SessionId);
+                buf.WriteLong(chat.ExpiresAt);
+                buf.WriteByteArray(chat.Key);
+                buf.WriteByteArray(chat.Signature);
+            }
+        }
         if ((actions & (1 << (int)PlayerInfoAction.UpdateGameMode)) != 0)
             buf.WriteVarInt(entry.GameMode.Id);
         if ((actions & (1 << (int)PlayerInfoAction.UpdateListed)) != 0)
@@ -47,20 +65,70 @@ public sealed record PlayerInfoEntry(
             buf.WriteVarInt(entry.Latency);
         if ((actions & (1 << (int)PlayerInfoAction.UpdateDisplayName)) != 0)
         {
-            //S2 only supports a null displayName; Component deserialization is left for later
             buf.WriteBoolean(entry.DisplayName is not null);
             if (entry.DisplayName is not null)
-                throw new NotSupportedException("DisplayName serialization is not implemented");
+                ComponentSerialization.StreamCodec.Encode(buf, entry.DisplayName);
         }
+        if ((actions & (1 << (int)PlayerInfoAction.UpdateListOrder)) != 0)
+            buf.WriteVarInt(entry.ListOrder);
+        if ((actions & (1 << (int)PlayerInfoAction.UpdateHat)) != 0)
+            buf.WriteBoolean(entry.ShowHat);
     }
 
-    private sealed class EntryCodec : StreamCodec<FriendlyByteBuf, PlayerInfoEntry>
+    //DecodeEntry reads entry data in action declaration order, mirroring EncodeEntry
+    public static PlayerInfoEntry DecodeEntry(FriendlyByteBuf buf, int actions)
     {
-        public PlayerInfoEntry Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Entry decoding is implemented symmetrically by the EncodeEntry static method");
-
-        public void Encode(FriendlyByteBuf buf, PlayerInfoEntry value)
-            => throw new NotImplementedException("Entry encoding is implemented symmetrically by the EncodeEntry static method");
+        var profileId = buf.ReadUuid();
+        var name = string.Empty;
+        GameType gameMode = GameType.Survival;
+        var listed = false;
+        var latency = 0;
+        Component? displayName = null;
+        var listOrder = 0;
+        var showHat = true;
+        ChatSessionData? chatSession = null;
+        if ((actions & (1 << (int)PlayerInfoAction.AddPlayer)) != 0)
+        {
+            name = buf.ReadString();
+            var propertyCount = buf.ReadVarInt();
+            for (var p = 0; p < propertyCount; p++)
+            {
+                buf.ReadString();
+                buf.ReadString();
+                if (buf.ReadBoolean()) buf.ReadByteArray();
+            }
+        }
+        if ((actions & (1 << (int)PlayerInfoAction.InitializeChat)) != 0)
+        {
+            if (buf.ReadBoolean())
+            {
+                var sessionId = buf.ReadUuid();
+                var expiresAt = buf.ReadLong();
+                var key = buf.ReadByteArray();
+                var signature = buf.ReadByteArray();
+                chatSession = new ChatSessionData(sessionId, expiresAt, key, signature);
+            }
+        }
+        if ((actions & (1 << (int)PlayerInfoAction.UpdateGameMode)) != 0)
+            gameMode = GameType.ById(buf.ReadVarInt()) ?? GameType.Survival;
+        if ((actions & (1 << (int)PlayerInfoAction.UpdateListed)) != 0)
+            listed = buf.ReadBoolean();
+        if ((actions & (1 << (int)PlayerInfoAction.UpdateLatency)) != 0)
+            latency = buf.ReadVarInt();
+        if ((actions & (1 << (int)PlayerInfoAction.UpdateDisplayName)) != 0)
+        {
+            if (buf.ReadBoolean()) displayName = ComponentSerialization.StreamCodec.Decode(buf);
+        }
+        if ((actions & (1 << (int)PlayerInfoAction.UpdateListOrder)) != 0)
+            listOrder = buf.ReadVarInt();
+        if ((actions & (1 << (int)PlayerInfoAction.UpdateHat)) != 0)
+            showHat = buf.ReadBoolean();
+        return new PlayerInfoEntry(profileId, name, gameMode, listed, latency, displayName)
+        {
+            ListOrder = listOrder,
+            ShowHat = showHat,
+            ChatSession = chatSession
+        };
     }
 }
 
@@ -82,39 +150,7 @@ public sealed record ClientboundPlayerInfoUpdatePacket(int Actions, IReadOnlyLis
             var count = buf.ReadVarInt();
             var entries = new PlayerInfoEntry[count];
             for (var i = 0; i < count; i++)
-            {
-                var profileId = buf.ReadUuid();
-                string? name = null;
-                GameType gameMode = GameType.Survival;
-                var listed = false;
-                var latency = 0;
-                Component? displayName = null;
-                if ((actions & (1 << (int)PlayerInfoAction.AddPlayer)) != 0)
-                {
-                    name = buf.ReadString();
-                    var propertyCount = buf.ReadVarInt();
-                    for (var p = 0; p < propertyCount; p++)
-                    {
-                        buf.ReadString();
-                        buf.ReadString();
-                        if (buf.ReadBoolean()) buf.ReadByteArray();
-                    }
-                }
-                if ((actions & (1 << (int)PlayerInfoAction.InitializeChat)) != 0)
-                    throw new NotSupportedException("InitializeChat decoding is not implemented");
-                if ((actions & (1 << (int)PlayerInfoAction.UpdateGameMode)) != 0)
-                    gameMode = GameType.ById(buf.ReadVarInt()) ?? GameType.Survival;
-                if ((actions & (1 << (int)PlayerInfoAction.UpdateListed)) != 0)
-                    listed = buf.ReadBoolean();
-                if ((actions & (1 << (int)PlayerInfoAction.UpdateLatency)) != 0)
-                    latency = buf.ReadVarInt();
-                if ((actions & (1 << (int)PlayerInfoAction.UpdateDisplayName)) != 0)
-                {
-                    if (buf.ReadBoolean())
-                        throw new NotSupportedException("DisplayName decoding is not implemented");
-                }
-                entries[i] = new PlayerInfoEntry(profileId, name ?? string.Empty, gameMode, listed, latency, displayName);
-            }
+                entries[i] = PlayerInfoEntry.DecodeEntry(buf, actions);
             return new ClientboundPlayerInfoUpdatePacket(actions, entries);
         }
 

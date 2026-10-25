@@ -1,3 +1,5 @@
+using NacreCraft.Primitives;
+
 namespace NacreCraft.Game.Network.Protocol.Game;
 
 //ClientboundGameTestHighlightPosPacket game test highlight pos packet, maps to vanilla ClientboundGameTestHighlightPosPacket
@@ -13,9 +15,12 @@ public sealed record ClientboundGameTestHighlightPosPacket(object AbsolutePos, o
     private sealed class GameTestHighlightPosCodec : StreamCodec<FriendlyByteBuf, ClientboundGameTestHighlightPosPacket>
     {
         public ClientboundGameTestHighlightPosPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => new(buf.ReadBlockPos(), buf.ReadBlockPos());
 
         public void Encode(FriendlyByteBuf buf, ClientboundGameTestHighlightPosPacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            buf.WriteBlockPos(value.AbsolutePos is BlockPos absolute ? absolute : default);
+            buf.WriteBlockPos(value.RelativePos is BlockPos relative ? relative : default);
+        }
     }
 }

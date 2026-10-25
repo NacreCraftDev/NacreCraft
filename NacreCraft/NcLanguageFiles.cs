@@ -49,6 +49,17 @@ public static class NcLanguageFiles
         return true;
     }
 
+    //LoadEmbedded reads the embedded language file for the code into the table, bypassing the language directory
+    //The on-disk file may be an older copy missing keys added later; this is the middle fallback between it and en_us
+    public static bool LoadEmbedded(string code, Dictionary<string, string> entries)
+    {
+        var assembly = typeof(NcLanguageFiles).Assembly;
+        using var stream = assembly.GetManifestResourceStream(EmbeddedPrefix + code + ".json");
+        if (stream is null) return false;
+        Language.LoadFromJson(stream, (key, value) => entries[key] = value);
+        return true;
+    }
+
     //Dir the language directory, lang/ under the program root
     public static string Dir(string? targetRoot = null)
         => Path.Combine(targetRoot ?? AppPaths.BaseDirectory, "lang");

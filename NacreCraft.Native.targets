@@ -1,0 +1,38 @@
+<Project>
+
+  <!--
+    The native layer is a Rust artifact outside the NuGet graph. A package places it under runtimes/<rid>/native
+    through ResolvePackageAssets, but a local ProjectReference carries no runtime assets, so the copy is done here.
+    NativeStackGuard looks for the library under runtimes/<rid>/native, which is why the layout is preserved.
+  -->
+  <PropertyGroup>
+    <NativeLayerRid Condition="'$(NativeLayerRid)' == '' And '$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</NativeLayerRid>
+    <NativeLayerRid Condition="'$(NativeLayerRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</NativeLayerRid>
+    <DeployNativeLayer Condition="'$(DeployNativeLayer)' == ''">true</DeployNativeLayer>
+  </PropertyGroup>
+
+  <Target Name="DeployNativeLayer" AfterTargets="Build"
+          Condition="'$(DeployNativeLayer)' == 'true' And '$(NativeLayerRid)' != ''">
+    <ItemGroup>
+      <NativeLayerFile Include="$(MSBuildThisFileDirectory)NacreCraft.Native\out\$(NativeLayerRid)\nacrecraft_native.*" />
+      <NativeLayerFile Include="$(MSBuildThisFileDirectory)NacreCraft.Native\out\$(NativeLayerRid)\libnacrecraft_native.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(NativeLayerFile)"
+          DestinationFolder="$(OutDir)runtimes\$(NativeLayerRid)\native"
+          SkipUnchangedFiles="true"
+          Condition="'@(NativeLayerFile)' != ''" />
+  </Target>
+
+  <Target Name="DeployNativeLayerToPublish" AfterTargets="Publish"
+          Condition="'$(DeployNativeLayer)' == 'true' And '$(NativeLayerRid)' != ''">
+    <ItemGroup>
+      <PublishedNativeLayer Include="$(MSBuildThisFileDirectory)NacreCraft.Native\out\$(NativeLayerRid)\nacrecraft_native.*" />
+      <PublishedNativeLayer Include="$(MSBuildThisFileDirectory)NacreCraft.Native\out\$(NativeLayerRid)\libnacrecraft_native.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PublishedNativeLayer)"
+          DestinationFolder="$(PublishDir)runtimes\$(NativeLayerRid)\native"
+          SkipUnchangedFiles="true"
+          Condition="'@(PublishedNativeLayer)' != ''" />
+  </Target>
+
+</Project>

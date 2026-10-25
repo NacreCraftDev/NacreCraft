@@ -167,6 +167,31 @@ public static class GameProtocols
             //pong_response is the reply to ping_request; vanilla play protocol id 62, used by the client to compute latency
             .AddPacketCommon(GamePacketTypes.ClientboundPongResponse, ClientboundPongResponsePacket.StreamCodec)
             .AddPacketCommon(CommonPacketTypes.ClientboundUpdateTags, ClientboundUpdateTagsPacket.StreamCodec)
+            //Play-state payloads shared by both sides: the client must decode them and the built-in server encodes the same codecs
+            .AddPacket(GamePacketTypes.ClientboundAwardStats, ClientboundAwardStatsPacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundBossEvent, ClientboundBossEventPacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundDamageEvent, ClientboundDamageEventPacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundDeleteChat, ClientboundDeleteChatPacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundExplode, ClientboundExplodePacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundMapItemData, ClientboundMapItemDataPacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundMerchantOffers, ClientboundMerchantOffersPacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundMoveMinecartAlongTrack, ClientboundMoveMinecartPacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundPlayerChat, ClientboundPlayerChatPacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundRecipeBookAdd, ClientboundRecipeBookAddPacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundRecipeBookRemove, ClientboundRecipeBookRemovePacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundRecipeBookSettings, ClientboundRecipeBookSettingsPacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundUpdateAdvancements, ClientboundUpdateAdvancementsPacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundUpdateRecipes, ClientboundUpdateRecipesPacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundWaypoint, ClientboundTrackedWaypointPacket.StreamCodec)
+            //Debug and game test payloads are only produced by the built-in server, and their registries are not implemented yet
+            .AddPacket(GamePacketTypes.ClientboundDebugBlockValue, ClientboundDebugBlockValuePacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundDebugChunkValue, ClientboundDebugChunkValuePacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundDebugEntityValue, ClientboundDebugEntityValuePacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundDebugEvent, ClientboundDebugEventPacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundDebugSample, ClientboundDebugSamplePacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundGameTestHighlightPos, ClientboundGameTestHighlightPosPacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundTestInstanceBlockStatus, ClientboundTestInstanceBlockStatus.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundPlaceGhostRecipe, ClientboundPlaceGhostRecipePacket.StreamCodec)
             .BuildUnbound();
 
     //Clientbound the bound CLIENTBOUND ProtocolInfo

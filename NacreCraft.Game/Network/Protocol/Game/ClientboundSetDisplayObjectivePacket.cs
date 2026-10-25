@@ -12,10 +12,14 @@ public sealed record ClientboundSetDisplayObjectivePacket(object Slot, string Ob
 
     private sealed class SetDisplayObjectiveCodec : StreamCodec<FriendlyByteBuf, ClientboundSetDisplayObjectivePacket>
     {
+        //Vanilla order: display slot id (VAR_INT) + objective name; an empty name clears the slot
         public ClientboundSetDisplayObjectivePacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => new(buf.ReadVarInt(), buf.ReadString());
 
         public void Encode(FriendlyByteBuf buf, ClientboundSetDisplayObjectivePacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            buf.WriteVarInt(value.Slot is int slot ? slot : 0);
+            buf.WriteString(value.ObjectiveName);
+        }
     }
 }

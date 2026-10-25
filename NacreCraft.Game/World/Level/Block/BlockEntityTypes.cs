@@ -42,6 +42,30 @@ public static class BlockEntityTypes
         public override BlockEntity Create(BlockPos pos) => new ComparatorBlockEntity(pos);
     }
 
+    //CommandBlockType command block type, index 23 in vanilla BlockEntityTypes declaration order
+    public sealed class CommandBlockType : BlockEntityType
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("command_block");
+        public override int RawId => 23;
+        public override BlockEntity Create(BlockPos pos) => new CommandBlockEntity(pos);
+    }
+
+    //StructureBlockType structure block type, index 21 in vanilla BlockEntityTypes declaration order
+    public sealed class StructureBlockType : BlockEntityType
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("structure_block");
+        public override int RawId => 21;
+        public override BlockEntity Create(BlockPos pos) => new StructureBlockEntity(pos, default);
+    }
+
+    //JigsawType jigsaw type, index 31 in vanilla BlockEntityTypes declaration order
+    public sealed class JigsawType : BlockEntityType
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("jigsaw");
+        public override int RawId => 31;
+        public override BlockEntity Create(BlockPos pos) => new JigsawBlockEntity(pos);
+    }
+
     //PistonMovingType moving piston type, index 11 for piston in vanilla BlockEntityTypes
     public sealed class PistonMovingType : BlockEntityType
     {
@@ -93,6 +117,12 @@ public static class BlockEntityTypes
     public static readonly FurnaceType FURNACE = new();
 
     public static readonly ComparatorType COMPARATOR = new();
+
+    public static readonly CommandBlockType COMMAND_BLOCK = new();
+
+    public static readonly StructureBlockType STRUCTURE_BLOCK = new();
+
+    public static readonly JigsawType JIGSAW = new();
 
     public static readonly ChestType CHEST = new();
 
@@ -151,6 +181,9 @@ public static class BlockEntityTypes
     {
         Register(FURNACE);
         Register(COMPARATOR);
+        Register(COMMAND_BLOCK);
+        Register(STRUCTURE_BLOCK);
+        Register(JIGSAW);
         Register(CHEST);
         Register(BARREL);
         Register(SMOKER);

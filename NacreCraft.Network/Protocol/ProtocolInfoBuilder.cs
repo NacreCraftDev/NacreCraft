@@ -16,6 +16,23 @@ public sealed class ProtocolInfoBuilder<THandler>
         _flow = flow;
     }
 
+    private ProtocolInfoBuilder(ConnectionProtocol protocol, FlowDirection flow, List<CodecEntry> codecs, BundlerInfo<THandler>? bundlerInfo)
+    {
+        _protocol = protocol;
+        _flow = flow;
+        _codecs = new List<CodecEntry>(codecs);
+        _bundlerInfo = bundlerInfo;
+    }
+
+    //Extend reopens a protocol built by this builder so one side can append its own packets without duplicating the shared table
+    //Used by the client to add serverbound packets that only its own screens send, keeping them out of the shared Game table
+    public static ProtocolInfoBuilder<THandler> Extend(SimpleUnboundProtocol<THandler> protocol)
+    {
+        if (protocol is not SimpleUnboundProtocolImpl<THandler> impl)
+            throw new InvalidOperationException("protocol must be built by ProtocolInfoBuilder");
+        return new ProtocolInfoBuilder<THandler>(impl.Protocol, impl.Direction, impl.CodecList, impl.Bundler);
+    }
+
     //AddPacket registers a packet type and its codec without a CodecModifier
     //serializer takes RegistryFriendlyByteBuf since StreamCodec's contravariant B lets a FriendlyByteBuf codec be passed implicitly
     public ProtocolInfoBuilder<THandler> AddPacket<TPacket>(
@@ -158,6 +175,12 @@ file sealed class SimpleUnboundProtocolImpl<THandler> : SimpleUnboundProtocol<TH
     }
 
     public ProtocolInfo<THandler>.Details Details => _details;
+
+    //Exposed to ProtocolInfoBuilder.Extend so a side-specific table can be built on top of an existing one
+    internal ConnectionProtocol Protocol => _protocol;
+    internal FlowDirection Direction => _flow;
+    internal List<ProtocolInfoBuilder<THandler>.CodecEntry> CodecList => _codecs;
+    internal BundlerInfo<THandler>? Bundler => _bundlerInfo;
 
     //Bind builds a ProtocolInfo and constructs an IdDispatchStreamCodec directly
     //byClass is "packet class → this protocol's network ID"; the same packet class can be registered under different ids in multiple protocols

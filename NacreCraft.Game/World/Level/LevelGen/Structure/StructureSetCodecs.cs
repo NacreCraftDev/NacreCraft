@@ -65,5 +65,8 @@ public static class StructureBootstrap
     public static void RegisterAll()
     {
         _ = RandomSpreadStructurePlacementType.Instance;
+        _ = ConcentricRingsStructurePlacementType.Instance;
+        //The non-jigsaw structure types must exist before worldgen/structure decodes; their generators are still pending
+        SimpleStructures.RegisterAll();
     }
 }

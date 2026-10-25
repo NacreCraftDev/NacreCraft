@@ -44,6 +44,9 @@ public static class NacreCraftKernel
         //Set the log source to the kernel
         Log.SetClassSource(typeof(NacreCraftKernel));
 
+        //Refuse incompatible hardware and warn about known risks before any native library is touched
+        HardwareCompatibility.EnsureSupported();
+
         //Extract language files to the root lang/ and install the table once for the default language code
         //Placed here to be as early as possible, so mod loading and kernel startup logs have words to pick from
         //The real language code is installed again after ServerMain/ClientMain read the config
@@ -77,6 +80,7 @@ public static class NacreCraftKernel
     private static void PrintStartupInfo()
     {
         //Log.Debug("PrintStartupInfo entry");
+        Log.Info($"Platform: {HardwareCompatibility.Describe()}");
         Log.Info($"Initializing kernel v{SharedConstants.Version}");
         Log.Info($"Protocol version: {SharedConstants.ProtocolVersion} (min {SharedConstants.ProtocolVersionLowerBound})");
         Log.Info($"World data version: {SharedConstants.WorldDataVersion}");

@@ -35,10 +35,22 @@ internal sealed class ClimateRTree<T>
     //Search looks up the nearest neighbour, maps to vanilla RTree.search
     public T Search(Climate.ParameterPoint target)
     {
-        var leaf = _root.Search(new ParameterTarget(target), _lastResult.Value);
+        //Temporary: node visits per query, printed every twenty thousand searches on this thread
+        var stats = _stats ??= new long[2];
+        var leaf = _root.Search(new ParameterTarget(target), _lastResult.Value, stats);
         _lastResult.Value = leaf;
+        stats[1]++;
+        if (stats[1] % 20000 == 0)
+        {
+            NacreCraft.Logging.Log.Info($"[rtree] queries={stats[1]} visits/query={(long)((double)stats[0] / stats[1])}");
+            stats[0] = 0;
+            stats[1] = 0;
+        }
         return leaf.Value;
     }
+
+    //Temporary: [0]=node visits, [1]=queries
+    [ThreadStatic] private static long[]? _stats;
 
     //ParameterTarget 7-dimensional query value, maps to the long[] in vanilla RTree.search
     //A value type so it stays on the stack; vanilla relies on Java escape analysis to elide the array
@@ -117,7 +129,7 @@ internal sealed class ClimateRTree<T>
             return below > 0 ? below * below : 0L;
         }
 
-        public abstract Leaf Search(in ParameterTarget target, Leaf? candidate);
+        public abstract Leaf Search(in ParameterTarget target, Leaf? candidate, long[] stats);
     }
 
     //Leaf leaf node holding one parameter list entry, maps to vanilla RTree.Leaf
@@ -127,7 +139,7 @@ internal sealed class ClimateRTree<T>
 
         public Leaf(Climate.ParameterPoint point, T value) : base(SpaceOf(point)) => Value = value;
 
-        public override Leaf Search(in ParameterTarget target, Leaf? candidate) => this;
+        public override Leaf Search(in ParameterTarget target, Leaf? candidate, long[] stats) => this;
     }
 
     //SubTree internal node holding several children, maps to vanilla RTree.SubTree
@@ -145,15 +157,16 @@ internal sealed class ClimateRTree<T>
             : base(space) => Children = children as Node[] ?? children.ToArray();
 
         //Search computes the child bounding-box distance first and skips a whole child that is farther than the current best
-        public override Leaf Search(in ParameterTarget target, Leaf? candidate)
+        public override Leaf Search(in ParameterTarget target, Leaf? candidate, long[] stats)
         {
             var minDistance = candidate is null ? long.MaxValue : candidate.Distance(target);
             var closest = candidate;
             foreach (var child in Children)
             {
+                stats[0]++;
                 var childDistance = child.Distance(target);
                 if (minDistance <= childDistance) continue;
-                var leaf = child.Search(target, closest);
+                var leaf = child.Search(target, closest, stats);
                 var leafDistance = ReferenceEquals(child, leaf) ? childDistance : leaf.Distance(target);
                 if (minDistance <= leafDistance) continue;
                 minDistance = leafDistance;

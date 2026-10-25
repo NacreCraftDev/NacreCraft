@@ -13,9 +13,9 @@ public sealed record ClientboundPlayerCombatEndPacket(int Duration) : Packet<Cli
     private sealed class PlayerCombatEndCodec : StreamCodec<FriendlyByteBuf, ClientboundPlayerCombatEndPacket>
     {
         public ClientboundPlayerCombatEndPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => new(buf.ReadVarInt());
 
         public void Encode(FriendlyByteBuf buf, ClientboundPlayerCombatEndPacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => buf.WriteVarInt(value.Duration);
     }
 }

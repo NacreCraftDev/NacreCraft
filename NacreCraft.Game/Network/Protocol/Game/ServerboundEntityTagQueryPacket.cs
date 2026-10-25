@@ -13,9 +13,12 @@ public sealed record ServerboundEntityTagQueryPacket(int TransactionId, int Enti
     private sealed class EntityTagQueryCodec : StreamCodec<FriendlyByteBuf, ServerboundEntityTagQueryPacket>
     {
         public ServerboundEntityTagQueryPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => new(buf.ReadVarInt(), buf.ReadVarInt());
 
         public void Encode(FriendlyByteBuf buf, ServerboundEntityTagQueryPacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            buf.WriteVarInt(value.TransactionId);
+            buf.WriteVarInt(value.EntityId);
+        }
     }
 }

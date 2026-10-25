@@ -55,6 +55,7 @@ log/
 artifacts/
 publish/
 target/
+NacreCraft.Native/out/
 third_party/
 # The native layer vendors the coreclr headers it compiles against, so they have to reach CI
 !NacreCraft.Native/third_party/

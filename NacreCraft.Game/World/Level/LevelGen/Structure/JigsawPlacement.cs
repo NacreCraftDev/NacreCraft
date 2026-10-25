@@ -2,7 +2,9 @@ using NacreCraft.Logging;
 using NacreCraft.Primitives;
 using NacreCraft.Primitives.Phys;
 using NacreCraft.Registry;
+using NacreCraft.Storage;
 using NacreCraft.Storage.Chunk;
+using NacreCraft.Storage.Updates;
 using NacreCraft.Util;
 using NacreCraft.Util.Random;
 
@@ -73,6 +75,67 @@ public static class JigsawPlacement
             builder => PlaceChildren(context, structureTemplateManager, chunkGenerator, heightAccessor, random,
                 centerPiece, maxDepth, doExpansionHack, centerX, centerY, centerZ, centerPiece.BoundingBox,
                 maxDistanceFromCenter, dimensionPadding, poolAliasLookup, liquidSettings, builder));
+    }
+
+    //GenerateInWorld assembles a jigsaw structure into a loaded level, maps to vanilla JigsawPlacement.generateJigsaw
+    //The jigsaw block asks for this; it starts from one element of the pool and expands level by level through jigsaw connections
+    public static void GenerateInWorld(ServerLevel level, StructureTemplateManager manager,
+        Holder<NacreCraft.Registry.StructureTemplatePool> startPool, Identifier? targetJigsaw, int levels,
+        BlockPos position, bool keepJigsaws)
+    {
+        if (startPool.Value is not StructureTemplatePool pool) return;
+        var random = RandomSource.Create();
+        var region = new WorldGenRegion(level, level.MinBuildHeight >> 4,
+            (level.MaxBuildHeight - level.MinBuildHeight) >> 4)
+        {
+            //Same flags the structure block uses: clients see the result, neighbors and drops stay off
+            UpdateFlags = BlockUpdateFlags.Clients | BlockUpdateFlags.KnownShape | BlockUpdateFlags.SuppressDrops,
+        };
+        //The manual assembly is not clipped to one chunk, so the bounding box spans the whole world
+        var chunkBox = new BoundingBoxInt(int.MinValue / 2, int.MinValue / 2, int.MinValue / 2,
+            int.MaxValue / 2, int.MaxValue / 2, int.MaxValue / 2);
+
+        var center = pool.GetRandomTemplate(random);
+        if (ReferenceEquals(center, EmptyPoolElement.Instance)) return;
+        var queue = new Queue<(StructurePoolElement Element, BlockPos Pos, Rotation Rotation, int Depth)>();
+        queue.Enqueue((center, position, StructureTransforms.GetRandomRotation(random), 0));
+
+        while (queue.Count > 0)
+        {
+            var (element, pos, rotation, depth) = queue.Dequeue();
+            element.Place(manager, region, null!, null!, pos, pos, rotation, chunkBox, random,
+                LiquidSettings.ApplyWaterlogging, keepJigsaws);
+            if (depth >= levels) continue;
+
+            foreach (var sourceJigsaw in element.GetShuffledJigsawBlocks(manager, pos, rotation, random))
+            {
+                //A configured target only narrows the start element; deeper connections use the pool alone
+                if (depth == 0 && targetJigsaw is { } startName && sourceJigsaw.Name != startName) continue;
+                if (BuiltInRegistries.TEMPLATE_POOL.GetValue(sourceJigsaw.Pool) is not StructureTemplatePool targetPool)
+                    continue;
+                var placed = false;
+                foreach (var candidate in targetPool.GetShuffledTemplates(random))
+                {
+                    //An empty element ends the search for this jigsaw, maps to the vanilla break
+                    if (ReferenceEquals(candidate, EmptyPoolElement.Instance)) break;
+                    var candidateRotation = StructureTransforms.GetRandomRotation(random);
+                    var candidateJigsaws = candidate.GetShuffledJigsawBlocks(manager, BlockPos.Zero, candidateRotation,
+                        random);
+                    foreach (var targetJigsawBlock in candidateJigsaws)
+                    {
+                        if (!JigsawBlock.CanAttach(sourceJigsaw, targetJigsawBlock)) continue;
+                        var front = JigsawBlock.GetFrontFacing(sourceJigsaw.Info.State);
+                        var attachPos = sourceJigsaw.Info.Pos.Relative(front, 1);
+                        var targetPosition = attachPos.Offset(-targetJigsawBlock.Info.Pos.X,
+                            -targetJigsawBlock.Info.Pos.Y, -targetJigsawBlock.Info.Pos.Z);
+                        queue.Enqueue((candidate, targetPosition, candidateRotation, depth + 1));
+                        placed = true;
+                        break;
+                    }
+                    if (placed) break;
+                }
+            }
+        }
     }
 
     //IsStartTooCloseToWorldHeightLimits whether the center piece touches the dimension padding at the top or bottom, maps to the identically named vanilla method

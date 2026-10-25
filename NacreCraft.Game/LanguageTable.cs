@@ -38,6 +38,9 @@ public static class LanguageTable
             using var stream = resource.Open();
             Language.LoadFromJson(stream, (key, value) => entries[key] = value);
         }
+        //The embedded copy fills keys the on-disk file lost; the on-disk file is applied last so user edits win
+        if (!string.Equals(code, Language.Default, StringComparison.Ordinal))
+            NcLanguageFiles.LoadEmbedded(code, entries);
         NcLanguageFiles.Load(code, entries);
     }
 

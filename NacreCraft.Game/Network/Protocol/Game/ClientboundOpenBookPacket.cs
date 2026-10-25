@@ -13,9 +13,9 @@ public sealed record ClientboundOpenBookPacket(object Hand) : Packet<ClientGameP
     private sealed class OpenBookCodec : StreamCodec<FriendlyByteBuf, ClientboundOpenBookPacket>
     {
         public ClientboundOpenBookPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => new(buf.ReadVarInt());
 
         public void Encode(FriendlyByteBuf buf, ClientboundOpenBookPacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => buf.WriteVarInt(value.Hand is int hand ? hand : 0);
     }
 }

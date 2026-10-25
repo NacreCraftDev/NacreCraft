@@ -1,4 +1,5 @@
 using NacreCraft.Game.Network.Protocol.Game;
+using NacreCraft.Game.World.Entity;
 using NacreCraft.Logging;
 using NacreCraft.Primitives;
 using NacreCraft.Registry;
@@ -21,6 +22,9 @@ public sealed class EntityTracker
 
     //RotationTolerance an angle change below this sends no rotation packet, maps to vanilla 1 degree
     public const float RotationTolerance = 1f;
+
+    //MotionEpsilon velocity change threshold, maps to vanilla 1.0E-7
+    private const double MotionEpsilon = 1.0E-7;
 
     //SharedFlagsIndex entity data shared flags index, from the same source as the Registry.Entity constant
     public const byte SharedFlagsIndex = NacreCraft.Registry.Entity.SharedFlagsIndex;
@@ -109,8 +113,8 @@ public sealed class EntityTracker
         public required bool LastOnGround { get; set; }
         public required float LastHeadYRot { get; set; }
 
-        //LastSyncedVersion the version number when metadata was last sent to this observer; not resent when unchanged
-        public int LastSyncedVersion { get; set; } = -1;
+        //LastVelocity velocity at the last motion packet, used to detect the change vanilla syncs through ClientboundSetEntityMotionPacket
+        public required Vec3 LastVelocity { get; set; }
     }
 
     //EntitySnapshot the entity fields one Sync round needs, captured once per pair
@@ -127,6 +131,9 @@ public sealed class EntityTracker
         public readonly float XRot;
         public readonly bool OnGround;
 
+        //TraceTnt marks primed TNT so the add/teleport trace only prints those, keeping the log low volume
+        public readonly bool TraceTnt;
+
         //EntityId and Type are passed in because the caller already read them to reject unusable candidates
         public EntitySnapshot(ITrackedEntity entity, int entityId, EntityType<object> type)
         {
@@ -138,6 +145,7 @@ public sealed class EntityTracker
             YRot = entity.YRot;
             XRot = entity.XRot;
             OnGround = entity.OnGround;
+            TraceTnt = entity is PrimedTnt;
         }
     }
 
@@ -178,9 +186,13 @@ public sealed class EntityTracker
             }
             TickStageProfiler.Record(TickStage.TrackSend, sendStart);
         }
-        //Clear dirty attributes only after all observers have sent this tick, maps to vanilla ServerEntity's clear after broadcasting
-        //Clearing inside Sync would let the first player handled eat the change and later observers receive no attribute packet
-        foreach (var entity in candidates) entity.Attributes?.ClearAttributesToSync();
+        //Clear dirty attributes and metadata only after all observers have sent this tick, maps to vanilla ServerEntity's clear after broadcasting
+        //Clearing inside Sync would let the first player handled eat the change and later observers receive no packet
+        foreach (var entity in candidates)
+        {
+            entity.Attributes?.ClearAttributesToSync();
+            if (entity is ISyncedEntity synced) synced.SyncedData.ClearDirty();
+        }
         DiagnosticPlayerCount += players.Count;
     }
 
@@ -271,15 +283,18 @@ public sealed class EntityTracker
                     LastXRot = snapshot.XRot,
                     LastOnGround = snapshot.OnGround,
                     LastHeadYRot = snapshot.YRot,
+                    LastVelocity = snapshot.Velocity,
                 };
                 state.Observers[playerEntityId] = observer;
                 SeenOf(playerEntityId).Add(entityId);
+                if (snapshot.TraceTnt)
+                    Log.Info($"[tnt-track] add id={entityId} pos={Format(snapshot.Pos)} vel={Format(snapshot.Velocity)} "
+                             + $"onGround={snapshot.OnGround}");
                 packets.Add(BuildAddEntity(snapshot));
                 //When pairing, metadata is fully sent; players need a pose and drops need an item stack, so the client builds the right model
                 if (entity is ISyncedEntity synced)
                 {
                     var values = synced.SyncedData.CollectAll();
-                    observer.LastSyncedVersion = synced.SyncedData.Version;
                     if (values.Count > 0) packets.Add(BuildSyncedData(entity.EntityId, values));
                 }
                 //When pairing, all syncable attributes are sent, maps to the attribute branch of vanilla ServerEntity.sendPairingData
@@ -290,6 +305,7 @@ public sealed class EntityTracker
             //seen guarantees observed was found; the compiler cannot see the link through TryGetValue's out parameter
             var observerState = observed!;
             AddMovementPackets(observerState, snapshot, packets);
+            AddMotionPacket(observerState, snapshot, packets);
             AddHeadRotationPacket(observerState, snapshot, packets);
             AddSyncedDataPacket(observerState, entity, packets);
             AddAttributesPacket(entity, packets);
@@ -344,6 +360,9 @@ public sealed class EntityTracker
             //The observer-side model offset then stays equal to that displacement, i.e. it flies off on the next move after the teleport with a constant distance
             packets.Add(new ClientboundEntityPositionSyncPacket(entityId, pos, snapshot.Velocity,
                 snapshot.YRot, snapshot.XRot, snapshot.OnGround));
+            if (snapshot.TraceTnt)
+                Log.Info($"[tnt-track] teleport id={entityId} from={Format(state.LastPos)} to={Format(pos)} "
+                         + $"vel={Format(snapshot.Velocity)}");
         }
         else if (moved)
         {
@@ -365,6 +384,24 @@ public sealed class EntityTracker
         state.LastOnGround = snapshot.OnGround;
     }
 
+    //AddMotionPacket sends the velocity whenever it changed, maps to the ClientboundSetEntityMotionPacket branch of vanilla ServerEntity
+    //Without it a piston or slime block changing the velocity leaves the client interpolating along the old one, which shows as correction jitter
+    private static void AddMotionPacket(ObserverState state, in EntitySnapshot snapshot,
+        List<Packet<ClientGamePacketListener>> packets)
+    {
+        var change = snapshot.Velocity.DistanceToSqr(state.LastVelocity);
+        if (change <= MotionEpsilon) return;
+        state.LastVelocity = snapshot.Velocity;
+        packets.Add(new ClientboundSetEntityMotionPacket(snapshot.EntityId, snapshot.Velocity));
+        //Only a large velocity jump is traced; gravity nudges happen every tick and would flood the log
+        if (snapshot.TraceTnt && change > 0.1)
+            Log.Info($"[tnt-track] motion id={snapshot.EntityId} vel={Format(snapshot.Velocity)}");
+    }
+
+    private static string Format(Vec3 value)
+        => string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:0.###},{1:0.###},{2:0.###}",
+            value.X, value.Y, value.Z);
+
     //AddHeadRotationPacket sends the head rotation packet on head facing change, maps to the rotateHead branch of vanilla ServerEntity
     //The client model's head only honors this packet; sending only move/rotate packets leaves the head still when others see you turn
     //This project has no separate head turning control; the head facing follows the body facing
@@ -376,26 +413,29 @@ public sealed class EntityTracker
         packets.Add(new ClientboundRotateHeadPacket(snapshot.EntityId, Mth.PackDegrees(snapshot.YRot)));
     }
 
-    //AddSyncedDataPacket sent after a metadata version change, maps to the synced data branch of vanilla ServerEntity
-    //The version number is recorded separately per observer, so with multiple observers the first player handled does not eat the change
+    //AddSyncedDataPacket sends only entries changed this tick, maps to the synced data branch of vanilla ServerEntity
+    //The dirty set is not cleared here; every observer in this round reads the same set and Tick clears it at the end
     private static void AddSyncedDataPacket(ObserverState state, ITrackedEntity entity,
         List<Packet<ClientGamePacketListener>> packets)
     {
         if (entity is not ISyncedEntity synced) return;
-        var data = synced.SyncedData;
-        if (state.LastSyncedVersion == data.Version) return;
-        state.LastSyncedVersion = data.Version;
-        var values = data.CollectAll();
-        if (values.Count == 0) return;
+        var values = synced.SyncedData.GetDirtyValues();
+        if (values is null || values.Count == 0) return;
         packets.Add(BuildSyncedData(entity.EntityId, values));
     }
 
     //BuildSyncedData converts the core metadata entries into an entity data packet
+    //Values are copied through their serializer, so a later stack/component mutation cannot change a packet that is already queued
     private static ClientboundSetEntityDataPacket BuildSyncedData(int entityId, List<SynchedValue> values)
     {
         var items = new EntityDataItem[values.Count];
         for (var i = 0; i < values.Count; i++)
-            items[i] = new EntityDataItem(values[i].Index, values[i].SerializerId, values[i].Value);
+        {
+            var value = values[i];
+            var serializer = EntityDataSerializers.Get(value.SerializerId);
+            items[i] = new EntityDataItem(value.Index, value.SerializerId,
+                serializer?.Copy(value.Value) ?? value.Value);
+        }
         return new ClientboundSetEntityDataPacket(entityId, items);
     }
 

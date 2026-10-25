@@ -146,7 +146,8 @@ public class SkyLightSectionStorage : LayerLightSectionStorage<SkyLightSectionSt
 
         public void RemoveTopSection(long zeroNode) => _topSections.Remove(zeroNode);
 
+        //Copy shares the backing map and top section table, maps to vanilla SkyDataLayerStorageMap.copy
         public override SkyDataLayerStorageMap Copy()
-            => new(CopyEntries(), new Dictionary<long, int>(_topSections), CurrentLowestY);
+            => new(SharedEntries, _topSections, CurrentLowestY);
     }
 }

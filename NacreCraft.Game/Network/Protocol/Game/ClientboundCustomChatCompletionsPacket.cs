@@ -12,10 +12,23 @@ public sealed record ClientboundCustomChatCompletionsPacket(object Action, objec
 
     private sealed class CustomChatCompletionsCodec : StreamCodec<FriendlyByteBuf, ClientboundCustomChatCompletionsPacket>
     {
+        //Vanilla order: action id (VAR_INT) + collection of strings
         public ClientboundCustomChatCompletionsPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            var action = buf.ReadVarInt();
+            var count = buf.ReadVarInt();
+            var entries = new List<string>(count);
+            for (var i = 0; i < count; i++) entries.Add(buf.ReadString());
+            return new ClientboundCustomChatCompletionsPacket(action, entries);
+        }
 
         public void Encode(FriendlyByteBuf buf, ClientboundCustomChatCompletionsPacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            buf.WriteVarInt(value.Action is int action ? action : 0);
+            var entries = value.Entries as IEnumerable<string> ?? Array.Empty<string>();
+            var list = entries.ToList();
+            buf.WriteVarInt(list.Count);
+            foreach (var entry in list) buf.WriteString(entry);
+        }
     }
 }

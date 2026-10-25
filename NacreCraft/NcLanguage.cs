@@ -15,10 +15,15 @@ public static class NcLanguage
     public static Language Build(string code, string? languageRoot = null)
     {
         var entries = new Dictionary<string, string>(StringComparer.Ordinal);
+        //en_us defines the key set and is the final fallback for keys no other file carries
         NcLanguageFiles.Load(Language.Default, entries, languageRoot);
         var resolved = Resolve(code, languageRoot);
         if (!string.Equals(resolved, Language.Default, StringComparison.Ordinal))
+        {
+            //The embedded copy fills keys the on-disk file lost, then the on-disk file overrides the rest
+            NcLanguageFiles.LoadEmbedded(resolved, entries);
             NcLanguageFiles.Load(resolved, entries, languageRoot);
+        }
         return Language.FromEntries(entries);
     }
 

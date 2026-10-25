@@ -43,8 +43,7 @@ public sealed class RandomState
 
         //noiseFlattener expands the remaining HolderHolder and Marker nodes for Climate.Sampler
         var flattener = new NoiseFlattener();
-        Sampler = new Climate.NoiseRouterSampler(Router);
-        _ = flattener;
+        Sampler = new Climate.NoiseRouterSampler(Router, flattener);
     }
 
     //GetOrCreateNoise looks up or builds a NormalNoise by key, maps to vanilla getOrCreateNoise
@@ -111,7 +110,6 @@ internal sealed class NoiseWiringHelper : Visitor
         if (_wrapped.TryGetValue(input, out var cached)) return cached;
         var result = WrapNew(input);
         _wrapped[input] = result;
-        NacreCraft.Util.SiteCounters.Wrapped("wiring", _wrapped.Count);
         return result;
     }
 
@@ -137,8 +135,7 @@ internal sealed class NoiseWiringHelper : Visitor
 //Expands HolderHolder into the inner function and Marker into the inner wrapped, saving call depth in Climate.Sampler
 internal sealed class NoiseFlattener : Visitor
 {
-    //Never populated: instrumented and no counter ever reached one, so this visitor's memo stays empty
-    //Left without a capacity on purpose, that way it allocates its entry array only if something ever writes to it
+    //One entry per visited node, so a shared subtree reached twice is only expanded once
     private readonly Dictionary<DensityFunction, DensityFunction> _wrapped = new();
 
     public NoiseHolder VisitNoise(NoiseHolder noise) => noise;
@@ -148,7 +145,6 @@ internal sealed class NoiseFlattener : Visitor
         if (_wrapped.TryGetValue(input, out var cached)) return cached;
         var result = WrapNew(input);
         _wrapped[input] = result;
-        NacreCraft.Util.SiteCounters.Wrapped("flattener", _wrapped.Count);
         return result;
     }
 

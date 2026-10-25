@@ -77,7 +77,6 @@ public sealed class CappedProcessor : StructureProcessor
     //caller must iterate count entries rather than the array length
     private static int[] RentShuffledIndices(int count, RandomSource random)
     {
-        NacreCraft.Util.SiteCounters.CountJigsawIndices(count);
         var indices = ArrayPool<int>.Shared.Rent(count);
         for (var i = 0; i < count; i++) indices[i] = i;
         for (var i = count - 1; i > 0; i--)

@@ -12,10 +12,14 @@ public sealed record ClientboundTagQueryPacket(int TransactionId, object Tag) : 
 
     private sealed class TagQueryCodec : StreamCodec<FriendlyByteBuf, ClientboundTagQueryPacket>
     {
+        //Vanilla order: VAR_INT transaction id + root NBT tag
         public ClientboundTagQueryPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => new(buf.ReadVarInt(), buf.ReadNbt());
 
         public void Encode(FriendlyByteBuf buf, ClientboundTagQueryPacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            buf.WriteVarInt(value.TransactionId);
+            buf.WriteNbt(value.Tag as NacreCraft.Nbt.Tag);
+        }
     }
 }

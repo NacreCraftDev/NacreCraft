@@ -13,9 +13,13 @@ public sealed record ClientboundMountScreenOpenPacket(int ContainerId, int Inven
     private sealed class MountScreenOpenCodec : StreamCodec<FriendlyByteBuf, ClientboundMountScreenOpenPacket>
     {
         public ClientboundMountScreenOpenPacket Decode(FriendlyByteBuf buf)
-            => throw new NotImplementedException("Business type not yet implemented");
+            => new(buf.ReadVarInt(), buf.ReadVarInt(), buf.ReadVarInt());
 
         public void Encode(FriendlyByteBuf buf, ClientboundMountScreenOpenPacket value)
-            => throw new NotImplementedException("Business type not yet implemented");
+        {
+            buf.WriteVarInt(value.ContainerId);
+            buf.WriteVarInt(value.InventoryColumns);
+            buf.WriteVarInt(value.EntityId);
+        }
     }
 }
