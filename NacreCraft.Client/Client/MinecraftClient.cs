@@ -199,7 +199,10 @@ public sealed class MinecraftClient : IDisposable
             //Inject the light sampler; mesh vertex light attributes fetch chunk light from ClientLevel
             var builder = new ChunkMeshBuilder(mapper, new ChunkLightSampler(_level));
             var pool = new GpuBufferPool((size, usage) => _gpuApp.Device.CreateHostVisibleBuffer(size, usage));
-            _worldDispatcher = new SectionRenderDispatcher(_level, builder, pool, workerCount: 2);
+            //Keep mesh building well below the render thread's core budget; fourteen normal-priority workers
+            //starved the main thread during the join burst and made the client stall before anything appeared
+            _worldDispatcher = new SectionRenderDispatcher(_level, builder, pool,
+                workerCount: Math.Min(4, Math.Max(2, Environment.ProcessorCount / 2)));
             _worldDispatcher.Start();
             _worldRenderer = new LevelRenderer(_level, _camera, _worldDispatcher, pool);
             //The entity render dispatcher is created along with world rendering

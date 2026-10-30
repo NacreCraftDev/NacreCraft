@@ -200,6 +200,8 @@ public static class GameBootstrap
         }
         FossilFeature.TemplateManager = manager;
         TemplateFeature.TemplateManager = manager;
+        //Templates are static resources, so read them in the background instead of stalling the first structure assembly
+        manager.PrewarmPoolTemplates();
     }
 
     //RegisterFluids registers the five built-in fluids

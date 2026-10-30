@@ -1,10 +1,10 @@
 # NacreCraft
 
-用 C# / .NET 10 从零重写的 Minecraft 26.2。
+用 C# 重新实现的开源服务端，行为与原版 Minecraft 26.2 完全一致，客户端基于同一套代码构建。运行于 .NET 10。
 
 > 本文件是仓库根 [README.md](../README.md) 的中文版，如中英文描述不一致，以英文版为准。
 
-NacreCraft 不是移植。这里没有逐行翻译原版 Java，也没有反编译产物。各子系统按 C# 惯用法写（`readonly struct`、`Span<T>`、源生成器、`AssemblyLoadContext`），但对外的行为保持一致：同样的 NBT 字节、同样的注册表 id、同样的区块文件、同样的网络包布局、同样的 DFU 升级路径。
+NacreCraft 与原版是等价实现，既不是 Minecraft 的衍生物，也不代替 Minecraft。这里没有逐行翻译原版 Java，也没有反编译产物。各子系统按 C# 惯用法写（`readonly struct`、`Span<T>`、源生成器、`AssemblyLoadContext`），但对外的行为保持一致：同样的 NBT 字节、同样的注册表 id、同样的区块文件、同样的网络包布局、同样的 DFU 升级路径。
 
 ## 能力
 
@@ -64,7 +64,7 @@ NacreCraft 不是移植。这里没有逐行翻译原版 Java，也没有反编�
 | — | `NacreCraft.ModLoader` | 运行时模组加载与注入 |
 | — | `NacreCraft.Loader` | 命令行启动器、jar 资源提取 |
 | — | `NacreCraft.TPGA` | 认证/代理服务，与内核无关 |
-| — | `NacreCraft.DataFixer.SourceGenerator` | DFU 的 Roslyn 源生成器 |
+| — | `NacreCraft.SourceGenerator` | 内核的 Roslyn 源生成器 |
 
 ## 构建
 

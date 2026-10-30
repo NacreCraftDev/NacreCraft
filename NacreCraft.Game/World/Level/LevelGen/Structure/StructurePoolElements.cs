@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using NacreCraft.Codec;
 using NacreCraft.Nbt;
 using NacreCraft.Primitives;
@@ -109,8 +110,18 @@ public class SinglePoolElement : StructurePoolElement
         var template = GetTemplate(manager);
         //A degenerate bounding box when the template is missing; in vanilla the template always exists on this path
         if (template is null) return new BoundingBoxInt(position.X, position.Y, position.Z, position.X, position.Y, position.Z);
-        return template.GetBoundingBox(new StructurePlaceSettings().SetRotation(rotation), position);
+        //The box depends only on the template and the rotation; the position is a pure translation on top of it
+        //Assembly asks for the same element at the same rotation many times per placement attempt, and rebuilding the
+        //settings object and walking the palette for every one of those was pure repetition
+        var origin = _originBounds.GetOrAdd(rotation,
+            static (key, state) => state.Template.GetBoundingBox(new StructurePlaceSettings().SetRotation(key), BlockPos.Zero),
+            (Template: template, Rotation: rotation));
+        return new BoundingBoxInt(origin.MinX + position.X, origin.MinY + position.Y, origin.MinZ + position.Z,
+            origin.MaxX + position.X, origin.MaxY + position.Y, origin.MaxZ + position.Z);
     }
+
+    //Bounds at the origin per rotation; concurrent so two generation threads cannot tear a half-written box
+    private readonly ConcurrentDictionary<Rotation, BoundingBoxInt> _originBounds = new();
 
     public override bool Place(StructureTemplateManager manager, WorldGenRegion level, StructureManager structureManager,
         ChunkGenerator generator, BlockPos position, BlockPos referencePos, Rotation rotation, BoundingBoxInt chunkBB,

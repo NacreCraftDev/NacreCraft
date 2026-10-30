@@ -22,10 +22,13 @@ public static class NbtIo
     }
 
     //Read a GZIP-compressed CompoundTag from a stream.
+    //The reader asks for one field at a time, so without a big buffer every read drives the inflater for a few bytes.
+    //A structure template carries tens of thousands of small fields, and that per-read inflate step was the whole cost
     public static CompoundTag ReadCompressed(Stream input, NbtAccounter accounter)
     {
         using var gzip = new GZipStream(input, CompressionMode.Decompress, leaveOpen: true);
-        using var br = new BinaryReader(gzip);
+        using var buffered = new BufferedStream(gzip, 65536);
+        using var br = new BinaryReader(buffered);
         return Read(new BinaryNbtReader(br), accounter);
     }
 

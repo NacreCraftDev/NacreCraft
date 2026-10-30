@@ -36,6 +36,8 @@ public class NoiseBasedChunkGenerator : ChunkGenerator
     //One NoiseChunk per chunk; built during the noise stage and reused directly by the surface stage, maps to vanilla protoChunk.getOrCreateNoiseChunk
     //A weak table avoids leaking NoiseChunk after the chunk unloads
     private readonly ConditionalWeakTable<ChunkAccess, NoiseChunk> _noiseChunks = new();
+    //Carver biome memo keyed by chunk position; the carver scan asks for the same centres over and over
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<long, Biome> _carverBiomes = new();
 
     //Temporary: per-thread noise stage split, [0]=NoiseChunk build ticks, [1]=fill loop ticks, [2]=builds
     [ThreadStatic] private static long[]? _noiseProf;
@@ -177,6 +179,9 @@ public class NoiseBasedChunkGenerator : ChunkGenerator
                                 var posZ = chunkStartBlockZ + cellZIndex * cellWidth + zInCell;
                                 noiseChunk.UpdateForZ(posZ, zInCell / (double)cellWidth);
                                 var state = noiseChunk.GetInterpolatedState() ?? defaultBlock;
+                                //Air is the section default; writing it only churns the palette and the section counts
+                                //Vanilla's doFill skips AIR for the same reason
+                                if (state.Owner.IsAir) continue;
                                 var stateStart = System.Diagnostics.Stopwatch.GetTimestamp();
                                 proto.SetBlockState(sectionY, posX & 15, posY & 15, posZ & 15, state);
                                 noiseProf[3] += System.Diagnostics.Stopwatch.GetTimestamp() - stateStart;
@@ -199,8 +204,15 @@ public class NoiseBasedChunkGenerator : ChunkGenerator
     {
         var toMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
         var builds = prof[2];
+        //Temporary: cache hit counters, cleared on every report so the line carries this window's rates
+        var flatHits = Interlocked.Exchange(ref NoiseChunk.FlatHits, 0);
+        var flatMisses = Interlocked.Exchange(ref NoiseChunk.FlatMisses, 0);
+        var c2dHits = Interlocked.Exchange(ref NoiseChunk.Cache2DHits, 0);
+        var c2dMisses = Interlocked.Exchange(ref NoiseChunk.Cache2DMisses, 0);
+        var cellFills = Interlocked.Exchange(ref NoiseChunk.CellFills, 0);
         NacreCraft.Logging.Log.Info($"[noise] per-chunk create={(long)(prof[0] * toMs / builds)}ms "
-            + $"fill={(long)(prof[1] * toMs / builds)}ms set={(long)(prof[3] * toMs / builds)}ms builds={builds}");
+            + $"fill={(long)(prof[1] * toMs / builds)}ms set={(long)(prof[3] * toMs / builds)}ms builds={builds} "
+            + $"flat={flatHits}/{flatMisses} c2d={c2dHits}/{c2dMisses} cell={cellFills}");
         Array.Clear(prof);
     }
 
@@ -274,15 +286,22 @@ public class NoiseBasedChunkGenerator : ChunkGenerator
         var noiseChunk = GetOrCreateNoiseChunk(chunk, randomState, BeardifierMarker.Instance);
         var context = new CarvingContext(this, chunk, noiseChunk, randomState, Settings.SurfaceRule);
         var mask = proto.GetOrCreateCarvingMask();
-        Func<int, int, int, Biome> biomeGetter = GetBiome;
+        //Cave carving asks for a biome around every carved block; going straight to BiomeSource turns that into a 6D
+        //climate sample per block. BiomeManager answers from the chunk palette first and only samples out of bounds.
+        var biomeManager = new BiomeManager(chunk, GetBiome, randomState.Seed);
+        Func<int, int, int, Biome> biomeGetter = biomeManager.GetBiome;
         var carverRandom = RandomSource.Create(seed);
         var pos = chunk.Pos;
+        //Temporary: carver stage split, [0]=biome lookup ticks, [1]=carve ticks, [2]=starts, [3]=builds
+        var carverProf = _carverProf ??= new long[4];
         for (var dx = -8; dx <= 8; dx++)
         {
             for (var dz = -8; dz <= 8; dz++)
             {
                 var sourcePos = new ChunkPos(pos.X + dx, pos.Z + dz);
-                var carvers = BiomeSource.GetBiome(sourcePos.MinBlockX, 0, sourcePos.MinBlockZ).Generation.Carvers;
+                var biomeStart = System.Diagnostics.Stopwatch.GetTimestamp();
+                var carvers = CarverBiome(sourcePos).Generation.Carvers;
+                var carveStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 var index = 0;
                 foreach (var holder in carvers)
                 {
@@ -291,12 +310,46 @@ public class NoiseBasedChunkGenerator : ChunkGenerator
                         var carver = (GameConfiguredWorldCarver)holder.Value;
                         SetLargeFeatureSeed(carverRandom, seed + index, sourcePos.X, sourcePos.Z);
                         if (carver.IsStartChunk(carverRandom))
+                        {
+                            carverProf[2]++;
                             carver.Carve(context, chunk, biomeGetter, carverRandom, noiseChunk.Aquifer, sourcePos, mask);
+                        }
                     }
                     index++;
                 }
+                carverProf[0] += carveStart - biomeStart;
+                carverProf[1] += System.Diagnostics.Stopwatch.GetTimestamp() - carveStart;
             }
         }
+        carverProf[3]++;
+        if (carverProf[3] % 10 == 0) ReportCarverProfile(carverProf);
+    }
+
+    //Temporary: [ThreadStatic] carver split accumulator
+    [ThreadStatic] private static long[]? _carverProf;
+
+    //Temporary: reports the average carver split of the last ten chunks on this thread
+    private static void ReportCarverProfile(long[] prof)
+    {
+        var toMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        var builds = prof[3];
+        NacreCraft.Logging.Log.Info($"[carvers] per-chunk biome={(long)(prof[0] * toMs / builds)}ms "
+            + $"carve={(long)(prof[1] * toMs / builds)}ms starts={prof[2] / builds} builds={builds}");
+        Array.Clear(prof);
+    }
+
+    //CarverBiome returns the biome at a neighbouring chunk centre, memoised per chunk
+    //The 17x17 scan asks for the same centre 289 times per chunk and again from every neighbouring chunk, and each miss
+    //is a full six dimensional climate sample; the value depends only on the seed and the chunk position
+    private Biome CarverBiome(ChunkPos pos)
+    {
+        var key = pos.Pack();
+        if (_carverBiomes.TryGetValue(key, out var cached)) return cached;
+        var biome = BiomeSource.GetBiome(pos.MinBlockX, 0, pos.MinBlockZ);
+        //Bound the memo so a long session cannot keep every chunk it ever generated
+        if (_carverBiomes.Count >= 65536) _carverBiomes.Clear();
+        _carverBiomes[key] = biome;
+        return biome;
     }
 
     //SetLargeFeatureSeed reseeds the random source by chunk coordinates, maps to vanilla WorldgenRandom.setLargeFeatureSeed

@@ -6,10 +6,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <DevelopmentDependency>true</DevelopmentDependency>
-    <RootNamespace>NacreCraft.DataFixer.SourceGenerator</RootNamespace>
+    <RootNamespace>NacreCraft.SourceGenerator</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

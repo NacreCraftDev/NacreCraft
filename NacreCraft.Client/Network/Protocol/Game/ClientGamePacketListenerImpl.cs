@@ -71,7 +71,9 @@ public sealed class ClientGamePacketListenerImpl : ClientGamePacketListener
         _player.IsHardcore = packet.Hardcore;
         if (_joinNotified) return;
         _joinNotified = true;
-        Log.Info($"Entered world entityId={packet.PlayerId} gameType={packet.CommonPlayerSpawnInfo.GameType.Name}");
+        Log.Info($"Entered world entityId={packet.PlayerId} gameType={packet.CommonPlayerSpawnInfo.GameType.Name} dimension={packet.CommonPlayerSpawnInfo.Dimension}");
+        if (Log.DebugEnabled)
+            Log.Debug($"login detail hardcore={packet.Hardcore} chunkRadius={packet.ChunkRadius} simulationDistance={packet.SimulationDistance} maxPlayers={packet.MaxPlayers} levels={packet.Levels.Count} seed={packet.CommonPlayerSpawnInfo.Seed} flat={packet.CommonPlayerSpawnInfo.IsFlat} portalCooldown={packet.CommonPlayerSpawnInfo.PortalCooldown} secureChat={packet.EnforcesSecureChat}");
         _onJoinWorld?.Invoke();
     }
 
@@ -97,12 +99,27 @@ public sealed class ClientGamePacketListenerImpl : ClientGamePacketListener
     public void HandleLevelChunkWithLight(ClientboundLevelChunkWithLightPacket packet)
     {
         if (packet.ChunkData is null) return;
+        if (Log.DebugEnabled) LogChunkPayload(packet);
         _level?.LoadChunk(packet.ChunkData);
         //Block entities carried by the chunk are filled into the client block entity table too; the chunk packet is sent only once and blocks are not resent individually
         if (_level is not null && packet.ChunkData is LevelChunk { BlockEntityTags: { Count: > 0 } tags })
             StoreChunkBlockEntities(tags);
         if (packet.LightData is not null && _level is not null)
             ApplyLightData(_level, packet.X, packet.Z, packet.LightData);
+    }
+
+    //LogChunkPayload traces what the chunk packet carried: section occupancy, block entity NBT and whether light came with it
+    private static void LogChunkPayload(ClientboundLevelChunkWithLightPacket packet)
+    {
+        var chunk = packet.ChunkData!;
+        var nonEmpty = 0;
+        for (var i = 0; i < chunk.SectionsCount; i++)
+            if (chunk.GetSection(chunk.MinSectionY + i) is { } section && !section.HasOnlyAir()) nonEmpty++;
+        var blockEntities = chunk is LevelChunk { BlockEntityTags: { } tags } ? tags.Count : 0;
+        Log.Debug($"chunk load x={packet.X} z={packet.Z} sections={chunk.SectionsCount} nonEmptySections={nonEmpty} blockEntities={blockEntities} light={packet.LightData is not null}");
+        if (chunk is not LevelChunk { BlockEntityTags: { Count: > 0 } entityTags }) return;
+        foreach (var tag in entityTags)
+            Log.Debug($"  block entity nbt x={tag.GetIntOr("x", 0)} y={tag.GetIntOr("y", 0)} z={tag.GetIntOr("z", 0)} id={tag.GetStringValue("id")} tags={tag.Count}");
     }
 
     //StoreChunkBlockEntities stores block entities into the client block entity table by the coordinates in their NBT
@@ -120,6 +137,7 @@ public sealed class ClientGamePacketListenerImpl : ClientGamePacketListener
     public void HandleLightUpdatePacket(ClientboundLightUpdatePacket packet)
     {
         if (_level is null) return;
+        if (Log.DebugEnabled) Log.Debug($"light update x={packet.X} z={packet.Z}");
         ApplyLightData(_level, packet.X, packet.Z, packet.LightData);
     }
 
@@ -161,7 +179,11 @@ public sealed class ClientGamePacketListenerImpl : ClientGamePacketListener
     private const int LightSectionCount = 26;
 
     //HandleForgetLevelChunk unloads the chunk; the render layer subscribes to ChunkUnloaded and drops its mesh
-    public void HandleForgetLevelChunk(ClientboundForgetLevelChunkPacket packet) => _level?.UnloadChunk(packet.Pos);
+    public void HandleForgetLevelChunk(ClientboundForgetLevelChunkPacket packet)
+    {
+        if (Log.DebugEnabled) Log.Debug($"chunk unload x={packet.Pos.X} z={packet.Pos.Z}");
+        _level?.UnloadChunk(packet.Pos);
+    }
     //HandleOpenSignEditor the server opens the sign editor; the position is stored for the screen
     public void HandleOpenSignEditor(ClientboundOpenSignEditorPacket packet) => State.OpenSignPos = packet.Pos;
 
@@ -180,13 +202,23 @@ public sealed class ClientGamePacketListenerImpl : ClientGamePacketListener
         _player.XpLevel = packet.ExperienceLevel;
     }
 
-    //HandleChunkBatchStart chunk batch start; no flow control currently, logs only
-    public void HandleChunkBatchStart(ClientboundChunkBatchStartPacket packet)
-        => Log.Debug("HandleChunkBatchStart");
+    //Chunk batch timing, used to tell the server how many chunks per tick this client can process
+    private long _chunkBatchStart;
 
-    //HandleChunkBatchFinished chunk batch finished; no flow control currently, logs only
+    public void HandleChunkBatchStart(ClientboundChunkBatchStartPacket packet)
+    {
+        _chunkBatchStart = System.Diagnostics.Stopwatch.GetTimestamp();
+    }
+
+    //HandleChunkBatchFinished reports the client's processing rate so the server can size the next batch
     public void HandleChunkBatchFinished(ClientboundChunkBatchFinishedPacket packet)
-        => Log.Debug($"HandleChunkBatchFinished batchSize={packet.BatchSize}");
+    {
+        var elapsed = (System.Diagnostics.Stopwatch.GetTimestamp() - _chunkBatchStart)
+            / (double)System.Diagnostics.Stopwatch.Frequency;
+        var ticks = Math.Max(1.0, elapsed * 20.0);
+        var desired = Math.Clamp(packet.BatchSize / ticks, 0.01, 64.0);
+        _connection.Send(new NacreCraft.Game.Network.Protocol.Game.ServerboundChunkBatchReceivedPacket((float)desired));
+    }
 
     //HandleSetChunkCacheRadius view distance sync; currently uses the local config, callback kept for extension
     public void HandleSetChunkCacheRadius(ClientboundSetChunkCacheRadiusPacket packet)
@@ -251,7 +283,8 @@ public sealed class ClientGamePacketListenerImpl : ClientGamePacketListener
     public void HandleBlockEntityData(ClientboundBlockEntityDataPacket packet)
     {
         _level?.SetBlockEntityData(packet.Pos, packet.Tag);
-        Log.Debug($"HandleBlockEntityData pos={packet.Pos} type={packet.BlockEntityTypeId}");
+        if (Log.DebugEnabled)
+            Log.Debug($"block entity data pos={packet.Pos} type={packet.BlockEntityTypeId} id={packet.Tag?.GetStringValue("id") ?? ""} tags={packet.Tag?.Count ?? 0}");
     }
 
     //HandleBlockEvent block event (chest open/close, piston extend/retract, etc.); no visual representation yet, logs only

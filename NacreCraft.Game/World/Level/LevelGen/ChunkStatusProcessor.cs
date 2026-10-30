@@ -17,6 +17,8 @@ public sealed class ChunkStatusProcessor
     private readonly long _seed;
     //_chunkProvider neighbour chunk provider; decoration collects biomes within a 3x3 and, without neighbours, decorates the centre chunk only
     private readonly Func<int, int, ChunkAccess?>? _chunkProvider;
+    //_regions one neighbour region per chunk, shared by every stage that reads neighbours
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<ChunkAccess, WorldGenRegion> _regions = new();
 
     //FinalHeightmaps final heightmap set, maps to vanilla ChunkStatus.FINAL_HEIGHTMAPS
     //OCEAN_FLOOR counts only solid blocks that block movement; the other three include fluids and non-opaque blocks
@@ -77,6 +79,11 @@ public sealed class ChunkStatusProcessor
     //Temporary: per-status wall time, printed every fifty completed chunks
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, StageTiming> StageTimings = new();
     private static long _timedBlocks;
+    //Temporary: biome fill split, reported next to the stage line
+    [ThreadStatic] private static long[]? _biomeProf;
+    private static long _biomeSampleTicks;
+    private static long _biomeWriteTicks;
+    private static long _biomeSamples;
 
     private sealed class StageTiming
     {
@@ -99,7 +106,32 @@ public sealed class ChunkStatusProcessor
             parts.Add($"{pair.Key}={ticks * toMs / count:F1}/{max * toMs:F0}");
         }
         NacreCraft.Logging.Log.Info("[gen-stage] avg/max ms: " + string.Join(" ", parts));
+        //Temporary: the biome fill split, reported with the stage line
+        var biomeSample = Interlocked.Exchange(ref _biomeSampleTicks, 0);
+        var biomeWrite = Interlocked.Exchange(ref _biomeWriteTicks, 0);
+        var biomeSamples = Interlocked.Exchange(ref _biomeSamples, 0);
+        if (biomeSamples > 0)
+            NacreCraft.Logging.Log.Info($"[biomes] sample={(long)(biomeSample * toMs)}ms write={(long)(biomeWrite * toMs)}ms samples={biomeSamples}");
     }
+
+    //GetOrCreateRegion returns the shared neighbour region of a chunk, building the 3x3 around it on first use
+    //Every stage used to build its own region, so the surface stage and the features stage each asked the provider for
+    //the same eight neighbours; vanilla keeps one chunk cache per generation step instead
+    private WorldGenRegion GetOrCreateRegion(ChunkAccess chunk)
+        => _regions.GetValue(chunk, target =>
+        {
+            var region = new WorldGenRegion(target.MinSectionY, target.SectionsCount);
+            region.AddChunk(target);
+            if (_chunkProvider is null) return region;
+            for (var offsetX = -DecorationWriteRadius; offsetX <= DecorationWriteRadius; offsetX++)
+            for (var offsetZ = -DecorationWriteRadius; offsetZ <= DecorationWriteRadius; offsetZ++)
+            {
+                if (offsetX == 0 && offsetZ == 0) continue;
+                var neighbour = _chunkProvider(target.Pos.X + offsetX, target.Pos.Z + offsetZ);
+                if (neighbour is not null) region.AddChunk(neighbour);
+            }
+            return region;
+        });
 
     //RunStatus the stage dispatch itself
     private bool RunStatus(ChunkAccess chunk, ChunkStatus status)
@@ -124,6 +156,8 @@ public sealed class ChunkStatusProcessor
             var biomeSource = _generator.BiomeSource;
             var posX = chunk.Pos.X;
             var posZ = chunk.Pos.Z;
+            //Temporary: splits the climate sample from the palette write, [0]=sample ticks, [1]=write ticks, [2]=samples
+            var prof = _biomeProf ??= new long[3];
             for (var sectionIdx = 0; sectionIdx < chunk.SectionsCount; sectionIdx++)
             {
                 var sectionY = chunk.MinSectionY + sectionIdx;
@@ -136,13 +170,22 @@ public sealed class ChunkStatusProcessor
                             var wx = posX * 16 + qX * 4;
                             var wy = sectionY * 16 + qY * 4;
                             var wz = posZ * 16 + qZ * 4;
-                            var biome = biomeSource.GetBiome(wx, wy, wz);
+                            var sampleStart = System.Diagnostics.Stopwatch.GetTimestamp();
+                            var holder = biomeSource.GetBiomeHolder(wx, wy, wz);
+                            var writeStart = System.Diagnostics.Stopwatch.GetTimestamp();
                             //The registry holder is shared; wrapping the value directly built one holder per quart cell
-                            chunk.SetBiome(wx, wy, wz, BuiltInRegistries.BIOME.WrapAsHolder(biome));
+                            chunk.SetBiome(wx, wy, wz, holder);
+                            prof[0] += writeStart - sampleStart;
+                            prof[1] += System.Diagnostics.Stopwatch.GetTimestamp() - writeStart;
+                            prof[2]++;
                         }
                     }
                 }
             }
+            Interlocked.Add(ref _biomeSampleTicks, prof[0]);
+            Interlocked.Add(ref _biomeWriteTicks, prof[1]);
+            Interlocked.Add(ref _biomeSamples, prof[2]);
+            Array.Clear(prof);
             return true;
         }
         if (status == ChunkStatus.NOISE)
@@ -153,20 +196,8 @@ public sealed class ChunkStatusProcessor
         }
         if (status == ChunkStatus.SURFACE)
         {
-            //Surface rules sample biomes just outside the chunk edge; passing the neighbouring palettes keeps those lookups off the climate sampler
-            var biomeRegion = new WorldGenRegion(chunk.MinSectionY, chunk.SectionsCount);
-            biomeRegion.AddChunk(chunk);
-            if (_chunkProvider is not null)
-            {
-                for (var offsetX = -1; offsetX <= 1; offsetX++)
-                for (var offsetZ = -1; offsetZ <= 1; offsetZ++)
-                {
-                    if (offsetX == 0 && offsetZ == 0) continue;
-                    var neighbour = _chunkProvider(chunk.Pos.X + offsetX, chunk.Pos.Z + offsetZ);
-                    if (neighbour is not null) biomeRegion.AddChunk(neighbour);
-                }
-            }
-            _generator.BuildSurface(biomeRegion, structures, chunk, _random);
+            //Surface rules sample biomes just outside the chunk edge; the shared region answers those from the neighbour palettes
+            _generator.BuildSurface(GetOrCreateRegion(chunk), structures, chunk, _random);
             return true;
         }
         if (status == ChunkStatus.CARVERS)
@@ -187,23 +218,10 @@ public sealed class ChunkStatusProcessor
             LevelHeightmap.PrimeHeightmaps(chunk, FinalHeightmaps);
             //Decoration may only write the centre chunk and its neighbours, out-of-range writes are dropped silently, matching the vanilla WorldGenRegion write radius
             //Structure placement and feature placement both happen inside this region, structures before features
-            var region = new WorldGenRegion(chunk.MinSectionY, chunk.SectionsCount)
-            {
-                Seed = _seed,
-                CenterChunk = chunk.Pos,
-                WriteRadius = DecorationWriteRadius,
-            };
-            region.AddChunk(chunk);
-            if (_chunkProvider is not null)
-            {
-                for (var offsetX = -DecorationWriteRadius; offsetX <= DecorationWriteRadius; offsetX++)
-                for (var offsetZ = -DecorationWriteRadius; offsetZ <= DecorationWriteRadius; offsetZ++)
-                {
-                    if (offsetX == 0 && offsetZ == 0) continue;
-                    var neighbour = _chunkProvider(chunk.Pos.X + offsetX, chunk.Pos.Z + offsetZ);
-                    if (neighbour is not null) region.AddChunk(neighbour);
-                }
-            }
+            var region = GetOrCreateRegion(chunk);
+            region.Seed = _seed;
+            region.CenterChunk = chunk.Pos;
+            region.WriteRadius = DecorationWriteRadius;
             _generator.ApplyBiomeDecoration(region, chunk, StructureFeatures);
             return true;
         }

@@ -900,7 +900,8 @@ public sealed class ServerGamePacketListenerImpl : ServerGamePacketListener, Tic
     public void HandleLockDifficulty(ServerboundLockDifficultyPacket packet) { }
     public void HandleChatSessionUpdate(ServerboundChatSessionUpdatePacket packet) { }
     public void HandleConfigurationAcknowledged(ServerboundConfigurationAcknowledgedPacket packet) { }
-    public void HandleChunkBatchReceived(ServerboundChunkBatchReceivedPacket packet) { }
+    public void HandleChunkBatchReceived(ServerboundChunkBatchReceivedPacket packet)
+        => Player?.ChunkSender?.OnChunkBatchReceived(packet.DesiredChunksPerTick);
     public void HandleDebugSubscriptionRequest(ServerboundDebugSubscriptionRequestPacket packet) { }
     public void HandleClientTickEnd(ServerboundClientTickEndPacket packet) { }
 

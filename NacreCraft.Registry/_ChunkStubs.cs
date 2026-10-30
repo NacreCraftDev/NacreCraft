@@ -57,6 +57,10 @@ public sealed class ChunkStatus
     //isOrAfter maps to vanilla status.isOrAfter, comparing by static registration order
     public bool IsOrAfter(ChunkStatus other) => _index >= other._index;
 
+    //Next returns the following status in registration order, null at FULL
+    public ChunkStatus? Next
+        => _index >= 0 && _index < _order.Count - 1 ? _order[_index + 1] : null;
+
     //ToSimpleState maps ChunkStatus to SimpleChunkState, maps to vanilla ChunkStatus.toSimpleState
     //A simplified state machine for chunk task scheduling stage grouping
     public SimpleChunkState ToSimpleState()

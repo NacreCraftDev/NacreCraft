@@ -5,6 +5,7 @@ using System.Threading;
 using NacreCraft.Logging;
 using NacreCraft.Network.Protocol;
 using NacreCraft.Registry;
+using NacreCraft.Util.Concurrency;
 
 namespace NacreCraft.Network;
 
@@ -14,6 +15,11 @@ namespace NacreCraft.Network;
 //Encryption and compression are toggled by thresholds; the vanilla netty pipeline is simplified to synchronous reads and writes here
 public sealed class Connection : IDisposable
 {
+    //Per-packet traces are opt-in: one fires on every send and one on every receive, and both build their text before
+    //the level check would drop it. Set NACRECRAFT_PACKET_LOG=1 to turn them on
+    private static readonly bool PacketLog =
+        Environment.GetEnvironmentVariable("NACRECRAFT_PACKET_LOG") is "1" or "true" or "True" or "TRUE";
+
     private readonly Stream _readStream;
     private readonly Stream _writeStream;
     private readonly PacketFlow _receiving;
@@ -55,6 +61,9 @@ public sealed class Connection : IDisposable
     private readonly ConcurrentQueue<PendingSend> _sendQueue = new();
     private int _flushQueued;
     private volatile bool _sendClosed;
+    //OutboundScheduled=1 means an IO pool task is already draining this connection
+    internal int OutboundScheduled;
+    internal bool HasPendingOutbound => !_sendQueue.IsEmpty;
 
     //PendingSend is a pending write item; the protocol and registry access are snapshotted at enqueue time
     //The protocol switches with Tick, so background threads must not read those mutable fields
@@ -274,6 +283,9 @@ public sealed class Connection : IDisposable
         buf.RegistryAccess = access;
         buf.Reset();
         protocol.EncodePacket(buf, packet);
+        //Per-packet send trace; the encoder already wrote the network ID into the buffer
+        if (PacketLog && Log.DebugEnabled)
+            Log.Debug($"send {packet.GetType().Name} bytes={buf.Length} protocol={protocol.Id}");
 
         //Uncompressed and unencrypted is the norm for LAN and tests; this path writes the reused buffer content out directly
         //It neither copies an intermediate array nor allocates a separate buffer for the few bytes of the length prefix
@@ -392,6 +404,9 @@ public sealed class Connection : IDisposable
             Log.Warning("Decode returned null, dropping the packet");
             return;
         }
+        //Per-packet receive trace; the network ID is realigned to the stream head because the codec has already consumed it
+        if (PacketLog && Log.DebugEnabled)
+            Log.Debug($"recv {packet.GetType().Name} id={dataBuf.PeekVarInt()} bytes={payload.Length} protocol={_inboundProtocol.Id}");
         if (direct) _processor.HandleNow(_packetListener, packet);
         else _processor.ScheduleIfPossible(_packetListener, packet);
         _receivedPackets++;
@@ -533,44 +548,30 @@ public sealed class Connection : IDisposable
     }
 }
 
-//OutboundWriters is the global outbound drain scheduler, maps to the netty eventLoop write thread in vanilla
-//Previously every send submitted a task to the thread pool; broadcasting to thousands of connections contended on the scheduler lock and cost the main thread tens of microseconds per packet
-//Changed to a few fixed write threads consuming the global drain queue, so a single Send on the main thread is just one enqueue plus one CAS
+//OutboundWriters routes outbound drains through the shared IO pool, maps to the netty eventLoop write thread
+//The main thread only enqueues on Send; a per-connection flag keeps one drain task in flight and preserves packet order
 internal static class OutboundWriters
 {
-    private static readonly ConcurrentQueue<Connection> Dirty = new();
-    private static readonly SemaphoreSlim Signal = new(0);
-    //The write thread count is half the core count; encoding and stream writes mix CPU and IO, and too much concurrency just makes threads steal cores from each other
-    private static readonly int WorkerCount = Math.Clamp(Environment.ProcessorCount / 2, 2, 8);
+    //Network writes are latency bound, so they sit at the front of the IO pool
+    private const int IoPriority = 0;
 
-    static OutboundWriters()
-    {
-        for (var i = 0; i < WorkerCount; i++)
-        {
-            var thread = new Thread(Loop) { IsBackground = true, Name = $"NacreCraftOutbound{i}" };
-            thread.Start();
-        }
-    }
-
-    //Mark adds the connection to the drain queue and wakes a write thread
     public static void Mark(Connection connection)
     {
-        Dirty.Enqueue(connection);
-        Signal.Release();
+        if (Interlocked.CompareExchange(ref connection.OutboundScheduled, 1, 0) != 0) return;
+        WorkerPools.Io.Enqueue(() => Drain(connection), IoPriority);
     }
 
-    //Loop takes one connection and drains it, waiting on the signal when none is available
-    //When the signal count exceeds actual connections it spins a few rounds at most, neither busy-waiting nor missing a wakeup
-    private static void Loop()
+    private static void Drain(Connection connection)
     {
-        while (true)
+        try
         {
-            if (Dirty.TryDequeue(out var connection))
-            {
-                connection.DrainOutbound();
-                continue;
-            }
-            Signal.Wait();
+            connection.DrainOutbound();
+        }
+        finally
+        {
+            Interlocked.Exchange(ref connection.OutboundScheduled, 0);
+            //A packet queued while the drain ran needs another pass
+            if (connection.HasPendingOutbound) Mark(connection);
         }
     }
 }

@@ -84,7 +84,8 @@ public sealed class PersistentServerLevel : SimpleServerLevel, BlockGetter
         RegistryAccess? registryAccess = null,
         int viewDistance = 8,
         Func<ChunkPos, ChunkAccess?>? generator = null,
-        int simulationDistance = 10)
+        int simulationDistance = 10,
+        IChunkStagePipeline? stagePipeline = null)
         : base(dimension, dataVersion, registryAccess)
     {
         _regionStorage = regionStorage;
@@ -94,7 +95,12 @@ public sealed class PersistentServerLevel : SimpleServerLevel, BlockGetter
         //The loader delegates to LoadChunkAsync and is scheduled asynchronously by ServerChunkCache, avoiding a circular dependency
         //The async lambda lets Task<LevelChunk?> convert implicitly to Task<ChunkAccess?> since Task is not covariant
         //generator is passed by the Game layer and runs the ChunkStatusProcessor generation chain to create a new chunk on a save miss
-        _chunkSource = new ServerChunkCache(async pos => await LoadChunkAsync(pos), viewDistance, generator);
+        _chunkSource = new ServerChunkCache(async pos => await LoadChunkAsync(pos), viewDistance, generator,
+            stagePipeline: stagePipeline);
+        //Light runs inside the LIGHT stage when the cache can take its gate in time; the queued light thread stays as the fallback
+#if NC_LIGHT_IN_STAGE
+        stagePipeline?.SetLightInitializer(_chunkSource.InitializeStageLight);
+#endif
         //Simulation distance decides the range that actually ticks; when view distance is larger, the ring between them is the load-but-do-not-tick weak band
         //Uses the same vanilla clamp range as view distance
         _chunkSource.SimulationDistance = Math.Clamp(simulationDistance, 3, 32);

@@ -1,8 +1,8 @@
 # NacreCraft
 
-A from-scratch reimplementation of Minecraft 26.2 in C# / .NET 10.
+An open-source server reimplemented in C# that matches vanilla Minecraft 26.2 exactly, with a client built on the same code. Runs on .NET 10.
 
-NacreCraft is not a port. Nothing here is translated line by line from the original Java, and nothing is decompiled. Each subsystem is written against C# idioms — `readonly struct`, `Span<T>`, source generators, `AssemblyLoadContext` — while keeping observable behavior identical: the same NBT bytes, the same registry ids, the same chunk files, the same packet layouts, the same DFU upgrade paths.
+It is an equivalent implementation, not a derivative of Minecraft and not a replacement for it. Nothing is translated line by line from the original Java, and nothing is decompiled. Each subsystem is written against C# idioms — `readonly struct`, `Span<T>`, source generators, `AssemblyLoadContext` — while keeping observable behavior identical: the same NBT bytes, the same registry ids, the same chunk files, the same packet layouts, the same DFU upgrade paths.
 
 ## Capabilities
 
@@ -62,7 +62,7 @@ Layers are dependency tiers — layer 0 depends on nothing, layer 4 sits on top 
 | — | `NacreCraft.ModLoader` | Runtime mod loading and injection |
 | — | `NacreCraft.Loader` | CLI launcher, jar asset extraction |
 | — | `NacreCraft.TPGA` | Auth/proxy service, independent of the kernel |
-| — | `NacreCraft.DataFixer.SourceGenerator` | Roslyn source generator for DFU |
+| — | `NacreCraft.SourceGenerator` | Roslyn source generators for the kernel |
 
 
 ## Repositories

@@ -45,6 +45,12 @@ public sealed class NoiseChunk : FunctionContext, ContextProvider
 
     //Temporary: how many chunks already reported their construction split
     private static int _wrapReports;
+    //Temporary: cache effectiveness counters, reported next to the per-chunk noise profile
+    public static long FlatHits;
+    public static long FlatMisses;
+    public static long Cache2DHits;
+    public static long Cache2DMisses;
+    public static long CellFills;
     private readonly List<NoiseInterpolator> _interpolators = new();
     private readonly List<NoiseCacheAllInCell> _cellCaches = new();
     private readonly DensityFunction _preliminarySurfaceLevel;

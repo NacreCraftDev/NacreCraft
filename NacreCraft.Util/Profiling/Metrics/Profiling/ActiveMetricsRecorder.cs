@@ -17,6 +17,7 @@ public sealed class ActiveMetricsRecorder : MetricsRecorder
     private readonly MetricsPersister _metricsPersister;
     private readonly Action<ProfileResults> _onProfilingEnd;
     private readonly Action<string> _onReportFinished;
+    private readonly object _gate = new();
     private readonly MetricsSamplerProvider _metricsSamplerProvider;
     private readonly Func<long> _wallTimeSource;
     private readonly long _deadlineNano;
@@ -51,7 +52,7 @@ public sealed class ActiveMetricsRecorder : MetricsRecorder
 
     public void End()
     {
-        lock (this)
+        lock (_gate)
         {
             if (!IsRecording()) return;
             _killSwitch = true;
@@ -60,7 +61,7 @@ public sealed class ActiveMetricsRecorder : MetricsRecorder
 
     public void Cancel()
     {
-        lock (this)
+        lock (_gate)
         {
             if (!IsRecording()) return;
             _singleTickProfiler = InactiveProfiler.Instance;

@@ -41,7 +41,6 @@ namespace NacreCraft.Client.Gui;
 public sealed class GuiWindow : GuiContainer
 {
     private GuiControl? _hoveredControl;
-    private GuiControl? _focusedControl;
     //_shiftDown/_ctrlDown maintained by ProcessKeyDown/Up from the Shift/Ctrl key codes
     //TextBox checks e.Modifiers to extend the selection or handle Ctrl+C/V/X combos
     private bool _shiftDown;
@@ -76,12 +75,7 @@ public sealed class GuiWindow : GuiContainer
 
     //RenderForegroundHook screen-level foreground callback injected by ScreenManager.SetScreen
     //Called on Render after widgets, not cached; HUD hearts animate every frame and skip the retained-mode cache
-    private Action<IGuiRenderContext>? _renderForegroundHook;
-    public Action<IGuiRenderContext>? RenderForegroundHook
-    {
-        get => _renderForegroundHook;
-        set => _renderForegroundHook = value;
-    }
+    public Action<IGuiRenderContext>? RenderForegroundHook { get; set; }
 
     //WantsBlur whether the current Screen needs blur post-processing, injected by ScreenManager.SetScreen from Screen.WantsBlur
     //Blur frames skip the retained-mode cache; BlurBeforeThisStratum is not recorded and must be called every frame
@@ -91,11 +85,7 @@ public sealed class GuiWindow : GuiContainer
 
     //FocusedControl the widget currently receiving keyboard input
     //ProcessMouseDown sets the hit widget as focus; ProcessKeyDown dispatches to it
-    public GuiControl? FocusedControl
-    {
-        get => _focusedControl;
-        set => _focusedControl = value;
-    }
+    public GuiControl? FocusedControl { get; set; }
 
     public GuiWindow(int surfaceWidth, int surfaceHeight)
     {
@@ -132,10 +122,10 @@ public sealed class GuiWindow : GuiContainer
         y /= GuiScale;
         var hit = HitTest(x, y);
         if (hit is null) return;
-        if (_focusedControl is not null && _focusedControl != hit)
-            _focusedControl.OnLostFocus();
-        var prevFocused = _focusedControl;
-        _focusedControl = hit;
+        if (FocusedControl is not null && FocusedControl != hit)
+            FocusedControl.OnLostFocus();
+        var prevFocused = FocusedControl;
+        FocusedControl = hit;
         if (prevFocused != hit) hit.OnGotFocus();
         var args = new MouseEventArgs(button, x, y, CurrentModifiers());
         if (hit == this)
@@ -215,12 +205,12 @@ public sealed class GuiWindow : GuiContainer
             return;
         }
         var args = new KeyEventArgs(key, ch, CurrentModifiers());
-        if (_focusedControl is not null && _focusedControl != this)
+        if (FocusedControl is not null && FocusedControl != this)
         {
-            _focusedControl.OnKeyDown(args);
+            FocusedControl.OnKeyDown(args);
             if (ch != '\0')
             {
-                _focusedControl.OnKeyPress(args);
+                FocusedControl.OnKeyPress(args);
             }
         }
         else
@@ -252,9 +242,9 @@ public sealed class GuiWindow : GuiContainer
     {
         UpdateModifiers(key, false);
         var args = new KeyEventArgs(key, ch, CurrentModifiers());
-        if (_focusedControl is not null && _focusedControl != this)
+        if (FocusedControl is not null && FocusedControl != this)
         {
-            _focusedControl.OnKeyUp(args);
+            FocusedControl.OnKeyUp(args);
         }
         else
         {
@@ -268,8 +258,8 @@ public sealed class GuiWindow : GuiContainer
     {
         if (_ctrlDown) return;
         var args = new KeyEventArgs(0, ch, CurrentModifiers());
-        if (_focusedControl is not null && _focusedControl != this)
-            _focusedControl.OnKeyPress(args);
+        if (FocusedControl is not null && FocusedControl != this)
+            FocusedControl.OnKeyPress(args);
         else
             base.OnKeyPress(args);
     }
@@ -282,13 +272,13 @@ public sealed class GuiWindow : GuiContainer
         CollectTabStops(this, tabStops);
         if (tabStops.Count == 0) return;
         tabStops.Sort((a, b) => a.TabIndex.CompareTo(b.TabIndex));
-        var currentIdx = _focusedControl is null ? -1 : tabStops.IndexOf(_focusedControl);
+        var currentIdx = FocusedControl is null ? -1 : tabStops.IndexOf(FocusedControl);
         var nextIdx = (currentIdx + 1) % tabStops.Count;
         var next = tabStops[nextIdx];
-        if (_focusedControl is not null && _focusedControl != next)
-            _focusedControl.OnLostFocus();
-        var prevFocused = _focusedControl;
-        _focusedControl = next;
+        if (FocusedControl is not null && FocusedControl != next)
+            FocusedControl.OnLostFocus();
+        var prevFocused = FocusedControl;
+        FocusedControl = next;
         if (prevFocused != next) next.OnGotFocus();
     }
 

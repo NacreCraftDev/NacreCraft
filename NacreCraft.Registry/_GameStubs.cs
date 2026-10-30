@@ -17,6 +17,11 @@ public interface BiomeSource
     //GetBiome placeholder signature to query a biome by world coordinates, awaiting concrete logic
     Biome GetBiome(int x, int y, int z);
 
+    //GetBiomeHolder the registry holder of the biome at a coordinate
+    //Vanilla biome sources answer with a holder; the default wraps whatever GetBiome returned and concrete sources
+    //override it when the reference is already at hand, which keeps the reverse lookup out of the biome fill loop
+    Holder<Biome> GetBiomeHolder(int x, int y, int z) => BuiltInRegistries.BIOME.WrapAsHolder(GetBiome(x, y, z));
+
     //PossibleBiomes all biomes this source can produce
     //Decoration uses it to filter out biomes found in the 3x3 range that do not belong to this source
     IReadOnlyList<Biome> PossibleBiomes { get; }

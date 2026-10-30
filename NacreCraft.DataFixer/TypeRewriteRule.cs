@@ -16,7 +16,7 @@ public interface TypeRewriteRule
     Optional<RewriteResult<A, object>> Rewrite<A>(Type<A> type);
 
     //nop no-op rule singleton
-    static TypeRewriteRule Nop() => NopRule.INSTANCE;
+    static TypeRewriteRule Nop() => NopRule.Instance;
 
     //seq composes multiple rules, applied in order
     static TypeRewriteRule Seq(List<TypeRewriteRule> rules) => new SeqRule(rules);
@@ -72,7 +72,7 @@ public interface TypeRewriteRule
     //NopRule no-op rule implementation
     public sealed class NopRule : TypeRewriteRule
     {
-        public static readonly NopRule INSTANCE = new();
+        public static readonly NopRule Instance = new();
         private NopRule() { }
         public Optional<RewriteResult<A, object>> Rewrite<A>(Type<A> type)
             => Optional<RewriteResult<A, object>>.Of(RewriteResult<A, object>.Nop(type));

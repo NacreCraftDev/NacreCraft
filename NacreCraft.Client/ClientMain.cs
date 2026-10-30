@@ -206,19 +206,39 @@ public static class ClientMain
         //   rsr is passed for later client Tags queries or /reload reloads
         //   resourceManager is passed to build the block atlas and world render chain once the swapchain is ready
         //   S3 texture injection and world render wiring are handled uniformly by MinecraftClient.EnsureWorldRenderer
-        var gpuApp = new VulkanGuiApp(gameConfig.EnableVsync, 800, 600, clientResources: resourceManager, startFullscreen: gameConfig.Fullscreen);
-        //Options carry the fullscreen video mode, the same place vanilla reads it from in its Window constructor
-        gpuApp.SetPreferredFullscreenVideoMode(VideoMode.Read(gameConfig.FullscreenVideoMode));
+        //   -nogui skips the Vulkan GUI pipeline entirely and runs the headless loop; everything before this point is window independent
+        var headless = options.HasFlag("nogui");
+        VulkanGuiApp? gpuApp = null;
+        if (headless)
+        {
+            Log.Info("nogui requested, Vulkan GUI pipeline is not initialized");
+        }
+        else
+        {
+            gpuApp = new VulkanGuiApp(gameConfig.EnableVsync, 800, 600, clientResources: resourceManager, startFullscreen: gameConfig.Fullscreen);
+            //Options carry the fullscreen video mode, the same place vanilla reads it from in its Window constructor
+            gpuApp.SetPreferredFullscreenVideoMode(VideoMode.Read(gameConfig.FullscreenVideoMode));
+        }
         // minecraft.Run blocks the current thread until minecraft.Stop is called
         using var minecraft = new MinecraftClient(gameConfig, gpuApp, rsr: rsr, resourceManager: resourceManager,
             language: clientLanguage, packRepository: packRepository);
 
         //Register Ctrl+C to trigger a graceful shutdown
-        Console.CancelKeyPress += (_, e) =>
+        //Replaces the kernel's early handler, which only prints ServerStop and exits
+        ConsoleInterrupt.Replace((_, e) =>
         {
             e.Cancel = true;
             minecraft.Stop();
-        };
+        });
+
+        //11.5 quickPlayMultiplayer connects right after startup instead of waiting for the multiplayer screen
+        //     The connector runs on its own thread, so Run is not blocked while the handshake completes
+        var quickPlay = options.GetOptionOrDefault("quickPlayMultiplayer", string.Empty);
+        if (!string.IsNullOrEmpty(quickPlay))
+        {
+            var (host, port) = ParseServerAddress(quickPlay);
+            minecraft.ConnectServer(host, port);
+        }
 
         minecraft.Run();
 
@@ -226,5 +246,20 @@ public static class ClientMain
         options.Unsubscribe();
         Log.Info("NacreCraft client stopped");
         //Log.Debug("Run exit");
+    }
+
+    //ParseServerAddress splits a host:port server address; a bare host falls back to the default port
+    //IPv6 literals must be bracketed as in vanilla, e.g. [::1]:25565
+    private static (string Host, int Port) ParseServerAddress(string address)
+    {
+        var value = address.Trim();
+        var separator = value.LastIndexOf(':');
+        var singleColon = value.IndexOf(':') == separator;
+        var closingBracket = value.LastIndexOf(']');
+        var afterBracket = closingBracket >= 0 && closingBracket < separator;
+        if (separator > 0 && separator < value.Length - 1 && (singleColon || afterBracket)
+            && int.TryParse(value[(separator + 1)..], out var port) && port is > 0 and <= 65535)
+            return (value[..separator].Trim('[', ']'), port);
+        return (value.Trim('[', ']'), 25565);
     }
 }

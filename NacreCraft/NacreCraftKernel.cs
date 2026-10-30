@@ -25,6 +25,8 @@ public static class NacreCraftKernel
             //Log.Debug("Initialize exit");
             return;
         }
+        //Installed before the logger exists, so an interrupt during startup still prints a marker and exits
+        ConsoleInterrupt.InstallEarly();
         Log.Debug($"Initialize entry args={(args == null ? "null" : string.Join(",", args))}");
 
         // 0. Log output level is decided by debug mode; both outputs change together

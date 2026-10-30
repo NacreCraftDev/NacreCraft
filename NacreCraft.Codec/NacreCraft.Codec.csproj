@@ -5,6 +5,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <!--Nullable analysis on the nested FlatMap lambdas of RecordCodecBuilder takes minutes, disabling it keeps the build fast; generic nullable annotations carry no value here-->
     <Nullable>disable</Nullable>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NacreCraft.SourceGenerator\NacreCraft.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
 
 </Project>

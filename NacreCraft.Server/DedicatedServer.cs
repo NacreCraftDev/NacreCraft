@@ -163,6 +163,7 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
         var chunkGenerator = stem?.Generator ?? fallbackGenerator;
         //On a save miss it goes through the ChunkStatusProcessor pipeline, random makes generation reproducible
         Func<ChunkPos, ChunkAccess?>? generator = null;
+        IChunkStagePipeline? stagePipeline = null;
         NacreCraft.Game.World.Level.LevelGen.Structure.StructureFeatureManager? structures = null;
         PersistentServerLevel? created = null;
         if (chunkGenerator is not null)
@@ -170,12 +171,13 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
             var pf = factory ?? PalettedContainerFactory.Default;
             //Neighbor lookups only take loaded chunks, an unloaded neighbor returns null and decoration degrades to the center chunk only
             //Generation must not trigger new loads, otherwise the neighbor chain recurses endlessly
-            var built = ChunkGenerationHelper.CreateGenerator(
+            var built = ChunkGenerationHelper.CreateGeneratorAndPipeline(
                 chunkGenerator, minSectionY, sectionsCount, random ?? RandomSource.Create(), pf,
                 worldSeed, (x, z) => created?.ChunkSource.GetLoadedChunk(x, z),
                 _settings.GenerateStructures);
             generator = built.Generator;
             structures = built.Structures;
+            stagePipeline = built.Pipeline;
         }
         var regionStorage = _levelAccess.CreateRegionStorage(key, _dataFixer, DataFixTypes.Chunk);
         created = new PersistentServerLevel(
@@ -187,7 +189,8 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
             registryAccess,
             _settings.ViewDistance,
             generator,
-            _settings.SimulationDistance);
+            _settings.SimulationDistance,
+            stagePipeline);
         //The structure bridge is attached after the level is built, chunk persistence packing and load restoration both go through it
         if (structures is not null)
         {

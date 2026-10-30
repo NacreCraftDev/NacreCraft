@@ -18,14 +18,7 @@ public sealed class ChunkGeneratorStructureState
         int sourceX, int sourceZ, int range)
     {
         if (!structureSet.IsBound() || structureSet.Value is not StructureSet set) return false;
-        var placement = set.Placement;
-        for (var testX = sourceX - range; testX <= sourceX + range; testX++)
-        {
-            for (var testZ = sourceZ - range; testZ <= sourceZ + range; testZ++)
-            {
-                if (placement.IsStructureChunk(this, testX, testZ)) return true;
-            }
-        }
-        return false;
+        //Delegated to the placement so repeated exclusion-zone queries hit its per-coordinate memo
+        return set.Placement.HasStructureChunkInRange(this, sourceX, sourceZ, range);
     }
 }

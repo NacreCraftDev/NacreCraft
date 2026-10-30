@@ -13,8 +13,18 @@ public static class JitEventMonitor
 
     //WhitelistEnabled whether to only count this project's compile events, on by default
     //Set NACRECRAFT_JIT_WHITELIST=0 to count all methods, useful for investigating recompilation in third-party libraries
-    private static readonly bool WhitelistEnabled =
-        Environment.GetEnvironmentVariable("NACRECRAFT_JIT_WHITELIST") is not ("0" or "false" or "False" or "FALSE");
+    private static readonly bool WhitelistEnabled = ReadFlag("NACRECRAFT_JIT_WHITELIST");
+
+    //LogEnabled whether the per-method lines are written at all
+    //Set NACRECRAFT_JIT_LOG=0 to drop them; the counters keep running either way, only the text is skipped
+    private static readonly bool LogEnabled = ReadFlag("NACRECRAFT_JIT_LOG");
+
+    //ReadFlag treats an absent or unrecognised value as on, so only an explicit off turns a switch off
+    private static bool ReadFlag(string name)
+        => Environment.GetEnvironmentVariable(name) is not ("0" or "false" or "False" or "FALSE");
+
+    //LogOn the whole condition in one read, so a disabled run allocates nothing for the line
+    private static bool LogOn => LogEnabled && Log.DebugEnabled;
 
     private static readonly Listener Hook = new();
     private static int _pendingTier1;
@@ -62,20 +72,23 @@ public static class JitEventMonitor
             var ns = Payload(e, "MethodNamespace") as string;
             if (!IsTracked(ns)) return;
             var reJitId = Payload(e, "ReJITID") is ulong value ? value : 0;
-            var name = $"{ns}.{Payload(e, "MethodName")}";
             if (reJitId == 0) return;
             if (reJitId == 1)
             {
                 Interlocked.Increment(ref _pendingTier1);
                 var total = Interlocked.Increment(ref _total);
-                Log.Debug($"[JIT] Tier1 {name} #{total}");
+                if (LogOn) Log.Debug($"[JIT] Tier1 {Name(ns, e)} #{total}");
                 return;
             }
             //Tier 2 and above, a further optimization of the previous tier's result, counted and colored separately
             Interlocked.Increment(ref _pendingTier2);
             var totalTier2 = Interlocked.Increment(ref _totalTier2);
-            Log.Debug($"[JIT] Tier{reJitId} recompiled {name} #{totalTier2}");
+            if (LogOn) Log.Debug($"[JIT] Tier{reJitId} recompiled {Name(ns, e)} #{totalTier2}");
         }
+
+        //Name builds the display name only when a line is actually written
+        private static string Name(string? ns, EventWrittenEventArgs e)
+            => $"{ns}.{Payload(e, "MethodName")}";
 
         //Payload fetches the raw value by field name, returns null for a missing field
         private static object? Payload(EventWrittenEventArgs e, string field)

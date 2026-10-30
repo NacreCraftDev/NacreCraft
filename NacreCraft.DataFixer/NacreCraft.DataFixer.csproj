@@ -8,9 +8,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\NacreCraft.DataFixer.SourceGenerator\NacreCraft.DataFixer.SourceGenerator.csproj"
+    <ProjectReference Include="..\NacreCraft.SourceGenerator\NacreCraft.SourceGenerator.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <CompilerVisibleProperty Include="NcDataFixerTypes" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -18,6 +22,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <!-- Enables the shared source generator's DFU pass; the Codec project leaves this unset -->
+    <NcDataFixerTypes>true</NcDataFixerTypes>
   </PropertyGroup>
 
 </Project>

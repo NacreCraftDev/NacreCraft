@@ -105,6 +105,20 @@ public sealed class CubicSplineMultipoint : CubicSpline
         _maxValue = maxValue;
     }
 
+    //Used by MapCoordinates: wrapping the coordinate keeps the same value range, so the bounds are carried over
+    //Recomputing them walks every interval again, which dominated chunk construction once the tree reached thousands of nodes
+    private CubicSplineMultipoint(DensityFunction coordinate, float[] locations, IReadOnlyList<CubicSpline> values,
+        float[] derivatives, float minValue, float maxValue)
+    {
+        ValidateSizes(locations, values, derivatives);
+        _coordinate = coordinate;
+        _locations = locations;
+        _values = values;
+        _derivatives = derivatives;
+        _minValue = minValue;
+        _maxValue = maxValue;
+    }
+
     public float Sample(FunctionContext context)
     {
         var input = (float)_coordinate.Compute(context);
@@ -145,8 +159,9 @@ public sealed class CubicSplineMultipoint : CubicSpline
         var top = _rebuildDepth++ == 0;
         var start = System.Diagnostics.Stopwatch.GetTimestamp();
         var newCoordinate = mapper(_coordinate);
-        var newValues = _values.Select(v => v.MapCoordinates(mapper)).ToList();
-        var result = new CubicSplineMultipoint(newCoordinate, _locations, newValues, _derivatives);
+        var newValues = new CubicSpline[_values.Count];
+        for (var i = 0; i < newValues.Length; i++) newValues[i] = _values[i].MapCoordinates(mapper);
+        var result = new CubicSplineMultipoint(newCoordinate, _locations, newValues, _derivatives, _minValue, _maxValue);
         var prof = RebuildProfile ??= new long[2];
         if (top) prof[0] += System.Diagnostics.Stopwatch.GetTimestamp() - start;
         prof[1]++;

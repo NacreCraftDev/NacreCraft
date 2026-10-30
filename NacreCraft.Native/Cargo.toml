@@ -11,10 +11,25 @@ crate-type = ["cdylib"]
 cc = "1.2"
 
 [dependencies]
-egui = "0.36.2"
-egui-winit = "0.36.2"
-egui_glow = { version = "0.36.2", features = ["winit"] }
+#default_fonts would embed four typefaces, over two megabytes of them, while the report window already takes its
+#typeface from the system so it can draw the local language
+egui = { version = "0.36.2", default-features = false }
+#links is the webbrowser crate, and nothing in this window opens a browser; the rest of the defaults are kept so the
+#clipboard still works and the Linux backends stay compiled in
+egui-winit = { version = "0.36.2", default-features = false, features = [
+    "clipboard",
+    "wayland",
+    "x11",
+] }
+egui_glow = { version = "0.36.2", default-features = false, features = ["winit"] }
 glow = "0.17.0"
 glutin = "0.32.3"
 glutin-winit = "0.5.0"
 winit = "0.30.13"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+#The window is drawn a handful of times before it goes away, so size is the only thing worth asking the optimiser for
+opt-level = "s"
+strip = "symbols"

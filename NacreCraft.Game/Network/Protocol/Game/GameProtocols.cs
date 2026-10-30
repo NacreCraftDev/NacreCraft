@@ -127,6 +127,7 @@ public static class GameProtocols
             .AddPacket(GamePacketTypes.ClientboundPlayerPosition, ClientboundPlayerPositionPacket.StreamCodec)
             .AddPacket(GamePacketTypes.ClientboundPlayerRotation, ClientboundPlayerRotationPacket.StreamCodec)
             .AddPacket(GamePacketTypes.ClientboundRemoveEntities, ClientboundRemoveEntitiesPacket.StreamCodec)
+            .AddPacket(GamePacketTypes.ClientboundRespawn, ClientboundRespawnPacket.StreamCodec)
             .AddPacket(GamePacketTypes.ClientboundRotateHead, ClientboundRotateHeadPacket.StreamCodec)
             .AddPacket(GamePacketTypes.ClientboundSectionBlocksUpdate, ClientboundSectionBlocksUpdatePacket.StreamCodec)
             .AddPacket(GamePacketTypes.ClientboundSetActionBarText, ClientboundSetActionBarTextPacket.StreamCodec)

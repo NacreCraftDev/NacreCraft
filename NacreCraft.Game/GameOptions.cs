@@ -63,6 +63,17 @@ public sealed class GameOptions
     private void OnUnhandled(object? sender, LaunchArgEventArgs e)
     {
         var token = e.Token;
+        //A single-dash token is always a flag, e.g. -nogui; a pending --opt is downgraded because option values do not start with a dash
+        if (token.Length > 1 && token[0] == '-' && token[1] != '-')
+        {
+            if (_pendingOption is not null)
+            {
+                _flags.Add(_pendingOption);
+                _pendingOption = null;
+            }
+            _flags.Add(token[1..]);
+            return;
+        }
         if (!token.StartsWith("--", StringComparison.Ordinal))
         {
             //A bare token may be the value of the previous --opt, handled by the internal _pendingOption

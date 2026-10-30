@@ -65,12 +65,30 @@ public sealed class ChunkHolder
         return true;
     }
 
+    //CurrentStage the stage this holder is currently generating, shown by the chunk GUI
+    public ChunkStatus CurrentStage { get; private set; } = ChunkStatus.EMPTY;
+
+    //StageStartedAt TickCount64 when the current stage began
+    public long StageStartedAt { get; private set; }
+
+    //ScheduledAt TickCount64 when the load task was first submitted
+    public long ScheduledAt { get; private set; }
+
     //MarkScheduled marks the load task submitted and returns whether this was the first mark
     public bool MarkScheduled()
     {
         if (_scheduled) return false;
         _scheduled = true;
+        ScheduledAt = Environment.TickCount64;
+        StageStartedAt = ScheduledAt;
         return true;
+    }
+
+    //MarkStage records the stage currently running so a stuck chunk can be identified from its position and stage
+    public void MarkStage(ChunkStatus stage)
+    {
+        CurrentStage = stage;
+        StageStartedAt = Environment.TickCount64;
     }
 
     //Complete sets the chunk and status once loading finishes and completes the future, maps to vanilla replaceProtoChunk
@@ -79,6 +97,8 @@ public sealed class ChunkHolder
         //Log.Debug($"Complete entry chunk={chunk.Pos}");
         _chunk = chunk;
         _status = chunk.ChunkStatus;
+        CurrentStage = ChunkStatus.FULL;
+        StageStartedAt = Environment.TickCount64;
         _future.TrySetResult(ChunkResult.Success(chunk));
         //Log.Debug($"Complete exit");
     }

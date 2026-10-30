@@ -254,29 +254,34 @@ public sealed partial class ServerChunkPage : UserControl
         }, DispatcherPriority.Background);
     }
 
-    //RebuildGenerationList lists chunks submitted for load but not yet finished, these are the terrain generations in progress
+    //RebuildGenerationList lists chunks submitted for load but not yet finished, with their stage and elapsed time
+    //Only the twenty slowest are shown so the list stays readable and the refresh stays cheap
     private void RebuildGenerationList()
     {
         var source = _server.Overworld.ChunkSource;
-        var tasks = new List<string>();
+        var now = Environment.TickCount64;
+        var entries = new List<(long Total, string Key, string Text)>();
         foreach (var holder in source.Holders)
         {
             if (!holder.WasScheduled || holder.IsDone) continue;
-            tasks.Add($"[{holder.Pos.X}, {holder.Pos.Z}]");
+            var total = holder.ScheduledAt == 0 ? 0 : now - holder.ScheduledAt;
+            var stage = holder.StageStartedAt == 0 ? 0 : now - holder.StageStartedAt;
+            var key = $"[{holder.Pos.X}, {holder.Pos.Z}]";
+            entries.Add((total, key, $"{key} {holder.CurrentStage} {stage / 1000.0:F1}s/{total / 1000.0:F1}s"));
         }
-        tasks.Sort(StringComparer.Ordinal);
+        entries.Sort((a, b) => b.Total.CompareTo(a.Total));
 
         GenerationSummary.Text = Loc.Format("nacrecraft.gui.chunk.generating",
-            tasks.Count, source.LoadedCount, source.HoldersCount, source.ViewDistance);
+            entries.Count, source.LoadedCount, source.HoldersCount, source.ViewDistance);
 
-        SyncTaskItems(tasks);
+        SyncTaskItems(entries.Take(20).Select(entry => (entry.Key, entry.Text)).ToList());
     }
 
     //SyncTaskItems maintains task items incrementally against the new list, only the ones actually added or removed are touched
     //Clearing and rebuilding the whole column makes unchanged items flicker and the animation becomes messier
-    private void SyncTaskItems(List<string> tasks)
+    private void SyncTaskItems(List<(string Key, string Text)> tasks)
     {
-        var wanted = new HashSet<string>(tasks);
+        var wanted = new HashSet<string>(tasks.Select(task => task.Key));
         //Vanished items fade out first and are removed after the transition, a direct removal disappears instantly
         var stale = _taskItems.Keys.Where(key => !wanted.Contains(key)).ToList();
         foreach (var key in stale)
@@ -288,16 +293,17 @@ public sealed partial class ServerChunkPage : UserControl
 
         for (var i = 0; i < tasks.Count; i++)
         {
-            var key = tasks[i];
+            var (key, text) = tasks[i];
             if (_taskItems.TryGetValue(key, out var existing))
             {
+                existing.Text = text;
                 //When the order changes it moves position, the moved item itself does not change and only the neighbors shift aside
                 var at = GenerationList.Children.IndexOf(existing);
                 if (at != i) GenerationList.Children.Move(at, i);
                 continue;
             }
 
-            var item = new TextBlock { Text = key, Classes = { "monoValue" }, Opacity = 0 };
+            var item = new TextBlock { Text = text, Classes = { "monoValue" }, Opacity = 0 };
             ApplyFade(item);
             _taskItems[key] = item;
             GenerationList.Children.Insert(Math.Min(i, GenerationList.Children.Count), item);

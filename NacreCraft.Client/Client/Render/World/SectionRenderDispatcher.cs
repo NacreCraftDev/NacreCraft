@@ -101,7 +101,12 @@ public sealed class SectionRenderDispatcher : IDisposable
         _viewArea.Start();
         for (var i = 0; i < _workers.Length; i++)
         {
-            _workers[i] = new Thread(WorkerLoop) { IsBackground = true, Name = $"SectionRenderDispatcher-Worker-{i}" };
+            _workers[i] = new Thread(WorkerLoop)
+            {
+                IsBackground = true,
+                Name = $"SectionRenderDispatcher-Worker-{i}",
+                Priority = ThreadPriority.BelowNormal,
+            };
             _workers[i].Start();
         }
     }

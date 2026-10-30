@@ -95,10 +95,20 @@ public interface Visitor
 internal sealed class RecursiveVisitor : Visitor
 {
     private readonly Visitor _inner;
+    //A density tree is a DAG: the same noise or constant node is referenced from several branches
+    //Without the memo every reference is wrapped again, which pushed one chunk's mapAll past eleven thousand visits
+    private readonly Dictionary<DensityFunction, DensityFunction> _memo =
+        new(System.Collections.Generic.ReferenceEqualityComparer.Instance);
 
     public RecursiveVisitor(Visitor inner) => _inner = inner;
 
-    public DensityFunction Apply(DensityFunction input) => _inner.Apply(input.MapChildren(this));
+    public DensityFunction Apply(DensityFunction input)
+    {
+        if (_memo.TryGetValue(input, out var cached)) return cached;
+        var result = _inner.Apply(input.MapChildren(this));
+        _memo[input] = result;
+        return result;
+    }
 
     public NoiseHolder VisitNoise(NoiseHolder noise) => _inner.VisitNoise(noise);
 }

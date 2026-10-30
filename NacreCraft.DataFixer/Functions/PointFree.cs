@@ -8,6 +8,7 @@ using T = NacreCraft.DataFixer.Types;
 //represents a cacheable optimized function wrapper; eval evaluates lazily
 public abstract class PointFree<T2>
 {
+    private readonly object _gate = new();
     private volatile bool _initialized;
     private Func<DynamicOps<object>, T2>? _value;
 
@@ -16,7 +17,7 @@ public abstract class PointFree<T2>
     {
         if (!_initialized)
         {
-            lock (this)
+            lock (_gate)
             {
                 if (!_initialized)
                 {

@@ -3,7 +3,7 @@
   <Project Path="NacreCraft.Config/NacreCraft.Config.csproj" />
   <Project Path="NacreCraft.Codec/NacreCraft.Codec.csproj" />
   <Project Path="NacreCraft.DataFixer/NacreCraft.DataFixer.csproj" />
-  <Project Path="NacreCraft.DataFixer.SourceGenerator/NacreCraft.DataFixer.SourceGenerator.csproj" />
+  <Project Path="NacreCraft.SourceGenerator/NacreCraft.SourceGenerator.csproj" />
   <Project Path="NacreCraft.Client/NacreCraft.Client.csproj" />
   <Project Path="NacreCraft.Game/NacreCraft.Game.csproj" />
   <Project Path="NacreCraft.Server/NacreCraft.Server.csproj" />

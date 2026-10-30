@@ -107,6 +107,9 @@ public static class NativeStackGuard
     /// </summary>
     public static void RelaunchIfNeeded()
     {
+        //--no-restart keeps the process in place; the early stack check stays off for this run
+        if (Array.IndexOf(Environment.GetCommandLineArgs(), "--no-restart") >= 0) return;
+
         //Restarted once already: if the layer is still missing, restarting again would loop forever
         if (Environment.GetEnvironmentVariable(AttachedFlag) == "1") return;
 

@@ -302,13 +302,12 @@ public static class Log
         AppDomain.CurrentDomain.ProcessExit += (_, _) => Shutdown();
     }
 
-    public static void SetRetentionDays(int days)
+    //RetentionDays log retention in days, negative input clamps to zero
+    public static int RetentionDays
     {
-        if (days < 0) days = 0;
-        _retentionDays = days;
+        get => _retentionDays;
+        set => _retentionDays = Math.Max(0, value);
     }
-
-    public static int GetRetentionDays() => _retentionDays;
 
     //ArchiveOldLogs packs what earlier sessions left behind, before this session opens its own file
     //Failure is swallowed: a missing compression library or a full disk must not take the file sink down with it

@@ -1,10 +1,11 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 
-namespace NacreCraft.DataFixer.SourceGenerator;
+namespace NacreCraft.SourceGenerator;
 
 //Scan concrete classes inheriting NacreCraft.DataFixer.Types.Type<A> and generate TypeObjectConverterFactory
 //Align with Java type erasure semantics where Type<A> is equivalent to Type<Object>, providing the AsObjectType conversion entry
@@ -14,6 +15,11 @@ public class TypeObjectConverterGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+        //The generator is shared by every kernel project, so it only runs where the DFU types exist
+        var enabled = context.AnalyzerConfigOptionsProvider.Select((provider, _) =>
+            provider.GlobalOptions.TryGetValue("build_property.NcDataFixerTypes", out var value)
+            && string.Equals(value, "true", StringComparison.OrdinalIgnoreCase));
+
         //Scan all ClassDeclarationSyntax and filter concrete classes inheriting Type<A>
         var subclasses = context.SyntaxProvider
             .CreateSyntaxProvider(
@@ -24,9 +30,10 @@ public class TypeObjectConverterGenerator : IIncrementalGenerator
             .Collect();
 
         //Generate TypeObjectConverterFactory
-        context.RegisterSourceOutput(subclasses, (spc, infos) =>
+        context.RegisterSourceOutput(subclasses.Combine(enabled), (spc, input) =>
         {
-            GenerateFactory(spc, infos);
+            if (!input.Right) return;
+            GenerateFactory(spc, input.Left);
         });
     }
 

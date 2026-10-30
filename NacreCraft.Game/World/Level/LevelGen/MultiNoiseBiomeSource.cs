@@ -52,11 +52,17 @@ public sealed class MultiNoiseBiomeSource : BiomeSource
 
     //GetBiome samples 6-dimensional parameters by coordinate and finds the biome closest in parameter space
     //Without a ParameterList/Sampler it returns the Biome.Plains singleton as a placeholder to avoid palette blow-up
-    public Biome GetBiome(int x, int y, int z)
+    public Biome GetBiome(int x, int y, int z) => GetBiomeHolder(x, y, z).Value;
+
+    //GetBiomeHolder answers with the registry holder the parameter tree already holds, maps to vanilla
+    //MultiNoiseBiomeSource.getNoiseBiome
+    //The biome fill writes one holder per quart; going through GetBiome and wrapping the value back cost a reverse
+    //registry lookup for every one of those
+    public Holder<Biome> GetBiomeHolder(int x, int y, int z)
     {
         var data = Data;
         if (data is null || Sampler is null)
-            return Biome.Plains;
+            return BuiltInRegistries.BIOME.WrapAsHolder(Biome.Plains);
 
         var target = new Climate.ParameterPoint(
             Sampler.Temperature(x, y, z),
@@ -66,6 +72,6 @@ public sealed class MultiNoiseBiomeSource : BiomeSource
             Sampler.Depth(x, y, z),
             Sampler.Weirdness(x, y, z),
             0L);
-        return data.FindClosest(target).Value;
+        return data.FindClosest(target);
     }
 }

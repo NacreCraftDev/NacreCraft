@@ -230,10 +230,18 @@ public sealed class SurfaceSystem
         var biomeCalls = Interlocked.Exchange(ref _profGetBiomeCalls, 0);
         var noise = Interlocked.Exchange(ref _profNoiseTicks, 0);
         var noiseCalls = Interlocked.Exchange(ref _profNoiseCalls, 0);
+        var corner = Interlocked.Exchange(ref BiomeManager.CornerTicks, 0);
+        var lookup = Interlocked.Exchange(ref BiomeManager.LookupTicks, 0);
+        var paletteHits = Interlocked.Exchange(ref BiomeManager.PaletteHits, 0);
+        var regionHits = Interlocked.Exchange(ref BiomeManager.RegionHits, 0);
+        var borderHits = Interlocked.Exchange(ref BiomeManager.BorderHits, 0);
+        var fallbackSamples = Interlocked.Exchange(ref BiomeManager.FallbackSamples, 0);
         const int builds = 50;
         NacreCraft.Logging.Log.Info($"[surface] per-chunk biome={(long)(biome * toMs / builds)}ms updateXZ={(long)(update * toMs / builds)}ms "
             + $"state={(long)(state * toMs / builds)}ms rule={(long)(rule * toMs / builds)}ms blocks={blocks / builds} "
             + $"getBiome={(long)(getBiome * toMs / builds)}ms/{biomeCalls / builds} "
+            + $"corner={(long)(corner * toMs / builds)}ms lookup={(long)(lookup * toMs / builds)}ms "
+            + $"palette={paletteHits} region={regionHits} border={borderHits} sample={fallbackSamples} "
             + $"noise={(long)(noise * toMs / builds)}ms/{noiseCalls / builds}");
     }
 

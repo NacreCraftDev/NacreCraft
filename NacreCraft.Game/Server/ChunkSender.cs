@@ -15,6 +15,14 @@ public sealed class ChunkSender
 {
     //ChunksPerTick chunks sent per tick, aligned with the order of magnitude of vanilla desiredChunksPerTick
     public const int ChunksPerTick = 4;
+    //Batch ceiling and floor, matching the clamp vanilla applies to the client's desired batch size
+    private const int MaxChunksPerTick = 64;
+    private const int MinChunksPerTick = 1;
+
+    //_desiredChunksPerTick the batch size the client asked for through chunk_batch_received, maps to vanilla desiredChunksPerTick
+    //The client measures how long a batch took to apply and answers with what it can keep up with, so a slow client slows the
+    //sender down instead of building a backlog it will never drain
+    private int _desiredChunksPerTick = ChunksPerTick;
 
     private readonly Connection _connection;
     private readonly Func<ChunkPos, ChunkAccess?> _provider;
@@ -78,7 +86,6 @@ public sealed class ChunkSender
         _viewDistance = radius;
         var radiusSquared = radius * radius;
         //Coordinates entering view are queued; the circular test matches the initial queueing rule
-        //Within this batch they are sorted by distance before appending, so the queue is roughly distance-ordered and the sender need not re-sort everything every tick
         List<long>? added = null;
         for (var dx = -radius; dx <= radius; dx++)
         for (var dz = -radius; dz <= radius; dz++)
@@ -89,7 +96,6 @@ public sealed class ChunkSender
         }
         if (added is not null)
         {
-            added.Sort((a, b) => DistanceSquared(ChunkPos.Unpack(a)).CompareTo(DistanceSquared(ChunkPos.Unpack(b))));
             foreach (var key in added)
             {
                 _pending.Add(key);
@@ -97,6 +103,10 @@ public sealed class ChunkSender
                 DiagnosticChunksQueued++;
             }
         }
+        //Send nearest first: walking forward appends the new ring at the tail, so without re-sorting a chunk straight ahead of
+        //the player would be sent after every chunk behind him that was queued earlier, maps to vanilla updateChunkTracking
+        _pending.Sort((a, b) => DistanceSquared(ChunkPos.Unpack(a)).CompareTo(DistanceSquared(ChunkPos.Unpack(b))));
+        _cursor = 0;
         //Forgetting on leaving view: unsent ones are only dequeued, sent ones send a Forget packet, maps to vanilla dropChunk
         foreach (var key in _tracked.Where(key => DistanceSquared(ChunkPos.Unpack(key)) > radiusSquared).ToList())
             DropChunk(key);
@@ -144,11 +154,12 @@ public sealed class ChunkSender
             return;
         }
         if (_cursor >= _pending.Count) _cursor = 0;
-        var budget = Math.Max(ChunksPerTick * 4, 16);
-        var batch = new List<(ChunkPos Pos, ChunkAccess Chunk)>(ChunksPerTick);
+        var perTick = Math.Clamp(_desiredChunksPerTick, MinChunksPerTick, MaxChunksPerTick);
+        var budget = Math.Max(perTick * 4, 16);
+        var batch = new List<(ChunkPos Pos, ChunkAccess Chunk)>(perTick);
         var index = _cursor;
         var scanStart = TickStageProfiler.Now();
-        while (index < _pending.Count && budget-- > 0 && batch.Count < ChunksPerTick)
+        while (index < _pending.Count && budget-- > 0 && batch.Count < perTick)
         {
             var key = _pending[index];
             var pos = ChunkPos.Unpack(key);
@@ -219,6 +230,15 @@ public sealed class ChunkSender
             }
             Log.Warning($"Chunk send failed remaining={_pending.Count} {e.Message} connAlive={_connection.IsConnected} details={_connection.DisconnectionDetails?.Reason ?? "none"}");
         }
+    }
+
+    //OnChunkBatchReceived takes the batch size the client reports it can keep up with, maps to vanilla PlayerChunkSender.onChunkBatchReceived
+    //The client answers after applying a batch, so this is the only back pressure the sender has; without it a slow client
+    //accumulates a backlog of chunk packets it applies long after they were built
+    public void OnChunkBatchReceived(float desiredChunksPerTick)
+    {
+        if (float.IsNaN(desiredChunksPerTick)) return;
+        _desiredChunksPerTick = (int)Math.Clamp(desiredChunksPerTick, MinChunksPerTick, MaxChunksPerTick);
     }
 
     private void ClearQueue()

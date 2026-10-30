@@ -308,11 +308,12 @@ public static class ServerMain
         JitEventMonitor.Start();
 
         //Register Ctrl+C for graceful shutdown, in GUI mode the window then closes by itself
-        Console.CancelKeyPress += (_, e) =>
+        //Replaces the kernel's early handler, which only prints ServerStop and exits
+        ConsoleInterrupt.Replace((_, e) =>
         {
             e.Cancel = true;
             server.Stop();
-        };
+        });
 
         if (useGui)
         {

@@ -28,6 +28,11 @@ public static class GcEventMonitor
     //Total cumulative GC count
     public static long Total => Interlocked.Read(ref _total);
 
+    //LogEnabled whether the per-collection lines are written at all
+    //Set NACRECRAFT_GC_LOG=0 to drop them; the counters keep running either way, only the text is skipped
+    private static readonly bool LogEnabled =
+        Environment.GetEnvironmentVariable("NACRECRAFT_GC_LOG") is not ("0" or "false" or "False" or "FALSE");
+
     //Start starts the subscription, effective only once
     //If it fails, degrade to "no red dots", the listener is a debug feature and should not take the server down with it
     public static void Start()
@@ -92,6 +97,7 @@ public static class GcEventMonitor
     {
         Interlocked.Increment(ref _pending);
         var total = Interlocked.Increment(ref _total);
-        Log.Debug($"[GC] Gen{data.Depth} {data.Reason} #{total}");
+        if (LogEnabled && Log.DebugEnabled)
+            Log.Debug($"[GC] Gen{data.Depth} {data.Reason} #{total}");
     }
 }

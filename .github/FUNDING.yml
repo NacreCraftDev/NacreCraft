@@ -1,0 +1,6 @@
+# Funding sources for the Sponsor button.
+#
+# The github entry is inert until the account has an approved sponsors listing; GitHub simply
+# renders no button while that is the case, and starts showing one as soon as it is approved.
+# Add a custom entry here for any platform that is not covered by the keys above.
+github: [NacreCraftDev]

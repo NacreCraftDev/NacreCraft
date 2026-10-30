@@ -35,6 +35,52 @@ public sealed class StructureTemplateManager
                 () => self.Load(key), LazyThreadSafetyMode.ExecutionAndPublication),
             this).Value;
 
+    //Temporary: number of cold template reads, used to tell template loading from assembly cost
+    public static long LoadCount;
+
+    //PrewarmPoolTemplates reads every template the loaded jigsaw pools can place, on a background thread
+    //A cold read rebuilds the whole NBT tag tree, 20-700ms for one template, and a single assembly can pull over a hundred
+    //of them, which is where the multi-second structure_starts stalls came from; warming moves that cost off the play path
+    public void PrewarmPoolTemplates()
+    {
+        var ids = new HashSet<Identifier>();
+        foreach (var holder in BuiltInRegistries.TEMPLATE_POOL.ListElements())
+        {
+            if (!holder.IsBound() || holder.Value is not StructureTemplatePool pool) continue;
+            foreach (var entry in pool.RawTemplates) CollectTemplates(entry.Element, ids);
+        }
+        if (ids.Count == 0) return;
+        var thread = new Thread(() => Warm(ids))
+        {
+            IsBackground = true,
+            Name = "nacrecraft-template-warm",
+            Priority = ThreadPriority.BelowNormal,
+        };
+        thread.Start();
+    }
+
+    private static void CollectTemplates(StructurePoolElement element, HashSet<Identifier> ids)
+    {
+        switch (element)
+        {
+            case SinglePoolElement single:
+                ids.Add(single.TemplateLocation);
+                break;
+            case ListPoolElement list:
+                foreach (var child in list.Elements) CollectTemplates(child, ids);
+                break;
+        }
+    }
+
+    private void Warm(HashSet<Identifier> ids)
+    {
+        var start = Environment.TickCount64;
+        var loaded = 0;
+        foreach (var id in ids)
+            if (GetOrLoad(id) is not null) loaded++;
+        Log.Info($"[template] prewarmed {loaded}/{ids.Count} in {Environment.TickCount64 - start}ms");
+    }
+
     //GetOrCreate returns the cached template, building an empty one in memory when neither the cache nor the packs have it
     //Structure block saving relies on this: the named template may not exist on disk yet
     public StructureTemplate GetOrCreate(Identifier id)
@@ -72,15 +118,26 @@ public sealed class StructureTemplateManager
     //Load builds the template path and reads the NBT
     private StructureTemplate? Load(Identifier id)
     {
+        //Temporary: cold template reads, reported next to a slow structure assembly
+        Interlocked.Increment(ref LoadCount);
         var location = Identifier.FromNamespaceAndPath(id.Namespace, $"{Directory}/{id.Path}{Extension}");
         var resource = _resources.GetResource(PackType.ServerData, location);
         if (resource is null) return null;
         try
         {
             using var stream = resource.Open();
+            var readStart = System.Diagnostics.Stopwatch.GetTimestamp();
             var tag = NbtIo.ReadCompressed(stream, NbtAccounter.UnlimitedHeap());
+            var readTicks = System.Diagnostics.Stopwatch.GetTimestamp() - readStart;
+            var parseStart = System.Diagnostics.Stopwatch.GetTimestamp();
             var template = new StructureTemplate();
             template.Load(tag);
+            var parseTicks = System.Diagnostics.Stopwatch.GetTimestamp() - parseStart;
+            //Temporary: a cold read that is slow enough to explain an assembly spike is split into NBT read and template conversion
+            var toMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            var total = (readTicks + parseTicks) * toMs;
+            if (total > 20.0)
+                Log.Info($"[template] {id} total={(long)total}ms read={(long)(readTicks * toMs)}ms parse={(long)(parseTicks * toMs)}ms");
             return template;
         }
         catch (Exception e)

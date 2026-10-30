@@ -387,9 +387,8 @@ static bool IsRewritableModule(AssemblyID assemblyId)
 //switch is the one operand whose width is not fixed; the walk reads it apart itself
 #define InlineSwitch 0
 
-//The two kinds worth noticing are folded into one value as bits: an instruction that branches back can drive a loop,
-//and one that calls can push the frame that begins the next descent. The rest say how an instruction leaves, which this
-//walk does not trace
+//The one kind worth noticing is a call, the instruction that pushes the frame beginning the next descent. The rest say
+//how an instruction leaves, which this walk does not trace
 #define NEXT 0
 #define BREAK 0
 #define RETURN 0
@@ -399,8 +398,7 @@ static bool IsRewritableModule(AssemblyID assemblyId)
 #define COND_BRANCH 1
 #define CALL 2
 
-//The bits of that value, named here because the tokens above only exist while the table is being expanded
-static const unsigned char IlFlowBranch = 1;
+//The bit that value keeps, named here because the tokens above only exist while the table is being expanded
 static const unsigned char IlFlowCall = 2;
 
 struct IlOpcodeInfo
@@ -483,14 +481,14 @@ static void BuildIlOpcodeTables()
 
 //MayExhaustStack reports whether a body can take part in a descent that never ends
 //
-//Every frame such a descent pushes comes from a call, so a body with no call in it always returns and no chain of such
-//bodies can run the stack out. It also has to come back to a body it has already been in, which is either a branch back
-//or a call sitting on a cycle; asking only whether a call is there at all covers straight and mutual recursion alike,
-//and it needs no idea where the call goes. That last part is what makes it usable here: the interesting cycles go
-//through an interface, where the token names the interface method rather than whichever implementation is reached
+//Every frame such a descent pushes comes from a call, so a body with no call always returns and a chain of such bodies
+//can never run the stack out. Asking only whether a call is present covers straight and mutual recursion alike, and it
+//needs no idea where the call goes: the interesting cycles pass through an interface, where the token names the
+//interface method rather than whichever implementation is reached
 //
-//The branch rule is kept alongside it. A loop that only takes space from its own frame, and so never calls anything,
-//can still walk the stack pointer down to the guard page
+//A loop is deliberately not a reason to inject. Its frame is taken once at entry and never again, so a body that only
+//loops still returns; the one thing that could grow inside a loop is a stack allocation, and the JIT already probes on
+//every dynamic stack pointer adjustment
 //
 //A body the walk cannot make sense of is taken to be able to. That leaves it exactly as it was before this scan existed,
 //so an unreadable body keeps the check rather than quietly losing it
@@ -524,38 +522,16 @@ static bool MayExhaustStack(const unsigned char* code, unsigned int codeSize)
             if (targets > (codeSize - tableAt) / 4)
                 return true;
 
-            const unsigned int after = tableAt + targets * 4;
-            for (unsigned int i = 0; i < targets; i++)
-            {
-                const long long target = static_cast<long long>(after)
-                    + static_cast<int>(ReadUInt32(code + tableAt + i * 4));
-                if (target <= static_cast<long long>(at))
-                    return true;
-            }
-
-            at = after;
+            at = tableAt + targets * 4;
             continue;
         }
 
-        if ((info->Flow & IlFlowBranch) != 0)
-        {
-            if (operandAt + info->OperandBytes > codeSize)
-                return true;
-
-            //Targets are relative to the instruction after the branch; a back edge always clears the instruction by a
-            //wide margin, so the exact convention does not matter to a loop test
-            const long long after = static_cast<long long>(operandAt) + info->OperandBytes;
-            const long long target = after + (info->OperandBytes == 1
-                ? static_cast<signed char>(code[operandAt])
-                : static_cast<int>(ReadUInt32(code + operandAt)));
-            if (target <= static_cast<long long>(at))
-                return true;
-        }
-        else if ((info->Flow & IlFlowCall) != 0)
-        {
-            //The target is not looked at: whatever it names, this is the instruction that pushes the next frame
+        if (operandAt + info->OperandBytes > codeSize)
             return true;
-        }
+
+        //The target is not looked at: whatever it names, this is the instruction that pushes the next frame
+        if ((info->Flow & IlFlowCall) != 0)
+            return true;
 
         at = operandAt + info->OperandBytes;
     }

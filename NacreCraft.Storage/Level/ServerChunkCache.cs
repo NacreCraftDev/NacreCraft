@@ -27,13 +27,17 @@ public sealed class ServerChunkCache : ChunkSource
     //_simulationTracker, simulation level propagation; the source is the simulation tickets
     private SimulationChunkTracker? _simulationTracker;
     //_playerCenters, each player's last view center and view distance; tickets are recomputed only on a chunk change or view distance change
-    private readonly Dictionary<object, (int X, int Z, int ViewDistance, int SimulationLevel)> _playerCenters = new();
+    //CurrentRadius is the outermost ring whose tickets have been added; Tick advances it one ring per tick
+    private readonly Dictionary<object, (int X, int Z, int ViewDistance, int SimulationLevel, int CurrentRadius)> _playerCenters = new();
     //_loadingTicketRefs, player refcounts for chunks in view distance; tickets are actually removed only when it hits zero
     private readonly Dictionary<long, int> _loadingTicketRefs = new();
     //_simulationTicketRefs, refcounts for the chunks players are in; tickets are actually removed only when it hits zero
     private readonly Dictionary<long, int> _simulationTicketRefs = new();
     //generator, called on a save miss; passed by the Game layer and running through the ChunkStatusProcessor pipeline
     private readonly Func<ChunkPos, ChunkAccess?>? _generator;
+    //stagePipeline drives one status per task; when set, it replaces the whole-chain generator
+    private readonly IChunkStagePipeline? _stagePipeline;
+    private readonly ChunkStageScheduler? _stageScheduler;
     //Chunk generation and lighting run on background threads; the loaded cache is touched by both the main and generation threads and must be a concurrent dictionary
     private readonly ConcurrentDictionary<long, ChunkAccess> _loaded = new();
     //_generateGate, the generation concurrency gate; generation is a CPU-bound synchronous process
@@ -84,8 +88,8 @@ public sealed class ServerChunkCache : ChunkSource
     private const int LightBatchBudget = 8192;
 
     //LightInitBudgetPerCycle, how many freshly loaded chunks the light thread lights before yielding the gate
-    //Kept small so a single hold stays short: the main thread takes the gate with a zero timeout when it wants to flush
-    private const int LightInitBudgetPerCycle = 1;
+    //Four keeps the hold bounded while letting light keep up with a 14-16 chunk/s generation rate; one starved the queue
+    private const int LightInitBudgetPerCycle = 4;
 
     //LightDirtyBudgetPerCycle, how many block-change positions the light thread applies before yielding the gate
     private const int LightDirtyBudgetPerCycle = 1024;
@@ -191,11 +195,14 @@ public sealed class ServerChunkCache : ChunkSource
     }
 
     public ServerChunkCache(Func<ChunkPos, Task<ChunkAccess?>> loader, int viewDistance = 8,
-        Func<ChunkPos, ChunkAccess?>? generator = null, int minSectionY = -4, int sectionsCount = 24)
+        Func<ChunkPos, ChunkAccess?>? generator = null, int minSectionY = -4, int sectionsCount = 24,
+        IChunkStagePipeline? stagePipeline = null)
     {
         _loader = loader;
         _chunkMap = new ChunkMap(viewDistance);
         _generator = generator;
+        _stagePipeline = stagePipeline;
+        _stageScheduler = stagePipeline is null ? null : new ChunkStageScheduler(stagePipeline);
         MinSectionY = minSectionY;
         SectionsCount = sectionsCount;
     }
@@ -239,8 +246,12 @@ public sealed class ServerChunkCache : ChunkSource
     {
         if (_loaded.TryGetValue(key, out var existing)) return existing;
         _loaded[key] = chunk;
-        _pendingLight.Enqueue(chunk);
-        _lightWork.Release();
+        //A chunk lit inside its LIGHT stage is already ready; queueing it again would rebuild the same light a second time
+        if (!_lightReady.ContainsKey(key))
+        {
+            _pendingLight.Enqueue(chunk);
+            _lightWork.Release();
+        }
         ChunkLoaded?.Invoke(chunk.Pos);
         return chunk;
     }
@@ -268,6 +279,46 @@ public sealed class ServerChunkCache : ChunkSource
     //IsLightReady reports whether the chunk's light has been built, meaning it is safe to send to a client
     //A chunk sent before that renders pitch black until an incremental light update arrives for every section
     public bool IsLightReady(ChunkPos pos) => _lightReady.ContainsKey(pos.Pack());
+
+    //InitializeStageLight builds the chunk's light inside the LIGHT stage, maps to vanilla running light in the status chain
+    //The engine is still single threaded behind _lightGate; what changes is that the chunk waits on its own generation chain
+    //instead of on a separate thread throttled to four chunks a cycle. False means the gate was busy: the chunk is left to
+    //the queued light thread, so the stage can never block on the engine
+#if NC_LIGHT_IN_STAGE
+    public bool InitializeStageLight(ChunkAccess chunk)
+    {
+        var key = chunk.Pos.Pack();
+        if (_lightReady.ContainsKey(key)) return true;
+        if (!_lightGate.Wait(2000)) return false;
+        try
+        {
+            //The engine resolves the chunk through the loaded cache, so publish it before lighting it
+            //The merge after generation finds it already there and keeps this instance
+            _loaded.TryAdd(key, chunk);
+            _suppressLightDispatch = true;
+            try
+            {
+                InitializeChunkLight(chunk);
+                LightEngine.RunLightUpdates(LightBatchBudget);
+            }
+            finally
+            {
+                _suppressLightDispatch = false;
+            }
+            _lightReady[key] = 0;
+            return true;
+        }
+        catch (Exception e)
+        {
+            Log.Warning($"Chunk light failed {chunk.Pos}: {e.Message}");
+            return false;
+        }
+        finally
+        {
+            _lightGate.Release();
+        }
+    }
+#endif
 
     //HasChunk reports whether the chunk is loaded, maps to vanilla hasChunk
     public override bool HasChunk(int x, int z)
@@ -310,7 +361,15 @@ public sealed class ServerChunkCache : ChunkSource
         try
         {
             var chunk = await _loader(holder.Pos).ConfigureAwait(false);
-            if (chunk is null && _generator is not null)
+            if (chunk is null && _stagePipeline is not null && _stageScheduler is not null)
+            {
+                //Stage scheduling hands the worker back after each status instead of pinning it to the whole chain
+                var staged = _stagePipeline.CreateChunk(holder.Pos);
+                var task = new ChunkStageTask(staged, ChunkStatus.STRUCTURE_START, holder.TicketLevel, holder);
+                _stageScheduler.Enqueue(task);
+                chunk = await task.Completion.Task.ConfigureAwait(false);
+            }
+            else if (chunk is null && _generator is not null)
             {
                 //Generation is a CPU-bound synchronous process; the gate caps concurrency at core count so the thread pool is not saturated at once
                 Interlocked.Increment(ref _generateWaiting);
@@ -602,6 +661,20 @@ public sealed class ServerChunkCache : ChunkSource
         //Converge ticket levels into holder levels, maps to vanilla DistanceManager.runAllUpdates
         //Simulation then loading matches the vanilla order; the converged result is written into holders through DistanceManager
         _simulationTracker?.RunAllUpdates();
+        //Advance one view ring per tick; the chunks around the player are generated and sent before the outer shell
+        List<object>? advance = null;
+        foreach (var pair in _playerCenters)
+            if (pair.Value.CurrentRadius < pair.Value.ViewDistance) (advance ??= new List<object>()).Add(pair.Key);
+        if (advance is not null)
+        {
+            foreach (var owner in advance)
+            {
+                var state = _playerCenters[owner];
+                var next = state.CurrentRadius + 1;
+                AddLoadingRing(state.X, state.Z, next);
+                _playerCenters[owner] = (state.X, state.Z, state.ViewDistance, state.SimulationLevel, next);
+            }
+        }
         _loadingTracker?.RunDistanceUpdates(int.MaxValue);
         _chunkMap.Distance.ChunksToUpdateFutures.Clear();
         List<long>? expired = null;
@@ -739,9 +812,11 @@ public sealed class ServerChunkCache : ChunkSource
         //The simulation ticket level is computed only from simulation distance, maps to vanilla getPlayerTicketLevel
         //Not capped by view distance: a view distance smaller than simulation distance only narrows the load range, and the simulation level semantics should not change with it
         var simulationLevel = Math.Max(0, ChunkLevel.EntityTickingLevel - SimulationDistance);
-        AddLoadingTickets(chunkX, chunkZ, radius);
+        //Seed only the inner rings; Tick adds one more ring per tick so the chunks around the player generate first
+        var initialRadius = Math.Min(2, radius);
+        for (var r = 0; r <= initialRadius; r++) AddLoadingRing(chunkX, chunkZ, r);
         AddSimulationTicket(ChunkPos.Pack(chunkX, chunkZ), simulationLevel);
-        _playerCenters[owner] = (chunkX, chunkZ, radius, simulationLevel);
+        _playerCenters[owner] = (chunkX, chunkZ, radius, simulationLevel, initialRadius);
     }
 
     //RemovePlayerTickets removes all of a player's tickets on leave, maps to vanilla ChunkMap.removePlayer
@@ -753,18 +828,36 @@ public sealed class ServerChunkCache : ChunkSource
         RemoveSimulationTicket(ChunkPos.Pack(previous.X, previous.Z), previous.SimulationLevel);
     }
 
-    //AddLoadingTickets adds a loading ticket per chunk in the view square; chunks already covered by another player only bump the count
-    private void AddLoadingTickets(int centerX, int centerZ, int radius)
+    //AddLoadingRing adds the tickets on one square ring; the center is radius 0
+    //Rings are added from the inside out, so a joining player gets the nearby chunks first
+    private void AddLoadingRing(int centerX, int centerZ, int radius)
     {
+        if (_ticketStorage is null) return;
+        if (radius == 0)
+        {
+            AddLoadingTicket(centerX, centerZ);
+            return;
+        }
         for (var dx = -radius; dx <= radius; dx++)
-            for (var dz = -radius; dz <= radius; dz++)
-            {
-                var key = ChunkPos.Pack(centerX + dx, centerZ + dz);
-                _loadingTicketRefs.TryGetValue(key, out var count);
-                _loadingTicketRefs[key] = count + 1;
-                if (count == 0)
-                    _ticketStorage!.AddTicket(key, new Ticket(TicketType.PlayerLoading, ChunkLevel.EntityTickingLevel));
-            }
+        {
+            AddLoadingTicket(centerX + dx, centerZ - radius);
+            AddLoadingTicket(centerX + dx, centerZ + radius);
+        }
+        for (var dz = -radius + 1; dz < radius; dz++)
+        {
+            AddLoadingTicket(centerX - radius, centerZ + dz);
+            AddLoadingTicket(centerX + radius, centerZ + dz);
+        }
+    }
+
+    //AddLoadingTicket adds one ticket, refcounted so overlapping players do not remove it early
+    private void AddLoadingTicket(int x, int z)
+    {
+        var key = ChunkPos.Pack(x, z);
+        _loadingTicketRefs.TryGetValue(key, out var count);
+        _loadingTicketRefs[key] = count + 1;
+        if (count == 0)
+            _ticketStorage!.AddTicket(key, new Ticket(TicketType.PlayerLoading, ChunkLevel.EntityTickingLevel));
     }
 
     //RemoveLoadingTickets removes loading tickets in the view square; if another player still covers it, only the count is decremented

@@ -43,12 +43,49 @@ public abstract class StructurePlacement
     //IsPlacementChunk base grid check, implemented by subclasses
     protected abstract bool IsPlacementChunk(ChunkGeneratorStructureState state, int sourceX, int sourceZ);
 
+    //Placement checks are pure functions of the chunk coordinate and the seed, and exclusion zones re-ask the same
+    //coordinates recursively; without the memo a single chunk can spend seconds re-evaluating the same placements
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(int X, int Z), bool> _chunkCache = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(int X, int Z, int Range), bool> _rangeCache = new();
+
+    //Caches are pure memoisation; capping them keeps a long-running server from growing them without bound
+    //A clear only costs a re-computation, never a wrong placement
+    private const int CacheLimit = 65536;
+
     //IsStructureChunk final check, maps to vanilla isStructureChunk
     //Three-way AND: base grid, frequency reduction, exclusion zone; the order cannot be swapped since frequency reduction consumes randoms
     public bool IsStructureChunk(ChunkGeneratorStructureState state, int sourceX, int sourceZ)
-        => IsPlacementChunk(state, sourceX, sourceZ)
+    {
+        var key = (sourceX, sourceZ);
+        if (_chunkCache.TryGetValue(key, out var cached)) return cached;
+        var result = IsPlacementChunk(state, sourceX, sourceZ)
             && ApplyAdditionalChunkRestrictions(sourceX, sourceZ, state.LevelSeed)
             && ApplyInteractionsWithOtherStructures(state, sourceX, sourceZ);
+        if (_chunkCache.Count >= CacheLimit) _chunkCache.Clear();
+        _chunkCache[key] = result;
+        return result;
+    }
+
+    //HasStructureChunkInRange checks a square of chunk coordinates, memoised per placement
+    //Exclusion zones call this in a nested loop, so the memo is what keeps structure starts from becoming quadratic
+    public bool HasStructureChunkInRange(ChunkGeneratorStructureState state, int sourceX, int sourceZ, int range)
+    {
+        var key = (sourceX, sourceZ, range);
+        if (_rangeCache.TryGetValue(key, out var cached)) return cached;
+        for (var testX = sourceX - range; testX <= sourceX + range; testX++)
+        {
+            for (var testZ = sourceZ - range; testZ <= sourceZ + range; testZ++)
+            {
+                if (!IsStructureChunk(state, testX, testZ)) continue;
+                if (_rangeCache.Count >= CacheLimit) _rangeCache.Clear();
+                _rangeCache[key] = true;
+                return true;
+            }
+        }
+        if (_rangeCache.Count >= CacheLimit) _rangeCache.Clear();
+        _rangeCache[key] = false;
+        return false;
+    }
 
     //ApplyAdditionalChunkRestrictions frequency reduction, maps to vanilla applyAdditionalChunkRestrictions
     //When Frequency is 1 the whole thing is skipped without consuming a single random; this affects later judge results

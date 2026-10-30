@@ -20,4 +20,18 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!-- Alignment switches. Every one defaults to on; build with -p:NcStageChain=false (or any other name) to compile the old path back in -->
+  <PropertyGroup>
+    <NcStageChain Condition="'$(NcStageChain)' == ''">true</NcStageChain>
+    <NcRegionFair Condition="'$(NcRegionFair)' == ''">true</NcRegionFair>
+    <NcStageDeps Condition="'$(NcStageDeps)' == ''">true</NcStageDeps>
+    <NcLightInStage Condition="'$(NcLightInStage)' == ''">true</NcLightInStage>
+    <NcSharedRegion Condition="'$(NcSharedRegion)' == ''">true</NcSharedRegion>
+    <DefineConstants Condition="'$(NcStageChain)' == 'true'">$(DefineConstants);NC_STAGE_CHAIN</DefineConstants>
+    <DefineConstants Condition="'$(NcRegionFair)' == 'true'">$(DefineConstants);NC_REGION_FAIR</DefineConstants>
+    <DefineConstants Condition="'$(NcStageDeps)' == 'true'">$(DefineConstants);NC_STAGE_DEPS</DefineConstants>
+    <DefineConstants Condition="'$(NcLightInStage)' == 'true'">$(DefineConstants);NC_LIGHT_IN_STAGE</DefineConstants>
+    <DefineConstants Condition="'$(NcSharedRegion)' == 'true'">$(DefineConstants);NC_SHARED_REGION</DefineConstants>
+  </PropertyGroup>
+
 </Project>

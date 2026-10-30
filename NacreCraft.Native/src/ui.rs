@@ -202,7 +202,7 @@ impl Runner {
     fn open(&mut self, event_loop: &ActiveEventLoop, request: Request) -> Result<(), String> {
         let (window, gl) = create_window(event_loop)?;
         let gl = Arc::new(gl);
-        let egui = egui_glow::EguiGlow::new(event_loop, Arc::clone(&gl), None, None, true);
+        let mut egui = egui_glow::EguiGlow::new(event_loop, Arc::clone(&gl), None, None, true);
 
         // egui asks for repaints through this; the loop is woken with a proxy because it may be parked in Wait
         if let Some(proxy) = PROXY.get() {
@@ -212,7 +212,13 @@ impl Runner {
             });
         }
 
-        install_fonts(&egui.egui_ctx);
+        // No font means nothing to draw with, and egui would only find that out on the first frame; the graphics
+        // resources are released here so a later request can still try again
+        if let Err(message) = install_fonts(&egui.egui_ctx) {
+            egui.destroy();
+            return Err(message);
+        }
+
         apply_style(&egui.egui_ctx);
 
         // A caller that has no report file hands the text over directly; only a crash path reads it back off disk
@@ -564,20 +570,21 @@ fn create_window(event_loop: &ActiveEventLoop) -> Result<(GlutinWindow, glow::Co
 
 /// install_fonts adds a system font that covers CJK, which the built-in set does not
 /// Without it every Chinese string in the window would come out as boxes
-fn install_fonts(ctx: &egui::Context) {
-    let Some(bytes) = load_system_font() else {
-        logging::write("no CJK system font was found, the error window falls back to the built-in font");
-        return;
-    };
+///
+/// The built-in typefaces are not compiled in, so a machine with none of the listed files has nothing to draw with and
+/// the window is better off not opening than opening blank
+fn install_fonts(ctx: &egui::Context) -> Result<(), String> {
+    let bytes = load_system_font().ok_or_else(|| "no usable system font was found".to_string())?;
 
     let mut fonts = egui::FontDefinitions::default();
     fonts
         .font_data
-        .insert("ncn-cjk".to_owned(), Arc::new(egui::FontData::from_owned(bytes)));
+        .insert("ncn-system".to_owned(), Arc::new(egui::FontData::from_owned(bytes)));
     for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
-        fonts.families.entry(family).or_default().insert(0, "ncn-cjk".to_owned());
+        fonts.families.entry(family).or_default().insert(0, "ncn-system".to_owned());
     }
     ctx.set_fonts(fonts);
+    Ok(())
 }
 
 /// apply_style tunes the theme for reading a report
@@ -625,14 +632,22 @@ fn background_frame(margin: egui::Margin) -> egui::Frame {
 /// load_system_font reads the first usable font it finds
 /// Only single-face files are listed: the loader cannot open a .ttc collection, so those paths would fail at draw time
 /// rather than here
+///
+/// The CJK faces come first so Chinese text is drawn properly, and the Latin ones are there to keep the window readable
+/// on a machine carrying none of them
 fn load_system_font() -> Option<Vec<u8>> {
     const CANDIDATES: &[&str] = &[
         "C:/Windows/Fonts/simhei.ttf",
         "C:/Windows/Fonts/Deng.ttf",
         "C:/Windows/Fonts/simkai.ttf",
         "C:/Windows/Fonts/msyh.ttf",
+        "C:/Windows/Fonts/segoeui.ttf",
+        "C:/Windows/Fonts/arial.ttf",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttf",
         "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
     ];
 
     for path in CANDIDATES {

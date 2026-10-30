@@ -138,7 +138,12 @@ public sealed class NoiseFlatCache : DensityFunction, INoiseChunkDensity
     {
         var x = (context.BlockX >> 2) - _chunk.FirstNoiseX;
         var z = (context.BlockZ >> 2) - _chunk.FirstNoiseZ;
-        if (x >= 0 && z >= 0 && x < _sizeXZ && z < _sizeXZ) return _values[x + z * _sizeXZ];
+        if (x >= 0 && z >= 0 && x < _sizeXZ && z < _sizeXZ)
+        {
+            NoiseChunk.FlatHits++;
+            return _values[x + z * _sizeXZ];
+        }
+        NoiseChunk.FlatMisses++;
         return _noiseFiller.Compute(context);
     }
 
@@ -168,7 +173,12 @@ public sealed class NoiseCache2D : DensityFunction, INoiseChunkDensity
     public double Compute(FunctionContext context)
     {
         var pos2D = ((context.BlockX & 0xFFFFFFFFL) | ((long)context.BlockZ << 32));
-        if (_lastPos2D == pos2D) return _lastValue;
+        if (_lastPos2D == pos2D)
+        {
+            NoiseChunk.Cache2DHits++;
+            return _lastValue;
+        }
+        NoiseChunk.Cache2DMisses++;
         _lastPos2D = pos2D;
         _lastValue = _function.Compute(context);
         return _lastValue;
@@ -251,7 +261,11 @@ public sealed class NoiseCacheAllInCell : DensityFunction, INoiseChunkDensity
     }
 
     //Fill pre-fills the whole cell once the current cell is selected, maps to the fillArray inside vanilla selectCellYZ
-    public void Fill() => _chunk.FillAllDirectly(_values, _noiseFiller);
+    public void Fill()
+    {
+        NoiseChunk.CellFills++;
+        _chunk.FillAllDirectly(_values, _noiseFiller);
+    }
 
     public double Compute(FunctionContext context)
     {
