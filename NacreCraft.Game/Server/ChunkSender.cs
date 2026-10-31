@@ -40,8 +40,6 @@ public sealed class ChunkSender
     private int _centerX = int.MinValue;
     private int _centerZ;
     private int _viewDistance = 1;
-    //_cursor the scan start for the next round; not-ready chunks stay in place and are not re-scanned from the front
-    private int _cursor;
     private int _sentCount;
     private int _failedCount;
     private bool _closed;
@@ -106,7 +104,6 @@ public sealed class ChunkSender
         //Send nearest first: walking forward appends the new ring at the tail, so without re-sorting a chunk straight ahead of
         //the player would be sent after every chunk behind him that was queued earlier, maps to vanilla updateChunkTracking
         _pending.Sort((a, b) => DistanceSquared(ChunkPos.Unpack(a)).CompareTo(DistanceSquared(ChunkPos.Unpack(b))));
-        _cursor = 0;
         //Forgetting on leaving view: unsent ones are only dequeued, sent ones send a Forget packet, maps to vanilla dropChunk
         foreach (var key in _tracked.Where(key => DistanceSquared(ChunkPos.Unpack(key)) > radiusSquared).ToList())
             DropChunk(key);
@@ -133,8 +130,9 @@ public sealed class ChunkSender
         return dx * dx + dz * dz;
     }
 
-    //Tick progressively sends this batch of ready chunks, taking a batch from the cursor in queue order
-    //The queue is roughly distance-ordered on enqueue; the per-tick scan is capped by the budget and not-ready ones stay in place for the cursor to revisit
+    //Tick sends the nearest ready chunks in queue order, stopping at the first one that is not ready
+    //The queue is distance ordered, so a chunk the client cannot use yet blocks everything behind it instead of being
+    //skipped: a hole next to the player is worse than a slightly later batch
     public void Tick()
     {
         if (_closed) { DiagnosticTickClosed++; return; }
@@ -150,16 +148,13 @@ public sealed class ChunkSender
         if (_pending.Count == 0)
         {
             DiagnosticTickEmpty++;
-            _cursor = 0;
             return;
         }
-        if (_cursor >= _pending.Count) _cursor = 0;
         var perTick = Math.Clamp(_desiredChunksPerTick, MinChunksPerTick, MaxChunksPerTick);
-        var budget = Math.Max(perTick * 4, 16);
         var batch = new List<(ChunkPos Pos, ChunkAccess Chunk)>(perTick);
-        var index = _cursor;
+        var index = 0;
         var scanStart = TickStageProfiler.Now();
-        while (index < _pending.Count && budget-- > 0 && batch.Count < perTick)
+        while (index < _pending.Count && batch.Count < perTick)
         {
             var key = _pending[index];
             var pos = ChunkPos.Unpack(key);
@@ -172,24 +167,18 @@ public sealed class ChunkSender
                 continue;
             }
             var chunk = _provider(pos);
-            if (chunk is null)
-            {
-                index++;
-                continue;
-            }
+            //Sending runs strictly from the nearest chunk outward: skipping a head that is not ready would hand the client a
+            //hole it can never fill, because that chunk is not retried once the batch moves past it. Vanilla breaks here too
+            if (chunk is null) break;
             //A chunk whose light has not been built yet stays queued for a later tick
             //Sending it now would leave the client with a black chunk until an incremental light update arrived for every section
-            if (_lightSource is not null && !_lightSource.IsLightReady(pos))
-            {
-                index++;
-                continue;
-            }
+            if (_lightSource is not null && !_lightSource.IsLightReady(pos)) break;
+            if (!AreNeighboursGenerated(pos)) break;
             batch.Add((pos, chunk));
             _pending.RemoveAt(index);
             _pendingSet.Remove(key);
         }
         TickStageProfiler.Record(TickStage.ChunkScan, scanStart);
-        _cursor = index >= _pending.Count ? 0 : index;
         if (batch.Count == 0) return;
         try
         {
@@ -241,11 +230,26 @@ public sealed class ChunkSender
         _desiredChunksPerTick = (int)Math.Clamp(desiredChunksPerTick, MinChunksPerTick, MaxChunksPerTick);
     }
 
+    //AreNeighboursGenerated checks the eight surrounding chunks, maps to vanilla PlayerChunkSender.areNeighboursGenerated
+    //A chunk sent before its neighbours are generated leaves the client with sections it cannot mesh or light correctly,
+    //and it is never resent; neighbours outside the view are simply absent and do not block
+    private bool AreNeighboursGenerated(ChunkPos pos)
+    {
+        for (var offsetX = -1; offsetX <= 1; offsetX++)
+        for (var offsetZ = -1; offsetZ <= 1; offsetZ++)
+        {
+            if (offsetX == 0 && offsetZ == 0) continue;
+            var neighbour = _provider(new ChunkPos(pos.X + offsetX, pos.Z + offsetZ));
+            if (neighbour is null) continue;
+            if (neighbour.ChunkStatus is not { } status || !status.IsOrAfter(ChunkStatus.FULL)) return false;
+        }
+        return true;
+    }
+
     private void ClearQueue()
     {
         _pending.Clear();
         _pendingSet.Clear();
         _tracked.Clear();
-        _cursor = 0;
     }
 }
