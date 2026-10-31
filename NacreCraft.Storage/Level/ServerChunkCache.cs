@@ -656,6 +656,8 @@ public sealed class ServerChunkCache : ChunkSource
     public override void Tick()
     {
         //Log.Debug($"Tick entry holders={_chunkMap.HoldersCount} loaded={_loaded.Count}");
+        //Report on a timer as well: the stage driven report stops printing when the pipeline stalls, which is exactly when it matters
+        _stageScheduler?.DiagnosticTick();
         //Timed-out tickets are cleared once per tick, maps to purgeStaleTickets in vanilla ServerChunkCache.tick
         _ticketStorage?.PurgeStaleTickets(ReadyForSaving);
         //Converge ticket levels into holder levels, maps to vanilla DistanceManager.runAllUpdates

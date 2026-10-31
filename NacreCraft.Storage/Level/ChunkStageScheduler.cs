@@ -11,14 +11,17 @@ namespace NacreCraft.Storage;
 public sealed class ChunkStageScheduler
 {
     //ReportInterval stage completions between queue reports; the pipeline runs about eleven stages per chunk
-    private const int ReportInterval = 500;
+    private const int ReportInterval = 20;
     private const int ReportTaskCount = 5;
+    private const long ReportMinIntervalMs = 1000;
 
     private readonly IChunkStagePipeline _pipeline;
     private int _queued;
     private int _running;
     private long _stages;
     private long _chunks;
+    //_lastReport last printed report, keeps the diagnostic line from flooding the log
+    private long _lastReport;
     //Traces carry the chunk position and both the current stage time and the total time since scheduling
     //A single chunk stuck for ten seconds is identified by its position instead of a bare counter
     private readonly ConcurrentDictionary<long, StageTrace> _waiting = new();
@@ -94,7 +97,7 @@ public sealed class ChunkStageScheduler
                 task.Holder.MarkStage(task.Status);
                 _pipeline.RunStage(task.Chunk, task.Status);
                 var next = _pipeline.NextStatus(task.Status);
-                if (Interlocked.Increment(ref _stages) % ReportInterval == 0) Report();
+                if (Interlocked.Increment(ref _stages) % ReportInterval == 0) DiagnosticTick();
                 if (next is null)
                 {
                     Interlocked.Increment(ref _chunks);
@@ -132,11 +135,35 @@ public sealed class ChunkStageScheduler
         Log.Info($"[chunk-stage] queued={Volatile.Read(ref _queued)} running={Volatile.Read(ref _running)} " +
             $"deferred={_deferred.Count} poolThreads={WorkerPools.Cpu.ThreadCount} " +
             $"stages={Interlocked.Read(ref _stages)} chunks={Interlocked.Read(ref _chunks)} " +
-            $"runningTop={Describe(_executing, now)} waitingTop={Describe(_waiting, now)}");
+            $"runningTop={Describe(_executing, now)} waitingTop={Describe(_waiting, now)} " +
+            $"deferredTop={DescribeDeferred(now)}");
         //The report doubles as the retry tick: parked chunks whose neighbours moved on are queued again here even when
         //no chunk finished in the meantime
 #if NC_STAGE_DEPS
         PumpDeferred();
+#endif
+    }
+
+    //DiagnosticTick reports on a timer so a fully stalled pipeline still prints; stage driven reports stop when nothing runs
+    public void DiagnosticTick()
+    {
+        var now = Environment.TickCount64;
+        if (now - _lastReport < ReportMinIntervalMs) return;
+        _lastReport = now;
+        Report();
+    }
+
+    private string DescribeDeferred(long now)
+    {
+#if NC_STAGE_DEPS
+        if (_deferred.IsEmpty) return "none";
+        return string.Join(",", _deferred.Values
+            .OrderByDescending(pending => now - pending.Since)
+            .Take(ReportTaskCount)
+            .Select(pending => $"[{pending.Task.Chunk.Pos.X},{pending.Task.Chunk.Pos.Z}]" +
+                $"{pending.Task.Status}:{now - pending.Since}ms"));
+#else
+        return "off";
 #endif
     }
 

@@ -232,15 +232,20 @@ public sealed class ChunkSender
 
     //AreNeighboursGenerated checks the eight surrounding chunks, maps to vanilla PlayerChunkSender.areNeighboursGenerated
     //A chunk sent before its neighbours are generated leaves the client with sections it cannot mesh or light correctly,
-    //and it is never resent; neighbours outside the view are simply absent and do not block
+    //and it is never resent. Only neighbours already inside the view are considered: asking the provider for a chunk outside
+    //it starts a load with no ticket behind it, which never finishes and stalls the whole queue
     private bool AreNeighboursGenerated(ChunkPos pos)
     {
         for (var offsetX = -1; offsetX <= 1; offsetX++)
         for (var offsetZ = -1; offsetZ <= 1; offsetZ++)
         {
             if (offsetX == 0 && offsetZ == 0) continue;
-            var neighbour = _provider(new ChunkPos(pos.X + offsetX, pos.Z + offsetZ));
-            if (neighbour is null) continue;
+            var neighbourX = pos.X + offsetX;
+            var neighbourZ = pos.Z + offsetZ;
+            //Outside the view: nothing to wait for, the client does not expect that chunk either
+            if (!_tracked.Contains(ChunkPos.Pack(neighbourX, neighbourZ))) continue;
+            var neighbour = _provider(new ChunkPos(neighbourX, neighbourZ));
+            if (neighbour is null) return false;
             if (neighbour.ChunkStatus is not { } status || !status.IsOrAfter(ChunkStatus.FULL)) return false;
         }
         return true;
