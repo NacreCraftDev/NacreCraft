@@ -26,20 +26,50 @@ public sealed class ChunkStageScheduler
     //A single chunk stuck for ten seconds is identified by its position instead of a bare counter
     private readonly ConcurrentDictionary<long, StageTrace> _waiting = new();
     private readonly ConcurrentDictionary<long, StageTrace> _executing = new();
+    //_pendingTasks and _handles let a raise reach a task already sitting in the pool queue
+    private readonly ConcurrentDictionary<long, ChunkStageTask> _pendingTasks = new();
+    private readonly ConcurrentDictionary<long, PrioritisedWorkerPool.WorkItem> _handles = new();
 
-    private readonly record struct StageTrace(ChunkPos Pos, ChunkStatus Status, long Since, long ScheduledAt);
+    private readonly record struct StageTrace(ChunkPos Pos, ChunkStatus Status, long Since, long ScheduledAt, long QueueKey);
 
     public ChunkStageScheduler(IChunkStagePipeline pipeline) => _pipeline = pipeline;
+
+    //Reprioritise reorders a task that is still waiting, maps to Paper's ChunkTaskScheduler.raisePriority
+    //A task already picked up by a worker cannot be moved: it finishes the stage and re-enters through Enqueue,
+    //which reads the holder again, so the boost still lands before the next stage
+    public void Reprioritise(long key)
+    {
+        if (!_pendingTasks.TryGetValue(key, out var task)) return;
+        if (!_handles.TryGetValue(key, out var handle)) return;
+        if (!_waiting.TryGetValue(key, out var trace)) return;
+        var priority = task.Holder.Priority;
+#if NC_REGION_FAIR
+        //Keep the region share and entry order the task was queued with; only the priority band moves
+        var queueKey = ((long)priority << 48) | (trace.QueueKey & 0x7FFF_FFFF_FFFFL);
+#else
+        var queueKey = ((long)priority << 32) | (trace.QueueKey & 0xFFFF_FFFFL);
+#endif
+        if (queueKey == trace.QueueKey) return;
+        _waiting[key] = trace with { QueueKey = queueKey };
+        WorkerPools.Cpu.Raise(handle, queueKey);
+    }
+
+    //SyncPriorities reorders waiting tasks whose holder priority moved, i.e. the ticket level converged after the chunk
+    //was already queued, maps to Paper's recalculateNeighbourPriorities running off a ticket level change
+    public void SyncPriorities()
+    {
+        if (_pendingTasks.IsEmpty) return;
+        foreach (var key in _pendingTasks.Keys) Reprioritise(key);
+    }
 
     //Enqueue submits a stage; lower priority values run first
     public void Enqueue(ChunkStageTask task)
     {
         var key = task.Chunk.Pos.Pack();
-        _waiting[key] = new StageTrace(task.Chunk.Pos, task.Status, Environment.TickCount64, task.Holder.ScheduledAt);
-        Interlocked.Increment(ref _queued);
-        //Read the ticket level on every enqueue: a chunk created before its ticket level converged would otherwise keep
+        _pendingTasks[key] = task;
+        //Read the priority on every enqueue: a chunk created before its ticket level converged would otherwise keep
         //the initial MaxLevel priority for the whole chain and starve behind every later chunk
-        var priority = task.Holder.TicketLevel;
+        var priority = task.Holder.Priority;
         //Ties break on schedule time: the queue is a min-heap, so the smallest key runs first and the chunk that entered
         //the pipeline earliest is served first. Submission order did the opposite, pushing a chunk that already ran ten
         //stages behind every chunk created since, which made a whole view finish in bursts
@@ -53,7 +83,12 @@ public sealed class ChunkStageScheduler
 #else
         var queueKey = ((long)priority << 32) | order;
 #endif
-        WorkerPools.Cpu.Enqueue(() => Run(task), queueKey);
+        _waiting[key] = new StageTrace(task.Chunk.Pos, task.Status, Environment.TickCount64, task.Holder.ScheduledAt, queueKey);
+        Interlocked.Increment(ref _queued);
+        var handle = WorkerPools.Cpu.Enqueue(() => Run(task), queueKey);
+        //A worker may take the task before this line runs; Run removes the registry entry, so only store the handle
+        //while this task is still the registered one, or a finished task would leave its handle behind for good
+        if (_pendingTasks.TryGetValue(key, out var registered) && ReferenceEquals(registered, task)) _handles[key] = handle;
     }
 
     //RegionKey buckets a chunk into its 32x32 chunk region, used only for fair sharing between distant views
@@ -76,6 +111,9 @@ public sealed class ChunkStageScheduler
     {
         var key = task.Chunk.Pos.Pack();
         _waiting.TryRemove(key, out _);
+        //The task is no longer queued, so a raise can no longer move it; the next Enqueue registers it again
+        _pendingTasks.TryRemove(key, out _);
+        _handles.TryRemove(key, out _);
         //Counts as served once it starts, which is what makes the next chunk of this region queue behind other regions
         _regionServed.AddOrUpdate(RegionKey(task.Chunk.Pos), 1L, static (_, value) => value + 1);
         Interlocked.Decrement(ref _queued);
@@ -93,7 +131,7 @@ public sealed class ChunkStageScheduler
                     return;
                 }
 #endif
-                _executing[key] = new StageTrace(task.Chunk.Pos, task.Status, Environment.TickCount64, task.Holder.ScheduledAt);
+                _executing[key] = new StageTrace(task.Chunk.Pos, task.Status, Environment.TickCount64, task.Holder.ScheduledAt, 0);
                 task.Holder.MarkStage(task.Status);
                 _pipeline.RunStage(task.Chunk, task.Status);
                 var next = _pipeline.NextStatus(task.Status);

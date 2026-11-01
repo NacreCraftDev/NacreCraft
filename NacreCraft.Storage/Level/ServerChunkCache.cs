@@ -84,6 +84,15 @@ public sealed class ServerChunkCache : ChunkSource
     //An unload takes a full chunk snapshot; without a limit, a player running far would unload a whole column in one tick and stall the main thread
     private const int UnloadBudgetPerTick = 16;
 
+    //AccessRadius how many extra chunk rings beyond the view are ticketed so generation can read its neighbours
+    //Reaching FULL needs a 3x3 around the chunk, maps to ChunkTaskScheduler.getAccessRadius(ChunkStatus.FULL)
+    private const int AccessRadius = 1;
+
+    //PrioritySyncInterval ticks between queue reorderings; ticket levels converge over several ticks and a quarter second
+    //of latency is invisible, while reordering every tick would walk the whole queue twenty times a second
+    private const int PrioritySyncInterval = 5;
+    private int _priorityTick;
+
     //LightBatchBudget, queue entries per batch; too small means batches too dense and throughput lost, too large means longer main-thread waits
     private const int LightBatchBudget = 8192;
 
@@ -289,7 +298,9 @@ public sealed class ServerChunkCache : ChunkSource
     {
         var key = chunk.Pos.Pack();
         if (_lightReady.ContainsKey(key)) return true;
-        if (!_lightGate.Wait(2000)) return false;
+        //Never block a generation worker on the engine: the gate is held for a whole chunk's light pass, so waiting would
+        //park every worker in the pool behind one another and stall the entire pipeline
+        if (!_lightGate.Wait(0)) return false;
         try
         {
             //The engine resolves the chunk through the loaded cache, so publish it before lighting it
@@ -353,6 +364,17 @@ public sealed class ServerChunkCache : ChunkSource
     public ChunkHolder? TryGetHolder(int x, int z)
         => _chunkMap.GetHolder(ChunkPos.Pack(x, z));
 
+    //RaisePriority asks for a chunk sooner than its ticket level implies, maps to Paper's ChunkTaskScheduler.raisePriority
+    //The sender uses it on whatever its head is blocked by: that chunk is usually still queued behind the rest of the view,
+    //which is what makes a whole batch wait on one missing neighbour
+    public void RaisePriority(int x, int z, int priority)
+    {
+        //Only an existing holder can be helped; creating one here would start a load the caller never asked for
+        if (_chunkMap.GetHolder(ChunkPos.Pack(x, z)) is not { IsDone: false } holder) return;
+        if (!holder.RaisePriority(priority)) return;
+        _stageScheduler?.Reprioritise(ChunkPos.Pack(x, z));
+    }
+
     //LoadAsync asynchronously loads a chunk and backfills the holder on success or failure, maps to vanilla schedule chunk load
     //A null from loader means the save has no such chunk, so generator runs the ChunkStatus generation chain to create a new chunk
     //When generator is also null, holder.Fail carries an UnloadedChunkException
@@ -365,7 +387,7 @@ public sealed class ServerChunkCache : ChunkSource
             {
                 //Stage scheduling hands the worker back after each status instead of pinning it to the whole chain
                 var staged = _stagePipeline.CreateChunk(holder.Pos);
-                var task = new ChunkStageTask(staged, ChunkStatus.STRUCTURE_START, holder.TicketLevel, holder);
+                var task = new ChunkStageTask(staged, ChunkStatus.STRUCTURE_START, holder);
                 _stageScheduler.Enqueue(task);
                 chunk = await task.Completion.Task.ConfigureAwait(false);
             }
@@ -658,15 +680,24 @@ public sealed class ServerChunkCache : ChunkSource
         //Log.Debug($"Tick entry holders={_chunkMap.HoldersCount} loaded={_loaded.Count}");
         //Report on a timer as well: the stage driven report stops printing when the pipeline stalls, which is exactly when it matters
         _stageScheduler?.DiagnosticTick();
+        //Ticket levels converge after a chunk was already queued; reorder the waiting ones so the closer chunks of a moving
+        //player move ahead instead of finishing in the order they were first requested
+        if (++_priorityTick >= PrioritySyncInterval)
+        {
+            _priorityTick = 0;
+            _stageScheduler?.SyncPriorities();
+        }
         //Timed-out tickets are cleared once per tick, maps to purgeStaleTickets in vanilla ServerChunkCache.tick
         _ticketStorage?.PurgeStaleTickets(ReadyForSaving);
         //Converge ticket levels into holder levels, maps to vanilla DistanceManager.runAllUpdates
         //Simulation then loading matches the vanilla order; the converged result is written into holders through DistanceManager
         _simulationTracker?.RunAllUpdates();
         //Advance one view ring per tick; the chunks around the player are generated and sent before the outer shell
+        //The load radius is wider than the send radius by AccessRadius, so every chunk inside the view has generated
+        //neighbours to read; vanilla derives the same margin from the target status, maps to ChunkTaskScheduler.getAccessRadius
         List<object>? advance = null;
         foreach (var pair in _playerCenters)
-            if (pair.Value.CurrentRadius < pair.Value.ViewDistance) (advance ??= new List<object>()).Add(pair.Key);
+            if (pair.Value.CurrentRadius < pair.Value.ViewDistance + AccessRadius) (advance ??= new List<object>()).Add(pair.Key);
         if (advance is not null)
         {
             foreach (var owner in advance)

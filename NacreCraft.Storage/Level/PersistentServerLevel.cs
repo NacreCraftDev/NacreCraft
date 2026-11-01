@@ -208,6 +208,8 @@ public sealed class PersistentServerLevel : SimpleServerLevel, BlockGetter
             return null;
         }
         var result = data.Read(this, SimplePoiManager.Empty, null, pos);
+        //The stored status is the only record of how far the chunk got, maps to vanilla SerializableChunkData.read calling setPersistedStatus
+        result?.SetStatus(data.ChunkStatus);
         //Log.Debug($"LoadChunkAsync exit result={(result is null ? "null" : result.Pos.ToString())}");
         return result;
     }

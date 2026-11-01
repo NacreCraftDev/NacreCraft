@@ -15,7 +15,11 @@ public class ProtoChunk : ChunkAccess
     public override ChunkPos Pos { get; }
     public override int MinSectionY { get; }
     public override int SectionsCount { get; }
-    public override ChunkStatus ChunkStatus { get; } = ChunkStatus.EMPTY;
+    public override ChunkStatus ChunkStatus => _status;
+    //_status advances as stages complete; neighbours and the sender test it to decide whether this chunk is usable
+    private ChunkStatus _status = ChunkStatus.EMPTY;
+
+    public override void SetStatus(ChunkStatus status) => _status = status;
 
     private readonly LevelChunkSection[] _sections;
     private readonly Dictionary<HeightmapRegistry.Types, long[]> _heightmaps;
@@ -96,8 +100,6 @@ public class ProtoChunk : ChunkAccess
 public sealed partial class LevelChunk : ProtoChunk
 {
     public object? Level { get; }
-    public new ChunkStatus ChunkStatus { get; set; } = ChunkStatus.FULL;
-
     //BlockEntityTags, block entity NBT brought back by decoding the network chunk packet, so the client can populate local block entities
     //The server chunk does not use this field; it goes through the level-level block entity collection
     public List<NacreCraft.Nbt.CompoundTag>? BlockEntityTags { get; set; }
@@ -109,6 +111,8 @@ public sealed partial class LevelChunk : ProtoChunk
         : base(pos, minSectionY, sectionsCount, statesFactory, biomesFactory)
     {
         Level = level;
+        //A LevelChunk only exists once generation finished, so its status must read FULL through the base property too
+        SetStatus(ChunkStatus.FULL);
     }
 
     //SetSection replaces the given section, maps to vanilla LevelChunk.setSection

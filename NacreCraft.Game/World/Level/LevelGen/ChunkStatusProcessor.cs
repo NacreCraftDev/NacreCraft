@@ -64,6 +64,8 @@ public sealed class ChunkStatusProcessor
     {
         var start = System.Diagnostics.Stopwatch.GetTimestamp();
         var handled = RunStatus(chunk, status);
+        //The status is the only thing neighbours and the sender can test, so it must move with the chain
+        if (handled) chunk.SetStatus(status);
         var elapsed = System.Diagnostics.Stopwatch.GetTimestamp() - start;
         var timing = StageTimings.GetOrAdd(status.Name, static _ => new StageTiming());
         Interlocked.Add(ref timing.Ticks, elapsed);

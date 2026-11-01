@@ -13,16 +13,15 @@ namespace NacreCraft.Game.Server;
 //Generation advances in the ServerChunkCache background without blocking the main loop; it terminates permanently after disconnect
 public sealed class ChunkSender
 {
-    //ChunksPerTick chunks sent per tick, aligned with the order of magnitude of vanilla desiredChunksPerTick
-    public const int ChunksPerTick = 4;
-    //Batch ceiling and floor, matching the clamp vanilla applies to the client's desired batch size
-    private const int MaxChunksPerTick = 64;
+    //MaxChunksPerTick ceiling per tick, aligned with Paper's getMaxChunkSendRate default of ten thousand chunks per second
+    //The old four per tick cap made a whole view take twenty seconds to arrive
+    private const int MaxChunksPerTick = 10000;
     private const int MinChunksPerTick = 1;
 
     //_desiredChunksPerTick the batch size the client asked for through chunk_batch_received, maps to vanilla desiredChunksPerTick
     //The client measures how long a batch took to apply and answers with what it can keep up with, so a slow client slows the
     //sender down instead of building a backlog it will never drain
-    private int _desiredChunksPerTick = ChunksPerTick;
+    private int _desiredChunksPerTick = MaxChunksPerTick;
 
     private readonly Connection _connection;
     private readonly Func<ChunkPos, ChunkAccess?> _provider;
@@ -35,13 +34,21 @@ public sealed class ChunkSender
     //Vanilla pendingChunks is also an insertion-order queue; this project scanning everything and sorting every tick was pure overhead
     private readonly List<long> _pending = new();
     private readonly HashSet<long> _pendingSet = new();
+    //_sent coordinates already delivered; a chunk stays in _tracked after sending, so this is what keeps it out of _pending
+    private readonly HashSet<long> _sent = new();
     //Coordinates already queued within view, including sent ones; used when leaving view to decide whether to send Forget
     private readonly HashSet<long> _tracked = new();
     private int _centerX = int.MinValue;
     private int _centerZ;
     private int _viewDistance = 1;
+    //_checkRadiusSquared squared radius in which neighbours are worth testing; the load ring just outside the view is
+    //ticketed on purpose, so neighbours there exist and are safe to read without starting a load
+    private int _checkRadiusSquared = 4;
     private int _sentCount;
     private int _failedCount;
+    //_blockedSince when the send head first became unready, zero while sending progresses; drives the diagnostic line
+    private long _blockedSince;
+    private long _lastBlockLog;
     private bool _closed;
 
     public ChunkSender(Connection connection, Func<ChunkPos, ChunkAccess?> provider,
@@ -83,37 +90,54 @@ public sealed class ChunkSender
         _centerZ = centerChunkZ;
         _viewDistance = radius;
         var radiusSquared = radius * radius;
-        //Coordinates entering view are queued; the circular test matches the initial queueing rule
-        List<long>? added = null;
+        //Neighbours one ring outside the view are ticketed by the loader, so the gate may consult them too
+        _checkRadiusSquared = (radius + 1) * (radius + 1);
+        //Coordinates entering view are tracked; the circular test matches the initial queueing rule
         for (var dx = -radius; dx <= radius; dx++)
         for (var dz = -radius; dz <= radius; dz++)
         {
             if (dx * dx + dz * dz > radiusSquared) continue;
-            var key = ChunkPos.Pack(centerChunkX + dx, centerChunkZ + dz);
-            if (_tracked.Add(key)) (added ??= new List<long>()).Add(key);
+            _tracked.Add(ChunkPos.Pack(centerChunkX + dx, centerChunkZ + dz));
         }
-        if (added is not null)
-        {
-            foreach (var key in added)
-            {
-                _pending.Add(key);
-                _pendingSet.Add(key);
-                DiagnosticChunksQueued++;
-            }
-        }
-        //Send nearest first: walking forward appends the new ring at the tail, so without re-sorting a chunk straight ahead of
-        //the player would be sent after every chunk behind him that was queued earlier, maps to vanilla updateChunkTracking
-        _pending.Sort((a, b) => DistanceSquared(ChunkPos.Unpack(a)).CompareTo(DistanceSquared(ChunkPos.Unpack(b))));
+        //Queue only what is already loaded and lit. Paper's sendQueue holds finished chunks and is filled when generation
+        //completes; queueing every coordinate entering the view made the head a chunk that was still generating, and the
+        //sender then stopped on it every tick, which is what turned a view into a twenty second trickle
+        FillPending();
         //Forgetting on leaving view: unsent ones are only dequeued, sent ones send a Forget packet, maps to vanilla dropChunk
         foreach (var key in _tracked.Where(key => DistanceSquared(ChunkPos.Unpack(key)) > radiusSquared).ToList())
             DropChunk(key);
         _connection.Send(new ClientboundSetChunkCacheCenterPacket(centerChunkX, centerChunkZ));
     }
 
+    //FillPending moves every tracked chunk that is loaded and lit into the send queue, maps to the sendQueue of Paper's
+    //RegionizedPlayerChunkLoader, which is fed by the generation pipeline instead of being polled
+    //A chunk whose light is not built yet stays in _tracked and is picked up on a later tick
+    private void FillPending()
+    {
+        var added = false;
+        foreach (var key in _tracked)
+        {
+            if (_sent.Contains(key) || _pendingSet.Contains(key)) continue;
+            var pos = ChunkPos.Unpack(key);
+            if (_isFailed?.Invoke(pos) == true) continue;
+            //Ask the provider first: it also submits the load for a chunk that has none, which is what keeps the view
+            //generating when the sender is the only thing touching it
+            if (_provider(pos) is null) continue;
+            if (_lightSource is not null && !_lightSource.IsLightReady(pos)) continue;
+            _pending.Add(key);
+            _pendingSet.Add(key);
+            DiagnosticChunksQueued++;
+            added = true;
+        }
+        if (added) _pending.Sort((a, b) => DistanceSquared(ChunkPos.Unpack(a)).CompareTo(DistanceSquared(ChunkPos.Unpack(b))));
+    }
+
     //DropChunk forgets a single chunk; only one already sent needs to notify the client
     private void DropChunk(long key)
     {
         _tracked.Remove(key);
+        //Dropping the sent mark is what lets the chunk be queued again if the view comes back to it
+        _sent.Remove(key);
         if (_pendingSet.Remove(key))
         {
             _pending.Remove(key);
@@ -145,6 +169,9 @@ public sealed class ChunkSender
             _closed = true;
             return;
         }
+        //Chunks that finished generating since the last tick are picked up here, which is what keeps the queue fed
+        //between view moves; Paper does the same by pushing into sendQueue as generation completes
+        FillPending();
         if (_pending.Count == 0)
         {
             DiagnosticTickEmpty++;
@@ -169,15 +196,31 @@ public sealed class ChunkSender
             var chunk = _provider(pos);
             //Sending runs strictly from the nearest chunk outward: skipping a head that is not ready would hand the client a
             //hole it can never fill, because that chunk is not retried once the batch moves past it. Vanilla breaks here too
-            if (chunk is null) break;
+            if (chunk is null)
+            {
+                //The head blocks every chunk behind it, so ask for it at the priority of a chunk the player is standing on;
+                //without this it sits at whatever ticket level it had when the view moved, often behind the whole view
+                _lightSource?.RaisePriority(pos.X, pos.Z, ChunkHolder.TickingLevel);
+                Blocked(pos, "not-loaded");
+                break;
+            }
             //A chunk whose light has not been built yet stays queued for a later tick
             //Sending it now would leave the client with a black chunk until an incremental light update arrived for every section
-            if (_lightSource is not null && !_lightSource.IsLightReady(pos)) break;
-            if (!AreNeighboursGenerated(pos)) break;
+            if (_lightSource is not null && !_lightSource.IsLightReady(pos)) { Blocked(pos, "no-light"); break; }
+            if (!AreNeighboursGenerated(pos, out var neighbourDetail, out var missing))
+            {
+                //A missing neighbour is what the head actually waits on; raising it releases the batch
+                _lightSource?.RaisePriority(missing.X, missing.Z, ChunkHolder.TickingLevel);
+                Blocked(pos, $"neighbour {neighbourDetail}");
+                break;
+            }
             batch.Add((pos, chunk));
             _pending.RemoveAt(index);
             _pendingSet.Remove(key);
+            //Stays in _tracked so leaving view later still sends a Forget; _sent keeps FillPending from re-queueing it
+            _sent.Add(key);
         }
+        if (batch.Count > 0) _blockedSince = 0;
         TickStageProfiler.Record(TickStage.ChunkScan, scanStart);
         if (batch.Count == 0) return;
         try
@@ -230,23 +273,51 @@ public sealed class ChunkSender
         _desiredChunksPerTick = (int)Math.Clamp(desiredChunksPerTick, MinChunksPerTick, MaxChunksPerTick);
     }
 
+    //Blocked records why the send head is stuck and reports every two seconds; the head blocks the whole queue, so a
+    //single unready chunk near the player is otherwise indistinguishable from a dead connection
+    private void Blocked(ChunkPos pos, string reason)
+    {
+        var now = Environment.TickCount64;
+        if (_blockedSince == 0) _blockedSince = now;
+        if (now - _lastBlockLog < 2000) return;
+        _lastBlockLog = now;
+        Log.Info($"[chunk-send] headBlocked=[{pos.X},{pos.Z}] reason={reason} for={now - _blockedSince}ms pending={_pending.Count}");
+    }
+
     //AreNeighboursGenerated checks the eight surrounding chunks, maps to vanilla PlayerChunkSender.areNeighboursGenerated
     //A chunk sent before its neighbours are generated leaves the client with sections it cannot mesh or light correctly,
     //and it is never resent. Only neighbours already inside the view are considered: asking the provider for a chunk outside
     //it starts a load with no ticket behind it, which never finishes and stalls the whole queue
-    private bool AreNeighboursGenerated(ChunkPos pos)
+    private bool AreNeighboursGenerated(ChunkPos pos, out string detail, out ChunkPos missing)
     {
+        detail = string.Empty;
+        missing = default;
         for (var offsetX = -1; offsetX <= 1; offsetX++)
         for (var offsetZ = -1; offsetZ <= 1; offsetZ++)
         {
             if (offsetX == 0 && offsetZ == 0) continue;
             var neighbourX = pos.X + offsetX;
             var neighbourZ = pos.Z + offsetZ;
-            //Outside the view: nothing to wait for, the client does not expect that chunk either
-            if (!_tracked.Contains(ChunkPos.Pack(neighbourX, neighbourZ))) continue;
+            //Beyond the ticketed band: nothing to wait for, and asking the provider there would start a load
+            var diffX = neighbourX - _centerX;
+            var diffZ = neighbourZ - _centerZ;
+            if (diffX * diffX + diffZ * diffZ > _checkRadiusSquared) continue;
             var neighbour = _provider(new ChunkPos(neighbourX, neighbourZ));
-            if (neighbour is null) return false;
-            if (neighbour.ChunkStatus is not { } status || !status.IsOrAfter(ChunkStatus.FULL)) return false;
+            if (neighbour is null)
+            {
+                //A neighbour that already failed will never arrive; waiting on it would freeze the queue for good
+                if (_isFailed?.Invoke(new ChunkPos(neighbourX, neighbourZ)) == true) continue;
+                detail = $"[{neighbourX},{neighbourZ}]:absent";
+                missing = new ChunkPos(neighbourX, neighbourZ);
+                return false;
+            }
+            var status = neighbour.ChunkStatus;
+            if (status is null || !status.IsOrAfter(ChunkStatus.FULL))
+            {
+                detail = $"[{neighbourX},{neighbourZ}]:{status?.Name ?? "null"}";
+                missing = new ChunkPos(neighbourX, neighbourZ);
+                return false;
+            }
         }
         return true;
     }
@@ -256,5 +327,6 @@ public sealed class ChunkSender
         _pending.Clear();
         _pendingSet.Clear();
         _tracked.Clear();
+        _sent.Clear();
     }
 }

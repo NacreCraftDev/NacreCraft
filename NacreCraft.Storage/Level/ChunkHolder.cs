@@ -28,6 +28,13 @@ public sealed class ChunkHolder
     //TicketLevel, the current ticket level; lower means higher priority, maps to vanilla ticketLevel
     public int TicketLevel { get; private set; } = MaxLevel;
 
+    //_boosted, priority a caller asked for because it needs this chunk sooner than its ticket level implies
+    //Maps to Paper's NewChunkHolder.priority, which the sender and the neighbour gates raise while they wait on a chunk
+    private int _boosted = int.MaxValue;
+
+    //Priority, the ordering key the stage scheduler uses; whichever of the ticket level and an explicit boost is smaller
+    public int Priority => Math.Min(Volatile.Read(ref _boosted), TicketLevel);
+
     private ChunkAccess? _chunk;
     private ChunkStatus _status = ChunkStatus.EMPTY;
     private readonly TaskCompletionSource<ChunkResult> _future =
@@ -62,6 +69,15 @@ public sealed class ChunkHolder
     {
         if (level == TicketLevel) return false;
         TicketLevel = level;
+        return true;
+    }
+
+    //RaisePriority raises the scheduling priority, a lower value runs sooner; returns whether it changed
+    //Lowering it again is not offered: the boost only ever matters while the chunk is still queued
+    public bool RaisePriority(int priority)
+    {
+        if (priority >= Volatile.Read(ref _boosted)) return false;
+        Volatile.Write(ref _boosted, priority);
         return true;
     }
 

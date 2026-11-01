@@ -7,23 +7,19 @@ public sealed class ChunkStageTask
 {
     public ChunkAccess Chunk { get; }
 
-    //Holder owns the stage timing the GUI reads
+    //Holder owns the stage timing the GUI reads and carries the priority the queue is ordered by
     public ChunkHolder Holder { get; }
 
     //Status is the stage this task will run next
     public ChunkStatus Status { get; set; }
 
-    //Lower values run first, matching the ticket level ordering
-    public int Priority { get; }
-
     public TaskCompletionSource<ChunkAccess> Completion { get; } =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    public ChunkStageTask(ChunkAccess chunk, ChunkStatus status, int priority, ChunkHolder holder)
+    public ChunkStageTask(ChunkAccess chunk, ChunkStatus status, ChunkHolder holder)
     {
         Chunk = chunk;
         Status = status;
-        Priority = priority;
         Holder = holder;
     }
 }

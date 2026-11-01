@@ -22,7 +22,8 @@
   <PropertyGroup>
     <NcStageChain Condition="'$(NcStageChain)' == ''">true</NcStageChain>
     <NcRegionFair Condition="'$(NcRegionFair)' == ''">true</NcRegionFair>
-    <NcStageDeps Condition="'$(NcStageDeps)' == ''">true</NcStageDeps>
+    <!-- Off by default: parking a chunk whose neighbours are not ready deadlocks, because nothing else advances those neighbours -->
+    <NcStageDeps Condition="'$(NcStageDeps)' == ''">false</NcStageDeps>
     <NcLightInStage Condition="'$(NcLightInStage)' == ''">true</NcLightInStage>
     <NcSharedRegion Condition="'$(NcSharedRegion)' == ''">true</NcSharedRegion>
     <DefineConstants Condition="'$(NcStageChain)' == 'true'">$(DefineConstants);NC_STAGE_CHAIN</DefineConstants>

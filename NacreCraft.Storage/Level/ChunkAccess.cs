@@ -30,6 +30,9 @@ public abstract class ChunkAccess : LevelHeightAccessor
     //ChunkStatus, the chunk status
     public abstract ChunkStatus ChunkStatus { get; }
 
+    //SetStatus advances the status after a generation stage, maps to vanilla ProtoChunk.setStatus
+    public virtual void SetStatus(ChunkStatus status) { }
+
     //Heightmaps, the heightmap collection, maps to vanilla getHeightmaps
     public abstract IDictionary<HeightmapRegistry.Types, long[]> Heightmaps { get; }
 

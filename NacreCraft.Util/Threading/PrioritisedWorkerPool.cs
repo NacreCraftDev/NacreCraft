@@ -8,9 +8,28 @@ public sealed class PrioritisedWorkerPool
 {
     private const int IdleTimeoutMs = 5000;
 
+    //WorkItem a submitted task; the handle lets the owner raise its priority while it is still queued
+    public sealed class WorkItem
+    {
+        internal readonly Action Work;
+
+        //Priority the key it was last queued with, so a raise that changes nothing costs no re-queue
+        internal long Priority;
+
+        //Version bumped on every raise; the entry it leaves behind is skipped when dequeued
+        internal int Version;
+
+        //Claimed set by the worker that took the newest entry, so a late raise cannot run the task twice
+        internal bool Claimed;
+
+        internal WorkItem(Action work) => Work = work;
+    }
+
+    private readonly record struct QueueEntry(WorkItem Item, int Version);
+
     private readonly string _name;
     private readonly int _maxThreads;
-    private readonly PriorityQueue<Action, long> _queue = new();
+    private readonly PriorityQueue<QueueEntry, long> _queue = new();
     private readonly object _gate = new();
     private readonly System.Threading.SemaphoreSlim _work = new(0);
     private int _threads;
@@ -35,12 +54,28 @@ public sealed class PrioritisedWorkerPool
     }
 
     //Enqueue submits work; lower priority values run first, equal values keep submission order
-    public void Enqueue(Action work, long priority)
+    public WorkItem Enqueue(Action work, long priority)
+    {
+        var item = new WorkItem(work) { Priority = priority };
+        lock (_gate)
+        {
+            _queue.Enqueue(new QueueEntry(item, item.Version), priority);
+            //Only grow when no idle thread can pick the item up, which keeps the pool near the actual load
+            if (_idle == 0 && _threads < _maxThreads) StartWorkerLocked();
+        }
+        _work.Release();
+        return item;
+    }
+
+    //Raise moves a still queued item to a new priority; already running work cannot be moved and is left alone
+    public void Raise(WorkItem item, long priority)
     {
         lock (_gate)
         {
-            _queue.Enqueue(work, priority);
-            //Only grow when no idle thread can pick the item up, which keeps the pool near the actual load
+            if (item.Claimed || item.Priority == priority) return;
+            item.Priority = priority;
+            item.Version++;
+            _queue.Enqueue(new QueueEntry(item, item.Version), priority);
             if (_idle == 0 && _threads < _maxThreads) StartWorkerLocked();
         }
         _work.Release();
@@ -81,7 +116,15 @@ public sealed class PrioritisedWorkerPool
             Action? work = null;
             lock (_gate)
             {
-                if (_queue.TryDequeue(out work, out _)) _idle--;
+                //Entries superseded by a raise are dropped here; the semaphore count they consumed was already taken
+                while (_queue.TryDequeue(out var entry, out _))
+                {
+                    if (entry.Version != entry.Item.Version || entry.Item.Claimed) continue;
+                    entry.Item.Claimed = true;
+                    work = entry.Item.Work;
+                    _idle--;
+                    break;
+                }
             }
             if (work is null) continue;
             try
