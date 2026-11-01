@@ -128,6 +128,9 @@ public static class GameBootstrap
             //Enchantment level values are the base every other enchantment effect builds on
             NacreCraft.Game.World.Items.Enchanting.LevelBasedValues.Bootstrap();
             Mark("enchantment-level-values");
+            //Value effects only need level based values, and the effect component table needs them later
+            NacreCraft.Game.World.Items.Enchanting.EnchantmentValueEffects.Bootstrap();
+            Mark("enchantment-value-effects");
             ArgumentTypeInfos.Bootstrap();
             Mark("argument-types");
             //Entity attributes are registered before entity types; entity construction builds its table from attributes, and this must also precede registry freeze

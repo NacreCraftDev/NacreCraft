@@ -36,7 +36,7 @@ public static class ServerMain
     private static int _started;
 
     //Run the server startup main function
-    //The process entry is in NacreCraft.ServerExe where mod bootstrap also happens, this only handles the startup flow itself
+    //The process entry is in NacreCraft.ServerStart where mod bootstrap also happens, this only handles the startup flow itself
     //args command line arguments, kernel-recognized ones are consumed and the rest are passed to GameOptions through an event
     public static void Run(string[] args)
     {

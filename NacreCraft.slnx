@@ -7,8 +7,8 @@
   <Project Path="NacreCraft.Client/NacreCraft.Client.csproj" />
   <Project Path="NacreCraft.Game/NacreCraft.Game.csproj" />
   <Project Path="NacreCraft.Server/NacreCraft.Server.csproj" />
-  <Project Path="NacreCraft.ServerExe/NacreCraft.ServerExe.csproj" />
-  <Project Path="NacreCraft.ClientExe/NacreCraft.ClientExe.csproj" />
+  <Project Path="NacreCraft.ServerStart/NacreCraft.ServerStart.csproj" />
+  <Project Path="NacreCraft.ClientStart/NacreCraft.ClientStart.csproj" />
   <Project Path="NacreCraft.Nbt/NacreCraft.Nbt.csproj" />
   <Project Path="NacreCraft.Network/NacreCraft.Network.csproj" />
   <Project Path="NacreCraft.ModLoader/NacreCraft.ModLoader.csproj" />

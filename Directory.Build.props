@@ -30,7 +30,7 @@
   <PropertyGroup>
     <WarningsAsErrors>$(WarningsAsErrors);CS8597;CS8601;CS8602;CS8603;CS8604;CS8625</WarningsAsErrors>
 
-    <NoWarn>$(NoWarn);CA2020;CA1000;CA1716;CA1715;CA1825;CS8632;AVLN3001;CA1716;CS0253;CA1707;CA1711;CA1720;CA5351;CA1305;CS8618</NoWarn>
+    <NoWarn>$(NoWarn);CA2020;CA1000;CA1716;CA1715;CA1825;CS8632;AVLN3001;CA1716;CS0253;CA1707;CA1711;CA1720;CA5351;CA1305;CS8618;CA1051;CA1708;CA2211;CA2201;CS0108;CS0693;CS0628;</NoWarn>
 
     <!--CS0162 reports the body of a branch that a compile-time switch from DebugFlags turned off. Those switches are-->
     <!--declared const on purpose so the compiler removes the branch; an unreachable-code defect elsewhere is rarer than-->

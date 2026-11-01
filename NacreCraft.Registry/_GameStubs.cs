@@ -56,7 +56,11 @@ public interface Enchantment { }
 public interface EnchantmentEntityEffect { }
 public interface EnchantmentLocationBasedEffect { }
 public interface EnchantmentProvider { }
-public interface EnchantmentValueEffect { }
+//EnchantmentValueEffect transforms a number by the enchantment level, maps to vanilla EnchantmentValueEffect
+public interface EnchantmentValueEffect
+{
+    float Process(int level, NacreCraft.Util.Random.RandomSource random, float value);
+}
 //ILevelReader the minimal level reading capability the predicate layer needs, corresponding to the set of ServerLevel methods used by predicates
 //ServerLevel lives in the Storage layer and is out of reach for the Registry layer, so this capability set is defined in Registry and implemented by ServerLevel
 public interface ILevelReader

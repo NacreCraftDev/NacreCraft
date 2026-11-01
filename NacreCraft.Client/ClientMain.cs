@@ -63,7 +63,7 @@ public static class ClientMain
     private static int _started;
 
     //Run client startup main function
-    //The process entry is in NacreCraft.ClientExe and mod bootstrap happens there too; this only handles the startup flow itself
+    //The process entry is in NacreCraft.ClientStart and mod bootstrap happens there too; this only handles the startup flow itself
     //args command-line arguments; kernel-recognized ones are consumed, unhandled ones are passed to GameOptions via events
     public static void Run(string[] args)
     {

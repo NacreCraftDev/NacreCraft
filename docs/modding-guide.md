@@ -47,10 +47,10 @@ NC has three entry points, and the mod injection pipeline is the same for all th
 | Entry | Purpose |
 | --- | --- |
 | `NacreCraft.Loader` | one exe for both sides: `--server` starts the server; `--client` or no mode flag starts the client |
-| `NacreCraft.ServerExe` | standalone server executable |
-| `NacreCraft.ClientExe` | standalone client executable |
+| `NacreCraft.ServerStart` | standalone server executable |
+| `NacreCraft.ClientStart` | standalone client executable |
 
-`Main` itself is a thin shell that only registers callbacks and hands the work to the next method. Take `NacreCraft.ServerExe`:
+`Main` itself is a thin shell that only registers callbacks and hands the work to the next method. Take `NacreCraft.ServerStart`:
 
 ```csharp
 public static int Main(string[] args)
@@ -70,10 +70,10 @@ This separation is not a matter of style. When the JIT compiles a method it reso
 The output directory after a build looks like this:
 
 ```
-NacreCraft.ServerExe.exe
+NacreCraft.ServerStart.exe
 NacreCraft.dll              <- main library, embeds all lower-level sub-libraries
 NacreCraft.ModLoader.dll    <- the loader itself
-NacreCraft.ServerExe.dll    <- entry assembly
+NacreCraft.ServerStart.dll    <- entry assembly
 kernel/
   NacreCraft.Game.dll
   NacreCraft.Server.dll
@@ -88,7 +88,7 @@ The .NET host treats assemblies registered in `deps.json` as TPA (Trusted Platfo
 
 The three kinds left in the root cannot be moved: the main library (it is the embedding host and must start first), the loader itself (the bootstrap code lives in it), and the entry assembly (the apphost starts from it).
 
-**Cost**: the entry assembly itself cannot be injected into. If your hook target happens to live in the `NacreCraft.ServerExe.dll` assembly, it is ineffective. Kernel business code is all under `kernel/`, so normally this is not a problem.
+**Cost**: the entry assembly itself cannot be injected into. If your hook target happens to live in the `NacreCraft.ServerStart.dll` assembly, it is ineffective. Kernel business code is all under `kernel/`, so normally this is not a problem.
 
 ### 2.3 Mod loading sequence
 

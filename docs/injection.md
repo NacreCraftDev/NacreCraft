@@ -355,7 +355,7 @@ Cannot be hooked:
 
 - the main library `NacreCraft.dll`
 - the loader `NacreCraft.ModLoader.dll`
-- entry assemblies (`NacreCraft.ServerExe.dll`, etc.)
+- entry assemblies (`NacreCraft.ServerStart.dll`, etc.)
 - `NacreCraft.Util.dll` — the loader's own logging has already loaded it by the time rewriting starts, so the startup log reports "Assembly NacreCraft.Util was already loaded early, its injection rules are too late". Everything in it is out of reach, `Log` and `CrashHandler` / `CrashReport` included; to react to a crash, anchor on a caller that does live in a rewriteable assembly, such as the `Stop()` call inside `MinecraftServer.Run`'s catch block.
 
 Every hook's `target` must be findable in the kernel or in some mod assembly, otherwise assembly reports "the injection target is not in any known assembly". Note that **a namespace does not imply an assembly** — `NacreCraft.Game.Server.DedicatedServer` actually lives in `NacreCraft.Server.dll`; the loader looks it up by an index built from metadata tables, so just write the full name.
