@@ -38,6 +38,10 @@ public sealed class ChunkMap
     //Holders, a holder view for tick traversal and diagnostics
     public ICollection<ChunkHolder> Holders => _chunks.Values;
 
+    //HolderLevelChanged fires after a holder's ticket level moves, maps to NewChunkHolder.processTicketLevelUpdate
+    //calling checkUnload; the owner re-files the holder into or out of its unload queue from here
+    public Action<ChunkHolder>? HolderLevelChanged { get; set; }
+
     //GetHolder gets a holder without creating one, maps to vanilla getUpdatingChunkIfPresent
     public ChunkHolder? GetHolder(long packedPos) => _chunks.GetValueOrDefault(packedPos);
 
@@ -46,7 +50,14 @@ public sealed class ChunkMap
         => _chunks.GetOrAdd(pos.Pack(), _ => new ChunkHolder(pos));
 
     //TryRemoveHolder removes a holder and returns whether it existed
-    public bool TryRemoveHolder(long packedPos) => _chunks.TryRemove(packedPos, out _);
+    //The drop and pending-unload sets are keyed by chunk too; an entry left behind after the holder is gone is never
+    //revisited by anything, so they would grow by one per unloaded chunk for as long as a player keeps walking
+    public bool TryRemoveHolder(long packedPos)
+    {
+        _toDrop.Remove(packedPos);
+        _pendingUnloads.Remove(packedPos);
+        return _chunks.TryRemove(packedPos, out _);
+    }
 
     //AllChunksWithAtLeastStatus holders whose latest status reached the given one, maps to vanilla allChunksWithAtLeastStatus
     public IEnumerable<ChunkHolder> AllChunksWithAtLeastStatus(ChunkStatus status)
@@ -76,7 +87,7 @@ public sealed class ChunkMap
                 holder = new ChunkHolder(ChunkPos.Unpack(packedPos));
             _chunks[packedPos] = holder;
         }
-        holder.UpdateTicketLevel(level);
+        if (holder.UpdateTicketLevel(level)) HolderLevelChanged?.Invoke(holder);
         //The pending-unload set follows the level; newly created holders must also be registered, otherwise after the level rises the old key stays in the set
         //The consequence is that LoadingChunkTracker.GetLevel keeps reporting the chunk as unloaded, and level convergence gets misjudged repeatedly
         if (ChunkLevel.IsLoaded(level)) _toDrop.Remove(packedPos);

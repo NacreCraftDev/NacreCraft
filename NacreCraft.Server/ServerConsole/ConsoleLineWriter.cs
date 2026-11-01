@@ -35,18 +35,21 @@ public sealed class ConsoleLineWriter : TextWriter
     }
 
     //Append splits into full lines by newline, the tail without a trailing newline is buffered for the next batch
+    //The complete lines of one call go over together: handing them over one by one makes the prompt repaint once per line
     private void Append(string text)
     {
         var data = _pending + text;
+        var lines = new List<string>();
         var start = 0;
         while (true)
         {
             var index = data.IndexOf('\n', start);
             if (index < 0) break;
             //On Windows line endings are \r\n, the trailing \r is not included in the text
-            _repl.WriteLine(data[start..index].TrimEnd('\r'));
+            lines.Add(data[start..index].TrimEnd('\r'));
             start = index + 1;
         }
         _pending = data[start..];
+        if (lines.Count > 0) _repl.WriteLines(lines);
     }
 }

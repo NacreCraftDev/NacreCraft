@@ -49,7 +49,6 @@ public interface CreativeModeTab { }
 public interface CriterionTrigger<T1> { }
 public interface DataComponentPredicateType<T1> { }
 public interface DebugSubscription<T1> { }
-public interface DecoratedPotPattern { }
 public interface Dialog { }
 public interface DialogBody { }
 public interface DimensionType { }
@@ -102,9 +101,12 @@ public interface IncomingRpcMethod<T1, T2> { }
 public interface InputControl { }
 public interface Instrument { }
 public interface IntProvider { }
-public interface JukeboxSong { }
 public interface Level { }
-public interface LevelBasedValue { }
+//LevelBasedValue a value derived from the enchantment level, maps to vanilla LevelBasedValue
+public interface LevelBasedValue
+{
+    float Calculate(int level);
+}
 public interface LevelStem { }
 public interface LootItemCondition { }
 public interface LootItemFunction { }
@@ -161,12 +163,8 @@ public interface TicketType { }
 public interface TradeSet { }
 public interface TreeDecoratorType<T1> { }
 public interface TrialSpawnerConfig { }
-public interface TrimMaterial { }
-public interface TrimPattern { }
 public interface TrunkPlacerType<T1> { }
-public interface VillagerProfession { }
 public interface VillagerTrade { }
-public interface VillagerType { }
 public interface WolfSoundVariant { }
 public interface WolfVariant { }
 //WorldCarver carver marker interface, maps to vanilla WorldCarver

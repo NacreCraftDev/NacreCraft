@@ -56,7 +56,11 @@ public static class NacreCraftKernel
         NcLanguage.Load(Language.Default);
 
         //Print the startup ASCII-art banner
-        PrintBanner();
+        ConsoleAnsiArtist.PrintRainbowText("NacreCraft");
+
+        //Version.build of this assembly, so any log identifies the exact build it came from
+        //Printed unconditionally: this is what a crash report gets matched against
+        Log.Info($"NacreCraft {BuildInfo.Display}");
 
         // 2. Parse launch arguments; kernel-recognized ones are consumed, unhandled ones are broadcast via the event
         //    Subscribers must subscribe to UnhandledArgument before calling Initialize
@@ -98,11 +102,5 @@ public static class NacreCraftKernel
             Log.Info($"Embedded sub-libraries ({embedded.Count}):{separator}{string.Join(separator, embedded)}");
         }
         //Log.Debug("PrintStartupInfo exit");
-    }
-
-    //Print the startup ASCII-art banner
-    private static void PrintBanner()
-    {
-        ConsoleAnsiArtist.PrintRainbowText("NacreCraft");
     }
 }

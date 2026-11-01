@@ -83,6 +83,15 @@ public static class GameBootstrap
             Mark("tickets");
             WorldCarverBootstrap.RegisterAll();
             Mark("carvers");
+            //World generation type registries must be filled before the noise settings and level stems decode, otherwise
+            //their type dispatch finds no codec and every dimension fails to load
+            NacreCraft.Game.World.Level.LevelGen.Dimension.BiomeSourceTypes.RegisterAll();
+            NacreCraft.Game.World.Level.LevelGen.Dimension.ChunkGeneratorTypes.RegisterAll();
+            NacreCraft.Game.World.Level.LevelGen.SurfaceRulesCodecs.RegisterAll();
+            Mark("worldgen-types");
+            //Content registries the original fills from code: pot patterns, villager types and professions
+            ContentBootstrap.RegisterAll();
+            Mark("content");
             //Feature and placement modifier registries must be filled before data load, otherwise the whole configured_feature/placed_feature batch fails to decode
             NacreCraft.Game.World.Level.LevelGen.Features.FeatureBootstrap.RegisterAll();
             Mark("features");
@@ -113,6 +122,12 @@ public static class GameBootstrap
             //Mob effects are registered in vanilla declaration order; commands and effect packets both encode by registry id
             NacreCraft.Game.World.Effect.MobEffects.Bootstrap();
             Mark("mob-effects");
+            //Potions reference the effect table above, so they register right after it
+            NacreCraft.Game.World.Effect.Potions.Bootstrap();
+            Mark("potions");
+            //Enchantment level values are the base every other enchantment effect builds on
+            NacreCraft.Game.World.Items.Enchanting.LevelBasedValues.Bootstrap();
+            Mark("enchantment-level-values");
             ArgumentTypeInfos.Bootstrap();
             Mark("argument-types");
             //Entity attributes are registered before entity types; entity construction builds its table from attributes, and this must also precede registry freeze

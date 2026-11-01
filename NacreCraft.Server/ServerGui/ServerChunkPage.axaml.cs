@@ -340,7 +340,9 @@ public sealed partial class ServerChunkPage : UserControl
         _cells.Clear();
         foreach (var holder in source.Holders)
         {
-            if (!ChunkLevel.IsBlockTicking(holder.TicketLevel)) continue;
+            //A holder exists once the chunk is inside the load range; ticking is a narrower tier inside that range and
+            //must not decide what the map draws, maps to ChunkLevel.isLoaded
+            if (!ChunkLevel.IsLoaded(holder.TicketLevel)) continue;
             //Strong or weak is decided by the simulation level: beyond the simulation distance chunks load without ticking, that ring is weak loading
             _cells.Add((holder.Pos, source.InEntityTickingRange(holder.Pos.Pack())));
         }

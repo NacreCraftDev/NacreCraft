@@ -25,11 +25,11 @@ public sealed class PotionContents : IEquatable<PotionContents>
 
     //Empty empty potion contents, maps to vanilla EMPTY
     public static readonly PotionContents Empty = new(
-        Optional<Holder<Potion>>.Empty(), Optional<int>.Empty(),
+        Optional<Holder<NacreCraft.Registry.Potion>>.Empty(), Optional<int>.Empty(),
         Array.Empty<MobEffectInstance>(), Optional<string>.Empty());
 
     public PotionContents(
-        Optional<Holder<Potion>> potion, Optional<int> customColor,
+        Optional<Holder<NacreCraft.Registry.Potion>> potion, Optional<int> customColor,
         IReadOnlyList<MobEffectInstance> customEffects, Optional<string> customName)
     {
         Potion = potion;
@@ -38,7 +38,7 @@ public sealed class PotionContents : IEquatable<PotionContents>
         CustomName = customName;
     }
 
-    public Optional<Holder<Potion>> Potion { get; }
+    public Optional<Holder<NacreCraft.Registry.Potion>> Potion { get; }
     public Optional<int> CustomColor { get; }
     public IReadOnlyList<MobEffectInstance> CustomEffects { get; }
     public Optional<string> CustomName { get; }
@@ -62,14 +62,14 @@ public sealed class PotionContents : IEquatable<PotionContents>
 //PotionContentsStreamCodec optional potion plus optional color plus effect list plus optional name, maps to vanilla STREAM_CODEC
 internal sealed class PotionContentsStreamCodec : StreamCodec<RegistryFriendlyByteBuf, PotionContents>
 {
-    private static readonly StreamCodec<RegistryFriendlyByteBuf, Holder<Potion>> PotionStream =
+    private static readonly StreamCodec<RegistryFriendlyByteBuf, Holder<NacreCraft.Registry.Potion>> PotionStream =
         ByteBufCodecs.Holder(Registries.POTION);
 
     public PotionContents Decode(RegistryFriendlyByteBuf buf)
     {
         var potion = buf.ReadBoolean()
-            ? Optional<Holder<Potion>>.Of(PotionStream.Decode(buf))
-            : Optional<Holder<Potion>>.Empty();
+            ? Optional<Holder<NacreCraft.Registry.Potion>>.Of(PotionStream.Decode(buf))
+            : Optional<Holder<NacreCraft.Registry.Potion>>.Empty();
         var customColor = buf.ReadBoolean() ? Optional<int>.Of(buf.ReadInt()) : Optional<int>.Empty();
         var size = buf.ReadVarInt();
         var customEffects = new List<MobEffectInstance>(Math.Min(size, ByteBufCodecs.MaxInitialCollectionSize));

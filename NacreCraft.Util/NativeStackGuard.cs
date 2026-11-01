@@ -138,8 +138,11 @@ public static class NativeStackGuard
 
         var startInfo = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = false };
 
-        //Entry zero is the executable itself; the rest of the command line is forwarded or a restart would drop flags
+        //Entry zero is the entry assembly, which is the executable only when the host was started directly. A launch
+        //through the dotnet host leaves the assembly path sitting in entry zero instead, so it has to be handed back
+        //as the first argument; dropping it restarts the bare host, which prints its usage and exits
         var arguments = Environment.GetCommandLineArgs();
+        if (IsDotnetHost(executable)) startInfo.ArgumentList.Add(arguments[0]);
         for (var i = 1; i < arguments.Length; i++) startInfo.ArgumentList.Add(arguments[i]);
 
         startInfo.Environment["CORECLR_ENABLE_PROFILING"] = "1";
@@ -239,6 +242,10 @@ public static class NativeStackGuard
         if (!GetConsoleMode(handle, out var mode)) return;
         _ = SetConsoleMode(handle, mode | EnableVirtualTerminalProcessing);
     }
+
+    //IsDotnetHost reports whether this process was started as the shared host rather than as the program itself
+    private static bool IsDotnetHost(string executable) =>
+        string.Equals(Path.GetFileNameWithoutExtension(executable), "dotnet", StringComparison.OrdinalIgnoreCase);
 
     //FindNativeLibrary looks beside the program first, then under the per-platform release layout
     //The host resolves runtimes/<rid>/native on its own for ordinary native calls, but the profiler path is handed to

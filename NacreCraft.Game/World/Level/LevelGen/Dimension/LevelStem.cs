@@ -50,32 +50,16 @@ internal sealed class LevelStemCodec : AbstractMapCodec<LevelStem>
         var typeId = Identifier.TryParse(typeText);
         if (typeId is null)
             return DataResult<ChunkGenerator>.Error(() => $"invalid chunk generator type id {typeText}");
-        if (typeId.Value.Path != "noise")
+        //The generator codec lives in the CHUNK_GENERATOR registry, maps to the vanilla dispatch through the same registry
+        var registry = (ops as RegistryOps<U>)?.GetRegistry(Registries.CHUNK_GENERATOR) ?? BuiltInRegistries.CHUNK_GENERATOR;
+        var codec = registry.GetValue(ResourceKey<MapCodec<object>>.Create(Registries.CHUNK_GENERATOR, typeId.Value));
+        if (codec is null)
             return DataResult<ChunkGenerator>.Error(() => $"unsupported chunk generator type {typeId}");
-
-        var biomeTag = input.Get("biome_source");
-        if (!biomeTag.IsPresent)
-            return DataResult<ChunkGenerator>.Error(() => "noise generator is missing the biome_source field");
-        var biomeSource = BiomeSourceCodecs.Decode(ops, biomeTag.Get());
-        if (!biomeSource.Result().IsPresent)
-            return DataResult<ChunkGenerator>.Error(() => "failed to parse biome_source");
-
-        var settingsText = ReadString(ops, input, "settings");
-        if (settingsText is null)
-            return DataResult<ChunkGenerator>.Error(() => "noise generator is missing the settings field");
-        var settingsId = Identifier.TryParse(settingsText);
-        if (settingsId is null)
-            return DataResult<ChunkGenerator>.Error(() => $"invalid noise settings id {settingsText}");
-        //Noise settings are loaded by data at step 8; if missing, the pack lacks worldgen/noise_settings
-        var settingsRegistry = (ops as RegistryOps<U>)?.GetRegistry(Registries.NOISE_SETTINGS)
-            ?? BuiltInRegistries.NOISE_SETTINGS;
-        if (settingsRegistry.GetValue(settingsId.Value) is not NoiseGeneratorSettings settings)
-            return DataResult<ChunkGenerator>.Error(() => $"noise settings {settingsId} not found");
-        return DataResult<ChunkGenerator>.Success(new NoiseBasedChunkGenerator(biomeSource.GetOrThrow(), settings));
+        return codec.Decode(ops, input).Map(value => (ChunkGenerator)value);
     }
 
     //ReadString read a string field; returns null when missing or not a string
-    private static string? ReadString<U>(DynamicOps<U> ops, MapLike<U> input, string name)
+    internal static string? ReadString<U>(DynamicOps<U> ops, MapLike<U> input, string name)
     {
         var tag = input.Get(name);
         if (!tag.IsPresent) return null;

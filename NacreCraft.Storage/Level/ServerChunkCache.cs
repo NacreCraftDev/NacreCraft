@@ -80,9 +80,16 @@ public sealed class ServerChunkCache : ChunkSource
     //Set while the light thread builds light for freshly loaded chunks; their section changes are covered by the full light
     //block of the chunk packet, so they must not enter the pending set and be broadcast to every player
     [ThreadStatic] private static bool _suppressLightDispatch;
-    //UnloadBudgetPerTick, at most this many chunks unload per tick, maps to the hasMoreTime budget of vanilla processUnloads
-    //An unload takes a full chunk snapshot; without a limit, a player running far would unload a whole column in one tick and stall the main thread
-    private const int UnloadBudgetPerTick = 16;
+    //Unload budget per tick, maps to Paper's configMinChunkUnloadCount and configMinChunkUnloadFraction
+    //Paper unloads max(50, backlog * 0.05) per tick, so the shell of a player who keeps running still comes down; a fixed
+    //sixteen left a growing backlog of ticketed holders behind every move, and the level never converged
+    //An unload takes a full chunk snapshot, so the share is what keeps a large backlog from stalling a single tick
+    private const int MinUnloadPerTick = 50;
+    private const double UnloadFractionPerTick = 0.05;
+
+    //_unloadQueue chunks whose ticket left the load range, maps to Paper's ChunkUnloadQueue
+    //The tick drains this instead of testing every holder, so the cost follows the border being crossed, not the world size
+    private readonly ChunkUnloadQueue _unloadQueue = new();
 
     //AccessRadius how many extra chunk rings beyond the view are ticketed so generation can read its neighbours
     //Reaching FULL needs a 3x3 around the chunk, maps to ChunkTaskScheduler.getAccessRadius(ChunkStatus.FULL)
@@ -211,7 +218,11 @@ public sealed class ServerChunkCache : ChunkSource
         _chunkMap = new ChunkMap(viewDistance);
         _generator = generator;
         _stagePipeline = stagePipeline;
-        _stageScheduler = stagePipeline is null ? null : new ChunkStageScheduler(stagePipeline);
+        _stageScheduler = stagePipeline is null
+            ? null
+            : new ChunkStageScheduler(stagePipeline, pos => _chunkMap.GetHolder(pos.Pack()));
+        //A holder whose ticket leaves the load range becomes an unload candidate right away, maps to checkUnload
+        _chunkMap.HolderLevelChanged = OnHolderLevelChanged;
         MinSectionY = minSectionY;
         SectionsCount = sectionsCount;
     }
@@ -692,53 +703,27 @@ public sealed class ServerChunkCache : ChunkSource
         //Converge ticket levels into holder levels, maps to vanilla DistanceManager.runAllUpdates
         //Simulation then loading matches the vanilla order; the converged result is written into holders through DistanceManager
         _simulationTracker?.RunAllUpdates();
-        //Advance one view ring per tick; the chunks around the player are generated and sent before the outer shell
-        //The load radius is wider than the send radius by AccessRadius, so every chunk inside the view has generated
-        //neighbours to read; vanilla derives the same margin from the target status, maps to ChunkTaskScheduler.getAccessRadius
-        List<object>? advance = null;
-        foreach (var pair in _playerCenters)
-            if (pair.Value.CurrentRadius < pair.Value.ViewDistance + AccessRadius) (advance ??= new List<object>()).Add(pair.Key);
-        if (advance is not null)
-        {
-            foreach (var owner in advance)
-            {
-                var state = _playerCenters[owner];
-                var next = state.CurrentRadius + 1;
-                AddLoadingRing(state.X, state.Z, next);
-                _playerCenters[owner] = (state.X, state.Z, state.ViewDistance, state.SimulationLevel, next);
-            }
-        }
         _loadingTracker?.RunDistanceUpdates(int.MaxValue);
         _chunkMap.Distance.ChunksToUpdateFutures.Clear();
-        List<long>? expired = null;
+        //Publish chunks that finished loading since the last tick into the cache and the light queue
+        //This stays a walk over the holders because the load completion callback must run on the main thread; the unload
+        //half moved to the queue below, which is the expensive part (light release and a snapshot per chunk)
         foreach (var holder in _chunkMap.Holders)
         {
-            var key = holder.Pos.Pack();
-            if (holder.IsDone)
-            {
-                var result = holder.Future.Result;
-                if (result.IsSuccess) MergeLoadedChunk(key, result.Chunk!);
-            }
-            //Holders whose tickets no longer require loading to FULL are reclaimed; loaded chunks stay in _loaded and remain usable
-            //One currently loading is kept for now; dropping it means its future has nowhere to backfill the cache on completion
-            //One still waiting for its light is kept too, or the work spent generating it would be thrown away
-            //Judged by the ticket level rather than the holder's own level: the level is a BFS decay and takes several ticks to rise above the threshold after a ticket is removed
-            //Here chunks generate straight to FULL with no intermediate state, so these shell holders serve no purpose and are best reclaimed early
-            var loading = (holder.WasScheduled && !holder.IsDone)
-                          || (_loaded.ContainsKey(key) && !_lightReady.ContainsKey(key));
-            if (!loading && !IsLoadWanted(key, holder))
-            {
-                expired ??= new List<long>();
-                expired.Add(key);
-            }
+            if (!holder.IsDone) continue;
+            var result = holder.Future.Result;
+            if (result.IsSuccess) MergeLoadedChunk(holder.Pos.Pack(), result.Chunk!);
         }
-        if (expired is not null)
+        //Drain the unload queue, maps to the section buckets of Paper's ChunkUnloadQueue: only holders whose ticket actually
+        //left the load range are tested, and the budget scales with the backlog so a moving player keeps up
+        if (_unloadQueue.Count > 0)
         {
-            //Unloading a chunk snapshots and writes; too many in one tick stall the main thread, so over-budget ones wait for the next tick
-            var budget = UnloadBudgetPerTick;
-            foreach (var key in expired)
+            var candidates = _unloadQueue.Snapshot();
+            var budget = Math.Max(MinUnloadPerTick, (int)Math.Round(candidates.Count * UnloadFractionPerTick));
+            foreach (var key in candidates)
             {
                 if (budget <= 0) break;
+                //Not safe yet: it stays queued and is retested on the next tick
                 if (UnloadChunkInternal(key)) budget--;
             }
         }
@@ -763,8 +748,10 @@ public sealed class ServerChunkCache : ChunkSource
     //Uses the holder's own level (the ticket after BFS propagation) rather than the raw ticket level
     //The ring just outside view distance has no ticket itself; judging by the raw ticket level would immediately treat them as reclaimable
     //when they are exactly the weak-loading band to keep; the threshold stays consistent with LoadingChunkTracker.SetLevel
+    //The threshold is FULL, matching the level the player loading tickets carry: ticking is narrower and must not decide
+    //whether the chunk stays in memory
     private bool IsLoadWanted(long packedPos, ChunkHolder holder)
-        => holder.TicketLevel <= ChunkLevel.BlockTickingLevel;
+        => holder.TicketLevel <= ChunkHolder.BorderLevel;
 
     //ReleaseChunkLight frees all data a chunk left in the light engine when it leaves memory, maps to vanilla ThreadedLevelLightEngine.updateChunkStatus
     //The light engine stores data by section coords and does not know which chunk a section belongs to; without clearing on unload no one else will
@@ -805,11 +792,31 @@ public sealed class ServerChunkCache : ChunkSource
     public bool UnloadChunk(ChunkPos pos)
     {
         var key = pos.Pack();
+        _unloadQueue.Remove(key);
         _chunkMap.TryRemoveHolder(key);
         if (!_loaded.TryRemove(key, out _)) return false;
         ReleaseChunkLight(pos);
         ChunkUnloaded?.Invoke(pos);
         return true;
+    }
+
+    //IsSafeToUnload whether nothing still wants this chunk, maps to Paper's NewChunkHolder.isSafeToUnload
+    //A neighbour generation task reading it, a stage task queued or running, an unfinished load, or a pending light build
+    //all block the drop; missing the neighbour test let a chunk go while a neighbour was reading it, and the reader pulled
+    //it straight back, so a moving player saw a constant churn of unload and load
+    private bool IsSafeToUnload(long packedPos, ChunkHolder holder)
+        => !IsLoadWanted(packedPos, holder)
+           && !holder.InUse
+           && !(_stageScheduler?.IsActive(packedPos) ?? false)
+           && !(holder.WasScheduled && !holder.IsDone)
+           && !(_loaded.ContainsKey(packedPos) && !_lightReady.ContainsKey(packedPos));
+
+    //OnHolderLevelChanged files a holder into or out of the unload queue, maps to NewChunkHolder.checkUnload
+    private void OnHolderLevelChanged(ChunkHolder holder)
+    {
+        var key = holder.Pos.Pack();
+        if (IsLoadWanted(key, holder)) _unloadQueue.Remove(key);
+        else _unloadQueue.Add(key);
     }
 
     //UnloadChunkInternal unloads a chunk tickets no longer require, returns whether a holder was actually touched
@@ -818,6 +825,16 @@ public sealed class ServerChunkCache : ChunkSource
     //The write precedes light release: block entities and chunk data are still attached to the object at this point
     private bool UnloadChunkInternal(long packedPos)
     {
+        //A holder removed on another path leaves a stale candidate; drop it so the queue cannot grow forever
+        if (_chunkMap.GetHolder(packedPos) is not { } holder)
+        {
+            _unloadQueue.Remove(packedPos);
+            return false;
+        }
+        //Re-test right before detaching, maps to Paper's unloadStage3 calling isSafeToUnload again: a stage may have picked
+        //the chunk up as a neighbour since the queue snapshot was taken
+        if (!IsSafeToUnload(packedPos, holder)) return false;
+        _unloadQueue.Remove(packedPos);
         if (!_chunkMap.TryRemoveHolder(packedPos)) return false;
         //A holder created without a loaded chunk is detached directly; there is no data to write
         if (!_loaded.TryRemove(packedPos, out var chunk)) return true;
@@ -837,19 +854,48 @@ public sealed class ServerChunkCache : ChunkSource
         var radius = Math.Clamp(viewDistance, 2, 32);
         if (_playerCenters.TryGetValue(owner, out var previous)
             && previous.X == chunkX && previous.Z == chunkZ && previous.ViewDistance == radius) return;
-        if (previous.ViewDistance > 0)
-        {
-            RemoveLoadingTickets(previous.X, previous.Z, previous.ViewDistance);
-            RemoveSimulationTicket(ChunkPos.Pack(previous.X, previous.Z), previous.SimulationLevel);
-        }
         //The simulation ticket level is computed only from simulation distance, maps to vanilla getPlayerTicketLevel
         //Not capped by view distance: a view distance smaller than simulation distance only narrows the load range, and the simulation level semantics should not change with it
         var simulationLevel = Math.Max(0, ChunkLevel.EntityTickingLevel - SimulationDistance);
-        //Seed only the inner rings; Tick adds one more ring per tick so the chunks around the player generate first
-        var initialRadius = Math.Min(2, radius);
-        for (var r = 0; r <= initialRadius; r++) AddLoadingRing(chunkX, chunkZ, r);
+        if (previous.ViewDistance > 0)
+        {
+            //Move only the border: the chunks that stay in view keep their ticket. Dropping the whole square and re-issuing
+            //it made every step unlatch the entire outer band, which let the level converge back and unloaded chunks that
+            //never left view; Paper keeps a per-chunk state machine and only diffs the ring that actually changed
+            var issued = previous.CurrentRadius;
+            var keep = Math.Min(issued, radius + AccessRadius);
+            for (var dx = -issued; dx <= issued; dx++)
+            for (var dz = -issued; dz <= issued; dz++)
+            {
+                var worldX = previous.X + dx;
+                var worldZ = previous.Z + dz;
+                if (Math.Abs(worldX - chunkX) <= keep && Math.Abs(worldZ - chunkZ) <= keep) continue;
+                QueueLoadingTicket(worldX, worldZ, -1);
+            }
+            for (var dx = -keep; dx <= keep; dx++)
+            for (var dz = -keep; dz <= keep; dz++)
+            {
+                var worldX = chunkX + dx;
+                var worldZ = chunkZ + dz;
+                if (Math.Abs(worldX - previous.X) <= issued && Math.Abs(worldZ - previous.Z) <= issued) continue;
+                QueueLoadingTicket(worldX, worldZ, 1);
+            }
+            //One flush for the whole move, maps to flushDelayedTicketOps at the end of Paper's update(): a chunk that falls
+            //out of one square and into the new one nets to zero and keeps the ticket it already had
+            FlushTicketOps();
+            RemoveSimulationTicket(ChunkPos.Pack(previous.X, previous.Z), previous.SimulationLevel);
+            AddSimulationTicket(ChunkPos.Pack(chunkX, chunkZ), simulationLevel);
+            _playerCenters[owner] = (chunkX, chunkZ, radius, simulationLevel, keep);
+            return;
+        }
+        //Issue the whole load range in one pass, maps to Paper's update() walking loadViewDistance + 1 in a single sweep
+        //Issuing one ring per tick made a joining player wait a dozen ticks for the outer view, and kept the distance
+        //propagator busy every tick instead of once; the ticket level decides what loads first, not the issue order
+        var fullRadius = radius + AccessRadius;
+        for (var r = 0; r <= fullRadius; r++) AddLoadingRing(chunkX, chunkZ, r);
+        FlushTicketOps();
         AddSimulationTicket(ChunkPos.Pack(chunkX, chunkZ), simulationLevel);
-        _playerCenters[owner] = (chunkX, chunkZ, radius, simulationLevel, initialRadius);
+        _playerCenters[owner] = (chunkX, chunkZ, radius, simulationLevel, fullRadius);
     }
 
     //RemovePlayerTickets removes all of a player's tickets on leave, maps to vanilla ChunkMap.removePlayer
@@ -857,7 +903,11 @@ public sealed class ServerChunkCache : ChunkSource
     {
         if (_ticketStorage is null) return;
         if (!_playerCenters.Remove(owner, out var previous)) return;
-        RemoveLoadingTickets(previous.X, previous.Z, previous.ViewDistance);
+        //Same ring count the loader issued; the outer AccessRadius band is part of it
+        for (var dx = -previous.CurrentRadius; dx <= previous.CurrentRadius; dx++)
+        for (var dz = -previous.CurrentRadius; dz <= previous.CurrentRadius; dz++)
+            QueueLoadingTicket(previous.X + dx, previous.Z + dz, -1);
+        FlushTicketOps();
         RemoveSimulationTicket(ChunkPos.Pack(previous.X, previous.Z), previous.SimulationLevel);
     }
 
@@ -868,47 +918,75 @@ public sealed class ServerChunkCache : ChunkSource
         if (_ticketStorage is null) return;
         if (radius == 0)
         {
-            AddLoadingTicket(centerX, centerZ);
+            QueueLoadingTicket(centerX, centerZ, 1);
             return;
         }
         for (var dx = -radius; dx <= radius; dx++)
         {
-            AddLoadingTicket(centerX + dx, centerZ - radius);
-            AddLoadingTicket(centerX + dx, centerZ + radius);
+            QueueLoadingTicket(centerX + dx, centerZ - radius, 1);
+            QueueLoadingTicket(centerX + dx, centerZ + radius, 1);
         }
         for (var dz = -radius + 1; dz < radius; dz++)
         {
-            AddLoadingTicket(centerX - radius, centerZ + dz);
-            AddLoadingTicket(centerX + radius, centerZ + dz);
+            QueueLoadingTicket(centerX - radius, centerZ + dz, 1);
+            QueueLoadingTicket(centerX + radius, centerZ + dz, 1);
         }
     }
 
-    //AddLoadingTicket adds one ticket, refcounted so overlapping players do not remove it early
-    private void AddLoadingTicket(int x, int z)
+    //_pendingTicketDelta net ticket change per chunk within one update, maps to Paper's delayedTicketOps
+    //Folding the deltas is what Paper's TicketOperation.addAndRemove expresses: a chunk that leaves one square and enters
+    //the next in the same pass keeps the ticket it already has instead of being dropped and re-added
+    private readonly Dictionary<long, int> _pendingTicketDelta = new();
+
+    //QueueLoadingTicket records one change against the fold instead of touching the ticket table
+    private void QueueLoadingTicket(int x, int z, int delta)
     {
         var key = ChunkPos.Pack(x, z);
+        _pendingTicketDelta[key] = _pendingTicketDelta.GetValueOrDefault(key) + delta;
+    }
+
+    //FlushTicketOps applies the folded changes in one pass, maps to flushDelayedTicketOps
+    //Nothing is propagated here; the distance graphs converge once in Tick, which is the equivalent of Paper calling
+    //processTicketUpdates after the flush
+    private void FlushTicketOps()
+    {
+        if (_pendingTicketDelta.Count == 0) return;
+        foreach (var pair in _pendingTicketDelta)
+        {
+            if (pair.Value > 0)
+            {
+                for (var i = 0; i < pair.Value; i++) AddLoadingTicket(pair.Key);
+            }
+            else
+            {
+                for (var i = 0; i < -pair.Value; i++) RemoveLoadingTicket(pair.Key);
+            }
+        }
+        _pendingTicketDelta.Clear();
+    }
+
+    //AddLoadingTicket adds one ticket, refcounted so overlapping players do not remove it early
+    //The level is FULL, matching Paper's LOADED_TICKET_LEVEL: a player in view needs the chunk generated and sent, while
+    //ticking comes from the simulation ticket whose BFS decay covers the simulation distance
+    private void AddLoadingTicket(long key)
+    {
         _loadingTicketRefs.TryGetValue(key, out var count);
         _loadingTicketRefs[key] = count + 1;
         if (count == 0)
-            _ticketStorage!.AddTicket(key, new Ticket(TicketType.PlayerLoading, ChunkLevel.EntityTickingLevel));
+            _ticketStorage!.AddTicket(key, new Ticket(TicketType.PlayerLoading, ChunkLevel.FullChunkLevel));
     }
 
-    //RemoveLoadingTickets removes loading tickets in the view square; if another player still covers it, only the count is decremented
-    private void RemoveLoadingTickets(int centerX, int centerZ, int radius)
+    //RemoveLoadingTicket drops one ticket; if another player still covers the chunk only the count is decremented
+    private void RemoveLoadingTicket(long key)
     {
-        for (var dx = -radius; dx <= radius; dx++)
-            for (var dz = -radius; dz <= radius; dz++)
-            {
-                var key = ChunkPos.Pack(centerX + dx, centerZ + dz);
-                if (!_loadingTicketRefs.TryGetValue(key, out var count)) continue;
-                if (count > 1)
-                {
-                    _loadingTicketRefs[key] = count - 1;
-                    continue;
-                }
-                _loadingTicketRefs.Remove(key);
-                _ticketStorage!.RemoveTicket(key, new Ticket(TicketType.PlayerLoading, ChunkLevel.EntityTickingLevel));
-            }
+        if (!_loadingTicketRefs.TryGetValue(key, out var count)) return;
+        if (count > 1)
+        {
+            _loadingTicketRefs[key] = count - 1;
+            return;
+        }
+        _loadingTicketRefs.Remove(key);
+        _ticketStorage!.RemoveTicket(key, new Ticket(TicketType.PlayerLoading, ChunkLevel.FullChunkLevel));
     }
 
     //AddSimulationTicket adds a simulation ticket on the player's chunk

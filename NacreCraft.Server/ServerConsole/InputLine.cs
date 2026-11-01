@@ -81,6 +81,60 @@ public sealed class InputLine
         Text = Text.Remove(Caret, 1);
     }
 
+    //KillToEnd removes from the caret to the end and returns what it took, the caller keeps it for a later paste
+    public string KillToEnd()
+    {
+        if (Caret >= Text.Length) return string.Empty;
+        LeaveHistory();
+        var removed = Text[Caret..];
+        Text = Text[..Caret];
+        return removed;
+    }
+
+    //KillToStart removes from the start to the caret and returns what it took
+    public string KillToStart()
+    {
+        if (Caret == 0) return string.Empty;
+        LeaveHistory();
+        var removed = Text[..Caret];
+        Text = Text[Caret..];
+        Caret = 0;
+        return removed;
+    }
+
+    //DeleteWordBackward removes the word left of the caret and returns it
+    public string DeleteWordBackward()
+    {
+        if (Caret == 0) return string.Empty;
+        LeaveHistory();
+        var start = WordStartBefore(Caret);
+        var removed = Text[start..Caret];
+        Text = Text[..start] + Text[Caret..];
+        Caret = start;
+        return removed;
+    }
+
+    //MoveWordLeft jumps to the start of the word left of the caret
+    public void MoveWordLeft() => Caret = WordStartBefore(Caret);
+
+    //MoveWordRight jumps past the word right of the caret
+    public void MoveWordRight()
+    {
+        var index = Caret;
+        while (index < Text.Length && !char.IsWhiteSpace(Text[index])) index++;
+        while (index < Text.Length && char.IsWhiteSpace(Text[index])) index++;
+        Caret = index;
+    }
+
+    //WordStartBefore walks back over the whitespace and then over the word, the boundary a shell uses for Ctrl+W
+    private int WordStartBefore(int from)
+    {
+        var index = from;
+        while (index > 0 && char.IsWhiteSpace(Text[index - 1])) index--;
+        while (index > 0 && !char.IsWhiteSpace(Text[index - 1])) index--;
+        return index;
+    }
+
     //MoveLeft moves the cursor left, stays put at the line start
     public void MoveLeft()
     {

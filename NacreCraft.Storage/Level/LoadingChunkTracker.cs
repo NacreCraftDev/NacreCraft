@@ -35,12 +35,12 @@ public sealed class LoadingChunkTracker : ChunkTracker
         var holder = _distanceManager.GetChunk(packedPos);
         var oldLevel = holder?.TicketLevel ?? MaxLevel;
         if (oldLevel == level) return;
-        //Only chunks still within the block-ticking tier after propagation get a new holder
+        //Only chunks still within the load range after propagation get a new holder
         //The criterion must be the passed-in level (the BFS propagation result), not the raw ticket level:
-        //The ring just outside view distance has no ticket itself, yet its level decays to 32 from neighbors, which is exactly the "load but do not tick" weak band
-        //Blocking by the raw ticket level would erase this whole band, leaving only chunks of the same tier inside the view distance
-        //Further out (33 and above) is only an empty shell of the load range; loading tickets are all 31 within view distance and the outer ring decaying from it has no practical use
-        if (holder is null && level > ChunkLevel.BlockTickingLevel) return;
+        //the ring just outside view distance has no ticket itself, yet its level decays to FULL + 1 from neighbours, which is
+        //exactly the "load but do not tick" weak band; blocking by the raw ticket level would erase that band
+        //The threshold is FULL because that is the level the player loading tickets carry, maps to vanilla LOADED_TICKET_LEVEL
+        if (holder is null && level > ChunkLevel.FullChunkLevel) return;
         if (_distanceManager.UpdateChunkScheduling(packedPos, level, holder, oldLevel) is { } updated)
             _distanceManager.ChunksToUpdateFutures.Add(updated);
     }

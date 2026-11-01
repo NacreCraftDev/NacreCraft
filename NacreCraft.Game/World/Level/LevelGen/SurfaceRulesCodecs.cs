@@ -9,19 +9,45 @@ namespace NacreCraft.Game.World.Level.LevelGen;
 //Dispatches by the type field to the subtype codecs; encode writes the type back from the runtime type
 public static class SurfaceRulesCodecs
 {
+    private static readonly ConditionSourceDispatchCodec ConditionSourceDispatch = new();
+
     //ConditionSourceCodec condition source dispatch codec
-    public static readonly Codec<SurfaceRules.ConditionSource> ConditionSourceCodec =
-        new ConditionSourceDispatchCodec();
+    //Declared before the rule dispatch below: a rule's nested condition field reads this field while that table is built
+    public static readonly Codec<SurfaceRules.ConditionSource> ConditionSourceCodec = ConditionSourceDispatch;
+
+    private static readonly RuleSourceDispatchCodec RuleSourceDispatch = new();
 
     //RuleSourceCodec rule source dispatch codec
-    public static readonly Codec<SurfaceRules.RuleSource> RuleSourceCodec =
-        new RuleSourceDispatchCodec();
+    public static readonly Codec<SurfaceRules.RuleSource> RuleSourceCodec = RuleSourceDispatch;
+
+    private static bool _registered;
+
+    //RegisterAll files every condition and rule type into the two registries, maps to the type registration of vanilla SurfaceRules
+    //The registries are weakly typed MapCodec<object>, so each entry is mapped on the way in and back out
+    public static void RegisterAll()
+    {
+        if (_registered) return;
+        _registered = true;
+        foreach (var (name, codec) in ConditionSourceDispatch.TypeCodecs)
+            Registry<MapCodec<object>>.Register(BuiltInRegistries.MATERIAL_CONDITION,
+                ResourceKey<MapCodec<object>>.Create(Registries.MATERIAL_CONDITION, Identifier.WithDefaultNamespace(name)),
+                new MappedMapCodec<SurfaceRules.ConditionSource, object>(
+                    codec, value => value, value => (SurfaceRules.ConditionSource)value));
+        foreach (var (name, codec) in RuleSourceDispatch.TypeCodecs)
+            Registry<MapCodec<object>>.Register(BuiltInRegistries.MATERIAL_RULE,
+                ResourceKey<MapCodec<object>>.Create(Registries.MATERIAL_RULE, Identifier.WithDefaultNamespace(name)),
+                new MappedMapCodec<SurfaceRules.RuleSource, object>(
+                    codec, value => value, value => (SurfaceRules.RuleSource)value));
+    }
 }
 
 //ConditionSourceDispatchCodec condition source type dispatch codec
 internal sealed class ConditionSourceDispatchCodec : AbstractMapCodec<SurfaceRules.ConditionSource>
 {
     private readonly IReadOnlyDictionary<string, MapCodec<SurfaceRules.ConditionSource>> _codecs;
+
+    //TypeCodecs the type table, exposed so RegisterAll can file every entry into MATERIAL_CONDITION
+    internal IReadOnlyDictionary<string, MapCodec<SurfaceRules.ConditionSource>> TypeCodecs => _codecs;
 
     public ConditionSourceDispatchCodec()
     {
@@ -99,7 +125,7 @@ internal sealed class ConditionSourceDispatchCodec : AbstractMapCodec<SurfaceRul
         var type = SurfaceRulesCodecHelper.ReadType(ops, input);
         if (!type.IsPresent)
             return DataResult<SurfaceRules.ConditionSource>.Error(() => "missing type field for ConditionSource");
-        var codec = Lookup(_codecs, type.Get());
+        var codec = LookupRegistered<SurfaceRules.ConditionSource, U>(ops, Registries.MATERIAL_CONDITION, type.Get());
         if (codec is null)
             return DataResult<SurfaceRules.ConditionSource>.Error(() => $"unknown condition type: {type.Get()}");
         var decoded = codec.Decode(ops, input);
@@ -110,6 +136,27 @@ internal sealed class ConditionSourceDispatchCodec : AbstractMapCodec<SurfaceRul
             ? DataResult<SurfaceRules.ConditionSource>.Success(value.Get())
             : DataResult<SurfaceRules.ConditionSource>.Error(() => $"failed to decode condition type {type.Get()}: {cause}");
     }
+
+    //LookupRegistered resolves a type against the registry, maps to the registry dispatch of vanilla SurfaceRules
+    //The registry stores MapCodec<object>, so the entry is mapped back to the strongly typed shape here
+    internal static MapCodec<T>? LookupRegistered<T, U>(DynamicOps<U> ops, ResourceKey<Registry<MapCodec<object>>> registryKey,
+        string type)
+    {
+        var id = Identifier.TryParse(type);
+        if (id is null) return null;
+        var registry = (ops as RegistryOps<U>)?.GetRegistry(registryKey) ?? RegistryOf(registryKey);
+        if (registry is null) return null;
+        var boxed = registry.GetValue(ResourceKey<MapCodec<object>>.Create(registryKey, id.Value));
+        return boxed is null
+            ? null
+            : new MappedMapCodec<object, T>(boxed, value => (T)value, value => value!);
+    }
+
+    //RegistryOf resolves the built-in registry for the two rule registries
+    private static Registry<MapCodec<object>>? RegistryOf(ResourceKey<Registry<MapCodec<object>>> key)
+        => key.Equals(Registries.MATERIAL_CONDITION) ? BuiltInRegistries.MATERIAL_CONDITION
+            : key.Equals(Registries.MATERIAL_RULE) ? BuiltInRegistries.MATERIAL_RULE
+            : null;
 
     public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, SurfaceRules.ConditionSource value, RecordBuilder<U> builder)
     {
@@ -134,6 +181,9 @@ internal sealed class ConditionSourceDispatchCodec : AbstractMapCodec<SurfaceRul
 internal sealed class RuleSourceDispatchCodec : AbstractMapCodec<SurfaceRules.RuleSource>
 {
     private readonly IReadOnlyDictionary<string, MapCodec<SurfaceRules.RuleSource>> _codecs;
+
+    //TypeCodecs the type table, exposed so RegisterAll can file every entry into MATERIAL_RULE
+    internal IReadOnlyDictionary<string, MapCodec<SurfaceRules.RuleSource>> TypeCodecs => _codecs;
 
     public RuleSourceDispatchCodec()
     {
@@ -162,7 +212,8 @@ internal sealed class RuleSourceDispatchCodec : AbstractMapCodec<SurfaceRules.Ru
         var type = SurfaceRulesCodecHelper.ReadType(ops, input);
         if (!type.IsPresent)
             return DataResult<SurfaceRules.RuleSource>.Error(() => "missing type field for RuleSource");
-        var codec = ConditionSourceDispatchCodec.Lookup(_codecs, type.Get());
+        var codec = ConditionSourceDispatchCodec.LookupRegistered<SurfaceRules.RuleSource, U>(ops,
+            Registries.MATERIAL_RULE, type.Get());
         if (codec is null)
             return DataResult<SurfaceRules.RuleSource>.Error(() => $"unknown rule type: {type.Get()}");
         var decoded = codec.Decode(ops, input);

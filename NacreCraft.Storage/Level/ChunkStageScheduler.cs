@@ -32,7 +32,42 @@ public sealed class ChunkStageScheduler
 
     private readonly record struct StageTrace(ChunkPos Pos, ChunkStatus Status, long Since, long ScheduledAt, long QueueKey);
 
-    public ChunkStageScheduler(IChunkStagePipeline pipeline) => _pipeline = pipeline;
+    //_holders resolves a neighbour holder so a running stage can mark it in use, maps to Paper's chunkHolderManager lookup
+    private readonly Func<ChunkPos, ChunkHolder?>? _holders;
+
+    public ChunkStageScheduler(IChunkStagePipeline pipeline, Func<ChunkPos, ChunkHolder?>? holders = null)
+    {
+        _pipeline = pipeline;
+        _holders = holders;
+    }
+
+    //IsActive whether a stage task for the chunk is queued or running, maps to Paper's generationTask != null
+    public bool IsActive(long key) => _executing.ContainsKey(key) || _pendingTasks.ContainsKey(key);
+
+    //AcquireNeighbours marks the 3x3 neighbourhood in use for the duration of a stage, maps to addNeighbourUsingChunk
+    //A stage reads its neighbours, so one being unloaded underneath would force the reader to regenerate
+    private void AcquireNeighbours(ChunkPos pos)
+    {
+        if (_holders is null) return;
+        for (var offsetX = -1; offsetX <= 1; offsetX++)
+        for (var offsetZ = -1; offsetZ <= 1; offsetZ++)
+        {
+            if (offsetX == 0 && offsetZ == 0) continue;
+            _holders(new ChunkPos(pos.X + offsetX, pos.Z + offsetZ))?.AddUser();
+        }
+    }
+
+    //ReleaseNeighbours drops the marks taken by AcquireNeighbours, maps to removeNeighbourUsingChunk
+    private void ReleaseNeighbours(ChunkPos pos)
+    {
+        if (_holders is null) return;
+        for (var offsetX = -1; offsetX <= 1; offsetX++)
+        for (var offsetZ = -1; offsetZ <= 1; offsetZ++)
+        {
+            if (offsetX == 0 && offsetZ == 0) continue;
+            _holders(new ChunkPos(pos.X + offsetX, pos.Z + offsetZ))?.RemoveUser();
+        }
+    }
 
     //Reprioritise reorders a task that is still waiting, maps to Paper's ChunkTaskScheduler.raisePriority
     //A task already picked up by a worker cannot be moved: it finishes the stage and re-enters through Enqueue,
@@ -118,6 +153,7 @@ public sealed class ChunkStageScheduler
         _regionServed.AddOrUpdate(RegionKey(task.Chunk.Pos), 1L, static (_, value) => value + 1);
         Interlocked.Decrement(ref _queued);
         Interlocked.Increment(ref _running);
+        AcquireNeighbours(task.Chunk.Pos);
         try
         {
             while (true)
@@ -160,6 +196,7 @@ public sealed class ChunkStageScheduler
         }
         finally
         {
+            ReleaseNeighbours(task.Chunk.Pos);
             _executing.TryRemove(key, out _);
             Interlocked.Decrement(ref _running);
         }

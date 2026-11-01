@@ -200,8 +200,7 @@ public sealed class PlayerList
             //SetHealth/SetExperience from the restored health and xp; no save means full health and zero xp
             connection.Send(new ClientboundSetHealthPacket(player.Health, 20, 5f));
             connection.Send(new ClientboundSetExperiencePacket(player.XpProgress, player.XpTotal, player.XpLevel));
-            //SetChunkCacheRadius view distance
-            connection.Send(new ClientboundSetChunkCacheRadiusPacket(viewDistance));
+            //SetChunkCacheRadius and SetSimulationDistance are pushed by ChunkSender.UpdateCenter, alongside the center
             //Permission level; without this event the client thinks it is level 0 and the F3+F4 entries are blocked by the client itself
             SendPlayerPermissionLevel(player);
             var chunkX = (int)Math.Floor(player.Position.X / 16);

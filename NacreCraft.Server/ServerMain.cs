@@ -1,6 +1,7 @@
 using System.IO;
 using System.Threading;
 using NacreCraft;
+using NacreCraft.Codec;
 using NacreCraft.Config;
 using NacreCraft.DataFixer;
 using NacreCraft.Game.Bootstrap;
@@ -65,7 +66,12 @@ public static class ServerMain
         LaunchOptions.DeclareKernelFlag("potato");
         //trace begins a runtime trace capture at startup, so a boot that misbehaves can be looked at afterwards
         LaunchOptions.DeclareKernelFlag("trace");
-        var useGui = Array.IndexOf(args, "--nogui") < 0 && Array.IndexOf(args, "nogui") < 0;
+        var guiRequested = Array.IndexOf(args, "--nogui") < 0 && Array.IndexOf(args, "nogui") < 0;
+        //A session with no display server cannot host the window, and platform detection only finds that out by throwing
+        //while the message loop starts, which takes the whole process down; the check happens before anything is created
+        var useGui = guiRequested && ServerGuiHost.IsAvailable();
+        if (guiRequested && !useGui)
+            Log.Warning("No display server was found, the server GUI stays off and the server runs headless");
         //Without a desktop the error window has nowhere to appear, so a crash there only writes its report as before
         CrashHandler.ErrorWindowEnabled = useGui;
         var useConsole = Array.IndexOf(args, "--noconsole") < 0;
@@ -184,6 +190,20 @@ public static class ServerMain
             new RegistryData<NacreCraft.Registry.StructureSet>(
                 (WritableRegistry<NacreCraft.Registry.StructureSet>)BuiltInRegistries.STRUCTURE_SET,
                 NacreCraft.Game.World.Level.LevelGen.Structure.StructureSetCodecs.ElementCodec),
+            //chat_type is a plain content table with no references, it only needs the component codec behind its decorations
+            RegistryData.Boxed((WritableRegistry<object>)BuiltInRegistries.CHAT_TYPE,
+                NacreCraft.Network.Chat.ChatType.Codec.Xmap<NacreCraft.Network.Chat.ChatType, object>(
+                    value => value, value => (NacreCraft.Network.Chat.ChatType)value)),
+            //Content tables with no cross-references; each entry only names plain values and a component description
+            new RegistryData<NacreCraft.Registry.TrimMaterial>(
+                (WritableRegistry<NacreCraft.Registry.TrimMaterial>)BuiltInRegistries.TRIM_MATERIAL,
+                NacreCraft.Game.World.Datapack.ContentCodecs.Material),
+            new RegistryData<NacreCraft.Registry.TrimPattern>(
+                (WritableRegistry<NacreCraft.Registry.TrimPattern>)BuiltInRegistries.TRIM_PATTERN,
+                NacreCraft.Game.World.Datapack.ContentCodecs.Pattern),
+            new RegistryData<NacreCraft.Registry.JukeboxSong>(
+                (WritableRegistry<NacreCraft.Registry.JukeboxSong>)BuiltInRegistries.JUKEBOX_SONG,
+                NacreCraft.Game.World.Datapack.ContentCodecs.Song),
         });
         Log.Info($"Registry data loaded: {registryLoad.LoadedCount} elements, {registryLoad.Errors.Count} errors");
         foreach (var error in registryLoad.Errors) Log.Warning($"Registry element failed to load: {error}");

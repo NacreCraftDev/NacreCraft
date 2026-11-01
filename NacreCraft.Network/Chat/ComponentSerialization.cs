@@ -34,6 +34,10 @@ public static class ComponentSerialization
         },
         component => ToJson(component));
 
+    //JsonCodec decodes the on-disk form, where a component is either a bare string or an object carrying translate,
+    //style and siblings; the string Codec above only accepts the SNBT entry form and cannot read the data pack files
+    public static readonly Codec<Component> JsonCodec = new ComponentDataCodec();
+
     //JSON-serializes a Component into a string
     public static string ToJson(Component component)
     {
@@ -299,6 +303,28 @@ public static class ComponentSerialization
             using var doc = JsonDocument.Parse(ToJson(value));
             buf.WriteNbt(JsonToTag(doc.RootElement));
         }
+    }
+
+    //ComponentDataCodec reads a component the way the data pack writes it: a bare string or a json object
+    //It converts whatever ops it is handed into json and reuses the json reader, so one implementation covers both forms
+    private sealed class ComponentDataCodec : ScalarCodec<Component>
+    {
+        public override DataResult<Component> Parse<U>(DynamicOps<U> ops, U input)
+        {
+            var json = ops.ConvertTo(JsonOps.Instance, input);
+            if (json is null) return DataResult<Component>.Error(() => "component is empty");
+            try
+            {
+                return DataResult<Component>.Success(FromJson(json.ToJsonString()));
+            }
+            catch (Exception e)
+            {
+                return DataResult<Component>.Error(() => e.Message);
+            }
+        }
+
+        public override DataResult<U> EncodeStart<U>(DynamicOps<U> ops, Component value)
+            => DataResult<U>.Success(JsonOps.Instance.ConvertTo(ops, JsonNode.Parse(ToJson(value))));
     }
 
     //Converts JsonElement to NBT Tag: bool to ByteTag, numbers to Int/Long/Double by precision

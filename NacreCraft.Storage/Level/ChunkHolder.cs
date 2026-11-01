@@ -35,6 +35,20 @@ public sealed class ChunkHolder
     //Priority, the ordering key the stage scheduler uses; whichever of the ticket level and an explicit boost is smaller
     public int Priority => Math.Min(Volatile.Read(ref _boosted), TicketLevel);
 
+    //_users how many running generation tasks read this chunk as a neighbour, maps to Paper's totalNeighboursUsingThisChunk
+    //and to the neighboursWaitingForUs set. A holder with a user must not be unloaded: the task holding it would lose the
+    //data it is reading and end up regenerating, which is what made moving look like a churn of load and unload
+    private int _users;
+
+    //InUse whether any generation task currently depends on this chunk
+    public bool InUse => Volatile.Read(ref _users) > 0;
+
+    //AddUser registers one generation task reading this chunk
+    public void AddUser() => Interlocked.Increment(ref _users);
+
+    //RemoveUser drops one such registration, maps to removeNeighbourUsingChunk
+    public void RemoveUser() => Interlocked.Decrement(ref _users);
+
     private ChunkAccess? _chunk;
     private ChunkStatus _status = ChunkStatus.EMPTY;
     private readonly TaskCompletionSource<ChunkResult> _future =

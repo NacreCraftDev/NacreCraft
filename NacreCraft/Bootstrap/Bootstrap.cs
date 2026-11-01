@@ -52,7 +52,8 @@ public static class Bootstrap
         int total = 0;
         int emptyCount = 0;
         int regCount = 0;
-        foreach (var (_, registry) in BuiltInRegistries.EnumerateRegistries())
+        List<string>? empty = null;
+        foreach (var (id, registry) in BuiltInRegistries.EnumerateRegistries())
         {
             //Use reflection for Freeze and Size to avoid generic covariance restrictions
             registry.GetType().GetMethod("Freeze")?.Invoke(registry, null);
@@ -60,9 +61,15 @@ public static class Bootstrap
             int count = (int)(sizeProp?.GetValue(registry) ?? 0);
             regCount++;
             total += count;
-            if (count == 0) emptyCount++;
+            if (count == 0)
+            {
+                emptyCount++;
+                (empty ??= new List<string>()).Add(id.ToString());
+            }
         }
         Log.Info($"Registry validation complete: {regCount} registries, {total} entries, {emptyCount} empty");
+        //Name the empty ones: an empty registry means whatever subsystem owns it never registered its entries
+        if (empty is not null) Log.Info($"Empty registries ({empty.Count}): {string.Join(", ", empty)}");
         //Log.Debug($"ValidateRegistries exit");
     }
 

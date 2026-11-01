@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <cwchar>
 #include <map>
@@ -103,16 +104,27 @@ static ICorProfilerInfo* g_profiler_info = nullptr;
 //It is taken from the same object during Initialize and released the same way
 static ICorProfilerInfo7* g_profiler_info7 = nullptr;
 
-//The runtime mask has to carry what both sides need
+//BuildProfilerEventMask decides what the runtime is asked to report
 //
 //A process has exactly one profiler, so there is one mask, and setting it twice would have the later call replace the
 //earlier one and silently switch that side off. The union is therefore built here and set once.
 //
-//MONITOR_JIT_COMPILATION is notification only and costs nothing by itself
-//ENABLE_REJIT is what makes RequestReJIT possible, and the runtime refuses it unless ReadyToRun images are given up
-//alongside it, which is why DISABLE_ALL_NGEN_IMAGES comes too
-static const DWORD ProfilerEventMask = COR_PRF_MONITOR_JIT_COMPILATION | COR_PRF_MONITOR_MODULE_LOADS |
-    COR_PRF_ENABLE_REJIT | COR_PRF_DISABLE_ALL_NGEN_IMAGES;
+//MONITOR_JIT_COMPILATION is notification only and costs nothing by itself.
+//
+//ReJIT stays off unless NCN_REJIT asks for it, because the runtime refuses ENABLE_REJIT unless ReadyToRun images are
+//given up alongside it and that is where the cost is: corprof.idl spells DISABLE_ALL_NGEN_IMAGES out as keeping every
+//NGEN image from loading, so the whole framework falls back to JIT. The level generator spends most of its time inside
+//framework code, which makes that trade pure loss while nothing asks for a rewrite
+static DWORD BuildProfilerEventMask()
+{
+    DWORD mask = COR_PRF_MONITOR_JIT_COMPILATION | COR_PRF_MONITOR_MODULE_LOADS;
+
+    const char* rejit = std::getenv("NCN_REJIT");
+    if (rejit != nullptr && rejit[0] != '\0' && std::strcmp(rejit, "0") != 0)
+        mask |= COR_PRF_ENABLE_REJIT | COR_PRF_DISABLE_ALL_NGEN_IMAGES;
+
+    return mask;
+}
 
 //SetProfilerMask enables the combined mask and reports whether the runtime took it
 //A failure costs both the early stack check and every runtime rewrite, so it is surfaced rather than swallowed
@@ -121,7 +133,7 @@ static bool SetProfilerMask()
     if (g_profiler_info == nullptr)
         return false;
 
-    const HRESULT hr = g_profiler_info->SetEventMask(ProfilerEventMask);
+    const HRESULT hr = g_profiler_info->SetEventMask(BuildProfilerEventMask());
     return SUCCEEDED(hr);
 }
 
@@ -324,11 +336,23 @@ static bool HasEcosystemReference(ModuleID moduleId)
     return referenced;
 }
 
-//IsRewritableModule asks the Rust side whether this module is on the configured list
+//Whether a module's bodies get the check, worked out once per module
+//
+//Every body that reaches the decision asks the same question, and the answer cannot change for a module; without the
+//cache each compiled method pays for a walk into the assembly metadata plus two calls across the language boundary
+static std::map<ModuleID, bool> g_rewritable_modules;
+static std::mutex g_rewritable_modules_mutex;
+
+//ComputeRewritableModule asks the Rust side whether this module is on the configured list
 //The name is taken from the assembly rather than the file path: a mod can be handed to the runtime as a byte array,
 //which leaves the module with no path at all, while its assembly name is present however it was loaded
-static bool IsRewritableModule(AssemblyID assemblyId)
+static bool ComputeRewritableModule(ModuleID callerModuleId)
 {
+    AssemblyID assemblyId = 0;
+    if (FAILED(g_profiler_info->GetModuleInfo(
+            callerModuleId, nullptr, 0, nullptr, nullptr, &assemblyId)))
+        return false;
+
     WCHAR assemblyName[512];
     ULONG nameLength = 0;
     AppDomainID appDomainId = 0;
@@ -356,6 +380,27 @@ static bool IsRewritableModule(AssemblyID assemblyId)
 
     //Reported either way so a run shows which assemblies were asked about and which ones the list took
     ncn_on_module_seen(simpleName, accepted ? 1 : 0);
+    return accepted;
+}
+
+//IsRewritableModule answers from the per module cache, computing the verdict the first time a module is asked about
+//Two threads racing on the same module both compute it; the answer does not depend on who wins, so the write is free
+static bool IsRewritableModule(ModuleID moduleId)
+{
+    {
+        std::lock_guard<std::mutex> guard(g_rewritable_modules_mutex);
+        const auto found = g_rewritable_modules.find(moduleId);
+        if (found != g_rewritable_modules.end())
+            return found->second;
+    }
+
+    const bool accepted = ComputeRewritableModule(moduleId);
+
+    {
+        std::lock_guard<std::mutex> guard(g_rewritable_modules_mutex);
+        g_rewritable_modules[moduleId] = accepted;
+    }
+
     return accepted;
 }
 
@@ -660,16 +705,13 @@ static void TryInjectStackCheck(FunctionID functionId, BOOL isSafeToBlock)
     if (FAILED(g_profiler_info->GetFunctionInfo(functionId, &classId, &moduleId, &methodDef)))
         return;
 
+    //A module outside the rewrite list is the common case by far and its verdict is cached, so asking first keeps the
+    //bookkeeping below off every framework body the runtime compiles
+    if (!IsRewritableModule(moduleId))
+        return;
+
     //Replacing a body twice is not something the runtime supports, so a method already handled is left alone
     if (!MarkRewritten(moduleId, methodDef))
-        return;
-
-    //The assembly is what the configured list names, so it is resolved from the module rather than kept alongside
-    AssemblyID assemblyId = 0;
-    if (FAILED(g_profiler_info->GetModuleInfo(moduleId, nullptr, 0, nullptr, nullptr, &assemblyId)))
-        return;
-
-    if (!IsRewritableModule(assemblyId))
         return;
 
     IMetaDataImport* import = nullptr;

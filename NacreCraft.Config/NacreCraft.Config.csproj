@@ -1,9 +1,77 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <!-- Build stamps. The counter and the compile time live under obj so they never show up in the source tree; they only
+       move when the sources do, because IncrementBuildNumber is an incremental target whose outputs are those two files. -->
+  <PropertyGroup>
+    <BuildNumberFile>$(BaseIntermediateOutputPath)build-number.txt</BuildNumberFile>
+    <BuildDateFile>$(BaseIntermediateOutputPath)build-date.txt</BuildDateFile>
+  </PropertyGroup>
+
+  <!-- Every source file of the solution is an input, not just this project's: a change in any module has to advance the
+       number, otherwise a build carrying new code would keep reporting an old one. bin and obj are excluded because their
+       contents change without the code changing and would bump the number on an otherwise empty build. -->
+  <ItemGroup>
+    <BuildStampInput Include="$(MSBuildThisFileDirectory)..\**\*.cs"
+                     Exclude="$(MSBuildThisFileDirectory)..\**\bin\**\*.cs;$(MSBuildThisFileDirectory)..\**\obj\**\*.cs" />
+    <BuildStampInput Include="$(MSBuildThisFileDirectory)..\**\*.csproj"
+                     Exclude="$(MSBuildThisFileDirectory)..\**\bin\**\*.csproj;$(MSBuildThisFileDirectory)..\**\obj\**\*.csproj" />
+  </ItemGroup>
+
+  <Target Name="IncrementBuildNumber" BeforeTargets="BeforeBuild"
+          Inputs="@(BuildStampInput)" Outputs="$(BuildNumberFile);$(BuildDateFile)"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <PropertyGroup>
+      <PreviousBuildNumber>0</PreviousBuildNumber>
+    </PropertyGroup>
+    <ReadLinesFromFile File="$(BuildNumberFile)" Condition="Exists('$(BuildNumberFile)')">
+      <Output TaskParameter="Lines" PropertyName="PreviousBuildNumber" />
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <PreviousBuildNumber Condition="'$(PreviousBuildNumber)' == ''">0</PreviousBuildNumber>
+      <BuildNumber>$([MSBuild]::Add('$(PreviousBuildNumber)', 1))</BuildNumber>
+      <BuildDate>$([System.DateTime]::Now.ToString('yyyyMMddHHmmss'))</BuildDate>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(BuildNumberFile)" Lines="$(BuildNumber)" Overwrite="true" />
+    <WriteLinesToFile File="$(BuildDateFile)" Lines="$(BuildDate)" Overwrite="true" />
+  </Target>
+
+  <Target Name="GenerateBuildInfo" BeforeTargets="BeforeCompile" DependsOnTargets="IncrementBuildNumber">
+    <PropertyGroup>
+      <BuildInfoGenerated>$(IntermediateOutputPath)NacreCraft.Config.BuildInfo.g.cs</BuildInfoGenerated>
+      <BuildNumber>0</BuildNumber>
+      <BuildDate>0</BuildDate>
+    </PropertyGroup>
+    <ReadLinesFromFile File="$(BuildNumberFile)" Condition="Exists('$(BuildNumberFile)')">
+      <Output TaskParameter="Lines" PropertyName="BuildNumber" />
+    </ReadLinesFromFile>
+    <ReadLinesFromFile File="$(BuildDateFile)" Condition="Exists('$(BuildDateFile)')">
+      <Output TaskParameter="Lines" PropertyName="BuildDate" />
+    </ReadLinesFromFile>
+    <!-- Regenerated on every build but only rewritten when the stamps moved, so a no-op build does not force a recompile.
+         Semicolons are item separators in MSBuild, so a trailing one has to be escaped or it is eaten. -->
+    <ItemGroup>
+      <BuildInfoLine Include="// &lt;auto-generated/&gt; written by GenerateBuildInfo on every build" />
+      <BuildInfoLine Include="namespace NacreCraft.Config%3B" />
+      <BuildInfoLine Include="public static partial class BuildInfo" />
+      <BuildInfoLine Include="{" />
+      <BuildInfoLine Include="    //BuildNumber increments once per build" />
+      <BuildInfoLine Include="    public const string BuildNumber = &quot;$(BuildNumber)&quot;%3B" />
+      <BuildInfoLine Include="    //BuildDate compile time, yyyyMMddHHmmss" />
+      <BuildInfoLine Include="    public const string BuildDate = &quot;$(BuildDate)&quot;%3B" />
+      <BuildInfoLine Include="}" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(BuildInfoGenerated)" Lines="@(BuildInfoLine)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <!-- Added every build: the item has to be in Compile before CoreCompile even when the file did not change -->
+    <ItemGroup>
+      <Compile Include="$(BuildInfoGenerated)" />
+      <FileWrites Include="$(BuildInfoGenerated)" />
+    </ItemGroup>
+  </Target>
 
 </Project>

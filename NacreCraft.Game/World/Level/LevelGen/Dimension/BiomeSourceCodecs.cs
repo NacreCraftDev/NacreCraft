@@ -4,9 +4,8 @@ using NacreCraft.Registry.Codec;
 
 namespace NacreCraft.Game.World.Level.LevelGen.Dimension;
 
-//BiomeSourceCodecs biome source codecs, maps to vanilla BiomeSources registration and dispatch
-//Vanilla dispatches through the MapCodec registry; this codebase has a closed set of types, so branch on the type field by hand
-//multi_noise supports the preset form; the_end pulls its five end biomes from the registry
+//BiomeSourceCodecs biome source dispatch, maps to vanilla BiomeSources dispatch
+//The codec for each type lives in the BIOME_SOURCE registry; this only reads the type field and forwards to it
 public static class BiomeSourceCodecs
 {
     //Decode derive the biome source from the type field
@@ -22,58 +21,24 @@ public static class BiomeSourceCodecs
         if (typeId is null)
             return DataResult<BiomeSource>.Error(() => $"invalid biome source type id {typeText}");
 
-        switch (typeId.Value.Path)
-        {
-            case "multi_noise":
-                return DecodeMultiNoise(ops, input);
-            case "the_end":
-                return DecodeTheEnd(ops);
-            default:
-                return DataResult<BiomeSource>.Error(() => $"unsupported biome source type {typeId}");
-        }
-    }
-
-    //DecodeTheEnd the end biome source takes no arguments; its five fixed biomes come from the registry
-    private static DataResult<BiomeSource> DecodeTheEnd<U>(DynamicOps<U> ops)
-    {
-        var source = TheEndBiomeSource.FromRegistry(BiomeRegistry(ops));
-        return source is null
-            ? DataResult<BiomeSource>.Error(() => "end biome source is missing required biomes (the_end/end_highlands/end_midlands/small_end_islands/end_barrens)")
-            : DataResult<BiomeSource>.Success(source);
-    }
-
-    //DecodeMultiNoise multi-noise biome source; only the preset form is supported for now
-    //The inline biomes list form is unused by the data pack; add it when needed
-    private static DataResult<BiomeSource> DecodeMultiNoise<U>(DynamicOps<U> ops, MapLike<U> input)
-    {
-        var presetText = ReadString(ops, input, "preset");
-        if (presetText is null)
-            return DataResult<BiomeSource>.Error(() => "multi_noise only supports the preset form for now");
-        var presetId = Identifier.TryParse(presetText);
-        if (presetId is null)
-            return DataResult<BiomeSource>.Error(() => $"invalid parameter list preset id {presetText}");
-        //The parameter list must already be loaded by data; if missing, the pack lacks worldgen/multi_noise_biome_source_parameter_list
-        var registry = ParameterListRegistry(ops);
-        if (registry is null)
-            return DataResult<BiomeSource>.Error(() => "parameter list registry is missing");
-        //A pure read of the key index; decoding is concurrent and must not create holders
-        var holder = registry.GetHolder(presetId.Value);
-        return holder is null
-            ? DataResult<BiomeSource>.Error(() => $"parameter list preset {presetId} not found")
-            : DataResult<BiomeSource>.Success(new MultiNoiseBiomeSource(holder));
+        var registry = (ops as RegistryOps<U>)?.GetRegistry(Registries.BIOME_SOURCE) ?? BuiltInRegistries.BIOME_SOURCE;
+        var codec = registry.GetValue(ResourceKey<MapCodec<BiomeSource>>.Create(Registries.BIOME_SOURCE, typeId.Value));
+        return codec is null
+            ? DataResult<BiomeSource>.Error(() => $"unsupported biome source type {typeId}")
+            : codec.Decode(ops, input);
     }
 
     //ParameterListRegistry prefer the registry carried by RegistryOps; fall back to the built-in one for plain ops
-    private static Registry<object>? ParameterListRegistry<U>(DynamicOps<U> ops)
+    internal static Registry<object>? ParameterListRegistry<U>(DynamicOps<U> ops)
         => (ops as RegistryOps<U>)?.GetRegistry(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST)
             ?? BuiltInRegistries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST;
 
     //BiomeRegistry same as above for biomes; tests can pass an isolated registry without touching the global one
-    private static Registry<Biome>? BiomeRegistry<U>(DynamicOps<U> ops)
+    internal static Registry<Biome>? BiomeRegistry<U>(DynamicOps<U> ops)
         => (ops as RegistryOps<U>)?.GetRegistry(Registries.BIOME) ?? BuiltInRegistries.BIOME;
 
     //ReadString read a string field; returns null when missing or not a string
-    private static string? ReadString<U>(DynamicOps<U> ops, MapLike<U> input, string name)
+    internal static string? ReadString<U>(DynamicOps<U> ops, MapLike<U> input, string name)
     {
         var tag = input.Get(name);
         if (!tag.IsPresent) return null;

@@ -1,3 +1,4 @@
+using NacreCraft.Codec;
 using NacreCraft.Registry;
 
 namespace NacreCraft.Network.Chat;
@@ -40,6 +41,9 @@ public sealed class ChatType
         Chat = chat;
         Narration = narration;
     }
+
+    //Codec the data pack form of a chat type, maps to vanilla ChatType.CODEC
+    public static readonly Codec<ChatType> Codec = new ChatTypeCodec();
 
     //Create builds a ChatType ResourceKey, aligns with vanilla create
     private static ResourceKey<object> Create(string name)
@@ -143,4 +147,48 @@ internal sealed class ChatTypeBoundCodec : StreamCodec<RegistryFriendlyByteBuf, 
         buf.WriteBoolean(hasTarget);
         if (hasTarget) ComponentSerialization.StreamCodec.Encode(buf, value.TargetName!);
     }
+}
+
+//ChatTypeCodec data pack codec for ChatType, maps to vanilla ChatType.CODEC
+//The style field of a decoration is ignored on load: the translation key and the parameter list are what drive the
+//decoration, and the data pack only uses the plain style
+internal sealed class ChatTypeCodec : AbstractMapCodec<ChatType>
+{
+    private static readonly MapCodec<ChatTypeDecoration> Decoration =
+        RecordCodecBuilder.Of2<ChatTypeDecoration, string, IReadOnlyList<string>>(
+            Codecs.String.FieldOf("translation_key")
+                .ForGetter<ChatTypeDecoration, string>(decoration => decoration.TranslationKey),
+            Codecs.String.ListOf().FieldOf("parameters")
+                .ForGetter<ChatTypeDecoration, IReadOnlyList<string>>(
+                    decoration => decoration.Parameters.Select(parameter => parameter.GetName()).ToList()),
+            (key, parameters) => new ChatTypeDecoration(key, parameters.Select(ParseParameter).ToList(), Style.Empty));
+
+    public override DataResult<ChatType> Decode<U>(DynamicOps<U> ops, MapLike<U> input)
+    {
+        var chat = ReadDecoration<U>(ops, input, "chat");
+        if (!chat.Result().IsPresent)
+            return DataResult<ChatType>.Error(() => "chat type is missing the chat decoration");
+        var narration = ReadDecoration<U>(ops, input, "narration");
+        if (!narration.Result().IsPresent)
+            return DataResult<ChatType>.Error(() => "chat type is missing the narration decoration");
+        return DataResult<ChatType>.Success(new ChatType(chat.GetOrThrow(), narration.GetOrThrow()));
+    }
+
+    public override RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, ChatType value, RecordBuilder<U> builder)
+        => throw new NotSupportedException("encoding chat types is not supported yet");
+
+    private static DataResult<ChatTypeDecoration> ReadDecoration<U>(DynamicOps<U> ops, MapLike<U> input, string name)
+    {
+        var tag = input.Get(name);
+        if (!tag.IsPresent) return DataResult<ChatTypeDecoration>.Error(() => $"missing {name} decoration");
+        return ops.GetMap(tag.Get()).FlatMap(map => Decoration.Decode(ops, map));
+    }
+
+    //ParseParameter maps the serialized parameter name back to the enum, unknown names fall back to sender like vanilla
+    private static ChatTypeDecoration.Parameter ParseParameter(string name) => name switch
+    {
+        "target" => ChatTypeDecoration.Parameter.TARGET,
+        "content" => ChatTypeDecoration.Parameter.CONTENT,
+        _ => ChatTypeDecoration.Parameter.SENDER
+    };
 }

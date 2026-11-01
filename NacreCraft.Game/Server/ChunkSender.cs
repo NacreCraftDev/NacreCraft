@@ -49,6 +49,10 @@ public sealed class ChunkSender
     //_blockedSince when the send head first became unready, zero while sending progresses; drives the diagnostic line
     private long _blockedSince;
     private long _lastBlockLog;
+    //Last view radius and simulation distance pushed to the client, maps to lastSentChunkRadius and
+    //lastSentSimulationDistance in Paper's PlayerChunkLoaderData; the client sizes its own view and request rate from them
+    private int _sentRadius = -1;
+    private int _sentSimulationDistance = -1;
     private bool _closed;
 
     public ChunkSender(Connection connection, Func<ChunkPos, ChunkAccess?> provider,
@@ -106,6 +110,18 @@ public sealed class ChunkSender
         //Forgetting on leaving view: unsent ones are only dequeued, sent ones send a Forget packet, maps to vanilla dropChunk
         foreach (var key in _tracked.Where(key => DistanceSquared(ChunkPos.Unpack(key)) > radiusSquared).ToList())
             DropChunk(key);
+        //The client sizes its own view and its chunk request rate from these two, maps to the radius and simulation
+        //distance sync at the end of Paper's update(); a stale value leaves it waiting for a range the server never sends
+        if (_sentRadius != radius)
+        {
+            _sentRadius = radius;
+            _connection.Send(new ClientboundSetChunkCacheRadiusPacket(radius));
+        }
+        if (_lightSource is { } source && _sentSimulationDistance != source.SimulationDistance)
+        {
+            _sentSimulationDistance = source.SimulationDistance;
+            _connection.Send(new ClientboundSetSimulationDistancePacket(source.SimulationDistance));
+        }
         _connection.Send(new ClientboundSetChunkCacheCenterPacket(centerChunkX, centerChunkZ));
     }
 

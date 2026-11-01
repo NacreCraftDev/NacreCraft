@@ -4,7 +4,7 @@ namespace NacreCraft.Storage;
 
 //DirectoryLock, directory lock, maps to vanilla net.minecraft.world.level.storage.DirectoryLock
 //Uses a session.lock file for exclusivity, preventing multiple processes opening the same world
-//Portably uses the managed FileStream.Lock API, no platform-specific calls
+//Exclusivity comes from the share mode alone, no platform-specific calls
 public sealed class DirectoryLock : IDisposable
 {
     private const string LockFileName = "session.lock";
@@ -24,6 +24,10 @@ public sealed class DirectoryLock : IDisposable
             throw new DirectoryNotFoundException($"World directory not found: {dir}");
 
         var lockPath = Path.Combine(dir, LockFileName);
+        //FileShare.None is the whole lock. Windows refuses any second handle through the share mode, and Unix takes it
+        //through flock. Adding FileStream.Lock on top would be a second mechanism: Windows keeps that one in a separate
+        //table, but a filesystem that collapses both into one slot, which WSL's drvfs does, makes the second call fail
+        //against the first and reports it as another process holding the file
         var stream = new FileStream(
             lockPath,
             FileMode.Create,
@@ -36,8 +40,6 @@ public sealed class DirectoryLock : IDisposable
             var bytes = Encoding.UTF8.GetBytes(timestamp.ToString());
             stream.Write(bytes, 0, bytes.Length);
             stream.Flush(true);
-            //The exclusive lock uses the managed Lock API for portability
-            stream.Lock(0, stream.Length);
         }
         catch
         {
@@ -47,16 +49,6 @@ public sealed class DirectoryLock : IDisposable
         return new DirectoryLock(stream);
     }
 
-    public void Dispose()
-    {
-        try
-        {
-            if (_stream.Length > 0)
-                _stream.Unlock(0, _stream.Length);
-        }
-        catch
-        {
-        }
-        _stream.Dispose();
-    }
+    //Closing the handle is what releases the lock on both platforms
+    public void Dispose() => _stream.Dispose();
 }
