@@ -30,6 +30,13 @@
   <PropertyGroup>
     <WarningsAsErrors>$(WarningsAsErrors);CS8597;CS8601;CS8602;CS8603;CS8604;CS8625</WarningsAsErrors>
 
+    <NoWarn>$(NoWarn);CA2020;CA1000;CA1716;CA1715;CA1825;CS8632;AVLN3001;CA1716;CS0253;CA1707;CA1711;CA1720;CA5351;CA1305;CS8618</NoWarn>
+
+    <!--CS0162 reports the body of a branch that a compile-time switch from DebugFlags turned off. Those switches are-->
+    <!--declared const on purpose so the compiler removes the branch; an unreachable-code defect elsewhere is rarer than-->
+    <!--the noise this makes, so the warning is off across the build rather than silenced at each use-->
+    <NoWarn>$(NoWarn);CS0162</NoWarn>
+
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <AnalysisMode>Default</AnalysisMode>

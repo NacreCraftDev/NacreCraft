@@ -38,8 +38,6 @@ public sealed class TypeObjectWrapper : T.Type<object>
     //reflectively gets an instance method, with caching
     private MethodInfo GetMethod(string name, Type[]? paramTypes = null)
     {
-        var key = (name, paramTypes?.Length ?? 0);
-        var cacheKey = _innerType.GetHashCode() ^ name.GetHashCode() ^ (paramTypes?.Length ?? 0);
         lock (_cacheLock)
         {
             //simple cache keyed by (innerType, name, paramCount)

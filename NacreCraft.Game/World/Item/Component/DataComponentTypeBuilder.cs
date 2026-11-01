@@ -5,13 +5,12 @@ namespace NacreCraft.Game.World.Items.Component;
 
 //DataComponentTypeBuilder DataComponentType builder, maps to vanilla DataComponentType.Builder
 //persistent sets the Codec persistence codec, networkSynchronized sets the StreamCodec network sync codec
-//cacheEncoding enables encode caching, ignoreSwapAnimation ignores the swap animation
+//ignoreSwapAnimation ignores the swap animation
 //When StreamCodec is unset at build time, deriving from Codec via fromCodecWithRegistries is not yet implemented and throws
 public sealed class DataComponentTypeBuilder<T> where T : class
 {
     private Codec<T>? _codec;
     private StreamCodec<RegistryFriendlyByteBuf, T>? _streamCodec;
-    private bool _cacheEncoding;
     private bool _ignoreSwapAnimation;
 
     //Persistent sets the persistence Codec
@@ -25,13 +24,6 @@ public sealed class DataComponentTypeBuilder<T> where T : class
     public DataComponentTypeBuilder<T> NetworkSynchronized(StreamCodec<RegistryFriendlyByteBuf, T> streamCodec)
     {
         _streamCodec = streamCodec;
-        return this;
-    }
-
-    //CacheEncoding enables encode caching
-    public DataComponentTypeBuilder<T> CacheEncoding()
-    {
-        _cacheEncoding = true;
         return this;
     }
 

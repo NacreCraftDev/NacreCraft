@@ -92,8 +92,10 @@ public sealed class DefaultPalettedContainerFactory : PalettedContainerFactory
     public override PalettedContainer<Holder<Biome>> CreateForBiomes()
         => new(_defaultBiome ?? default!, _biomesStrategy);
 
+    //The default falls back the same way CreateForBlockStates does, so a factory that never received a default still
+    //produces a codec instead of throwing
     public override Codec<PalettedContainer<BlockState>> BlockStatesContainerCodec()
-        => PalettedContainer<BlockState>.CreateCodec(_blockStateCodec, _blockStatesStrategy, _defaultBlockState.Value);
+        => PalettedContainer<BlockState>.CreateCodec(_blockStateCodec, _blockStatesStrategy, _defaultBlockState ?? default);
 
     public override Codec<PalettedContainer<Holder<Biome>>> BiomeContainerCodec()
         => PalettedContainer<Holder<Biome>>.CreateCodec(_biomeCodec, _biomesStrategy, _defaultBiome!);

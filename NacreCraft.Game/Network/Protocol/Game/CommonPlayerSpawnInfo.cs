@@ -39,8 +39,9 @@ public sealed record CommonPlayerSpawnInfo(
             var seed = buf.ReadLong();
             //S4 vanilla GameType.byId(readByte) single byte
             var gameType = GameType.ById(buf.ReadByte()) ?? GameType.Survival;
+            //0xFF is the single byte vanilla writes for -1, meaning there is no previous game type
             var prevRaw = buf.ReadByte();
-            var previousGameType = prevRaw == -1 ? null : GameType.ById(prevRaw);
+            var previousGameType = prevRaw == 0xFF ? null : GameType.ById(prevRaw);
             var isDebug = buf.ReadBoolean();
             var isFlat = buf.ReadBoolean();
             var hasDeath = buf.ReadBoolean();
@@ -67,8 +68,8 @@ public sealed record CommonPlayerSpawnInfo(
             buf.WriteLong(value.Seed);
             //S4 vanilla writeByte(gameType.getId()) single byte
             buf.WriteByte((byte)value.GameType.Id);
-            //previousGameType vanilla writeByte(-1 or id) single byte; VarInt(-1) is 5 bytes and must not be used
-            buf.WriteByte((byte)(value.PreviousGameType?.Id ?? -1));
+            //previousGameType vanilla writes -1 or the id in one byte; 0xFF stands in for -1 and a VarInt would take five
+            buf.WriteByte(value.PreviousGameType is null ? (byte)0xFF : (byte)value.PreviousGameType.Id);
             buf.WriteBoolean(value.IsDebug);
             buf.WriteBoolean(value.IsFlat);
             buf.WriteBoolean(value.HasLastDeathLocation);

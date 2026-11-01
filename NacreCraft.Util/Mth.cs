@@ -678,7 +678,6 @@ public static partial class Mth
             throw new ArgumentException($"step size expected to be >= 1, was {stepSize}");
         var clampedOrigin = Clamp(origin, lowerBound, upperBound);
         var cursor = clampedOrigin;
-        var wentNegative = false;
         yield return cursor;
         while (true)
         {

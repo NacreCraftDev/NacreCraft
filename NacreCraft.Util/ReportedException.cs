@@ -13,7 +13,8 @@ public class ReportedException : Exception
 
     public override string Message => Report.Title;
 
-    public override Exception? GetBaseException()
+    //Never null: the inner report either carries its own base exception or this instance is it
+    public override Exception GetBaseException()
     {
         return Report.Exception is ReportedException innerReported
             ? innerReported.GetBaseException()

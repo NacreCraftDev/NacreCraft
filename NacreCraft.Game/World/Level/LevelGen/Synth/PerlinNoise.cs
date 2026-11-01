@@ -16,10 +16,6 @@ public class PerlinNoise
     private readonly double[] _amplitudes;
     private readonly double _lowestFreqValueFactor;
     private readonly double _lowestFreqInputFactor;
-    //Per-octave input scales and output weights are unrolled into arrays, so the sampling loop no longer does per-step multiply/divide
-    //The recurrence is only multiplication and division by powers of two, so precomputing changes no floating-point bit
-    private readonly double[] _inputScales;
-    private readonly double[] _valueFactors;
     private readonly double _maxValue;
 
     //CreateLegacyForBlendedNoise legacy factory used by BlendedNoise, maps to vanilla createLegacyForBlendedNoise

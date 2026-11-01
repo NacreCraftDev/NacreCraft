@@ -460,10 +460,13 @@ public abstract class ServerLevel : ILevelReader, NacreCraft.Registry.IEntityIns
     {
         var state = GetBlockState(pos);
         //Log stale ticks too, otherwise you only see "a tick was scheduled but nothing happened"
+        //Returning here is what drops the tick; without it a chunk that unloaded between scheduling and running would
+        //reach the two lines below and throw on state.Value
         if (state is null || !ReferenceEquals(state.Value.Owner, block))
         {
             if (RedstoneIds.IsRedstoneComponent(block.Id))
                 Log.Debug($"redstone dropped expired tick {pos} block={block.Id} owner={state?.Owner.Id.ToString() ?? "chunk not loaded"}");
+            return;
         }
         if (RedstoneIds.IsRedstoneComponent(block.Id))
             Log.Debug($"redstone run {pos} block={block.Id} state={state.Value.Id} time={GameTime}");

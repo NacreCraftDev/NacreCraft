@@ -19,8 +19,8 @@ public sealed record Linear(float Base, float PerLevelAboveFirst) : NacreCraft.R
 {
     public static readonly MapCodec<Linear> Codec =
         RecordCodecBuilder.Of2<Linear, float, float>(
-            Codecs.Float.FieldOf("base").ForGetter(value => value.Base),
-            Codecs.Float.FieldOf("per_level_above_first").ForGetter(value => value.PerLevelAboveFirst),
+            Codecs.Float.FieldOf("base").ForGetter<Linear, float>(value => value.Base),
+            Codecs.Float.FieldOf("per_level_above_first").ForGetter<Linear, float>(value => value.PerLevelAboveFirst),
             (baseValue, perLevel) => new Linear(baseValue, perLevel));
 
     public float Calculate(int level) => Base + PerLevelAboveFirst * (level - 1);
@@ -33,9 +33,9 @@ public sealed record Clamped(NacreCraft.Registry.LevelBasedValue Value, float Mi
     public static readonly MapCodec<Clamped> Codec =
         RecordCodecBuilder.Of3<Clamped, NacreCraft.Registry.LevelBasedValue, float, float>(
             LevelBasedValueCodec.Instance.FieldOf("value")
-                .ForGetter(value => value.Value),
-            Codecs.Float.FieldOf("min").ForGetter(value => value.Min),
-            Codecs.Float.FieldOf("max").ForGetter(value => value.Max),
+                .ForGetter<Clamped, NacreCraft.Registry.LevelBasedValue>(value => value.Value),
+            Codecs.Float.FieldOf("min").ForGetter<Clamped, float>(value => value.Min),
+            Codecs.Float.FieldOf("max").ForGetter<Clamped, float>(value => value.Max),
             (inner, min, max) => new Clamped(inner, min, max));
 
     public float Calculate(int level) => Math.Clamp(Value.Calculate(level), Min, Max);
@@ -47,8 +47,10 @@ public sealed record Fraction(NacreCraft.Registry.LevelBasedValue Numerator,
 {
     public static readonly MapCodec<Fraction> Codec =
         RecordCodecBuilder.Of2<Fraction, NacreCraft.Registry.LevelBasedValue, NacreCraft.Registry.LevelBasedValue>(
-            LevelBasedValueCodec.Instance.FieldOf("numerator").ForGetter(value => value.Numerator),
-            LevelBasedValueCodec.Instance.FieldOf("denominator").ForGetter(value => value.Denominator),
+            LevelBasedValueCodec.Instance.FieldOf("numerator")
+                .ForGetter<Fraction, NacreCraft.Registry.LevelBasedValue>(value => value.Numerator),
+            LevelBasedValueCodec.Instance.FieldOf("denominator")
+                .ForGetter<Fraction, NacreCraft.Registry.LevelBasedValue>(value => value.Denominator),
             (numerator, denominator) => new Fraction(numerator, denominator));
 
     public float Calculate(int level) => Numerator.Calculate(level) / Denominator.Calculate(level);
@@ -59,7 +61,7 @@ public sealed record LevelsSquared(float Added) : NacreCraft.Registry.LevelBased
 {
     public static readonly MapCodec<LevelsSquared> Codec =
         RecordCodecBuilder.Of1<LevelsSquared, float>(
-            Codecs.Float.FieldOf("added").ForGetter(value => value.Added),
+            Codecs.Float.FieldOf("added").ForGetter<LevelsSquared, float>(value => value.Added),
             added => new LevelsSquared(added));
 
     public float Calculate(int level) => Added + level * level;
@@ -71,8 +73,10 @@ public sealed record Exponent(NacreCraft.Registry.LevelBasedValue Base,
 {
     public static readonly MapCodec<Exponent> Codec =
         RecordCodecBuilder.Of2<Exponent, NacreCraft.Registry.LevelBasedValue, NacreCraft.Registry.LevelBasedValue>(
-            LevelBasedValueCodec.Instance.FieldOf("base").ForGetter(value => value.Base),
-            LevelBasedValueCodec.Instance.FieldOf("power").ForGetter(value => value.Power),
+            LevelBasedValueCodec.Instance.FieldOf("base")
+                .ForGetter<Exponent, NacreCraft.Registry.LevelBasedValue>(value => value.Base),
+            LevelBasedValueCodec.Instance.FieldOf("power")
+                .ForGetter<Exponent, NacreCraft.Registry.LevelBasedValue>(value => value.Power),
             (baseValue, power) => new Exponent(baseValue, power));
 
     public float Calculate(int level) => MathF.Pow(Base.Calculate(level), Power.Calculate(level));
@@ -84,8 +88,10 @@ public sealed record Lookup(IReadOnlyList<float> Values, NacreCraft.Registry.Lev
 {
     public static readonly MapCodec<Lookup> Codec =
         RecordCodecBuilder.Of2<Lookup, IReadOnlyList<float>, NacreCraft.Registry.LevelBasedValue>(
-            Codecs.Float.ListOf().FieldOf("values").ForGetter(value => value.Values),
-            LevelBasedValueCodec.Instance.FieldOf("fallback").ForGetter(value => value.Fallback),
+            Codecs.Float.ListOf().FieldOf("values")
+                .ForGetter<Lookup, IReadOnlyList<float>>(value => value.Values),
+            LevelBasedValueCodec.Instance.FieldOf("fallback")
+                .ForGetter<Lookup, NacreCraft.Registry.LevelBasedValue>(value => value.Fallback),
             (values, fallback) => new Lookup(values, fallback));
 
     public float Calculate(int level)
@@ -110,10 +116,12 @@ public sealed class LevelBasedValueCodec : AbstractMapCodec<NacreCraft.Registry.
     {
         var typeTag = input.Get("type");
         if (!typeTag.IsPresent)
-            return DataResult<NacreCraft.Registry.LevelBasedValue>.Error(() => "level based value is missing the type field");
+            return DataResult<NacreCraft.Registry.LevelBasedValue>.Error(
+                () => "level based value is missing the type field");
         var typeText = ops.GetStringValue(typeTag.Get());
         if (!typeText.Result().IsPresent)
-            return DataResult<NacreCraft.Registry.LevelBasedValue>.Error(() => "level based value type is not a string");
+            return DataResult<NacreCraft.Registry.LevelBasedValue>.Error(
+                () => "level based value type is not a string");
         var id = Identifier.TryParse(typeText.GetOrThrow());
         if (id is null)
             return DataResult<NacreCraft.Registry.LevelBasedValue>.Error(
