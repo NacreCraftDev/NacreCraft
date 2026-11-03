@@ -116,9 +116,9 @@ public sealed record ClientboundCommandsPacket(CommandNode<CommandSourceStack> R
             buf.WriteString(argument.Name);
             buf.WriteVarInt(BuiltInRegistries.COMMAND_ARGUMENT_TYPE.GetIdOrThrow(info));
             info.SerializeToNetwork(info.Unpack(argumentType), buf);
-            //Custom suggestions all fall back to ask_server, asking the server while the client types, aligns with vanilla unnamed provider behavior
+            //The provider name decides whether the client asks the server or builds the list locally
             if ((flags & FlagCustomSuggestions) != 0)
-                buf.WriteIdentifier(Identifier.WithDefaultNamespace("ask_server"));
+                buf.WriteIdentifier(SuggestionProviders.GetName(argument.CustomSuggestions!));
         }
         else if (node is LiteralCommandNode<CommandSourceStack> literal)
         {
