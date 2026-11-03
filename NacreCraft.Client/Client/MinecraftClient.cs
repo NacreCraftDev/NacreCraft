@@ -50,6 +50,8 @@ using NacreCraft.Client.Gui.Font.Glyphs;
 using NacreCraft.Client.Model;
 using NacreCraft.Client.Model.Geom;
 using NacreCraft.Client.Resources.Metadata.Gui;
+using NacreCraft.Util;
+using NacreCraft.Util.Tracing;
 
 namespace NacreCraft.Client;
 
@@ -465,6 +467,7 @@ public sealed class MinecraftClient : IDisposable
     //GameTick world logic, decoupled from the GUI since the render thread owns the widget tree
     private void GameTick(double delta)
     {
+        using var trace = ClientTrace.BeginScope("tick", "game");
         //Queued work runs early in the tick, the same place vanilla Minecraft.runTick calls runAllTasks
         RunQueuedTasks();
         _connection?.Tick();
@@ -492,6 +495,7 @@ public sealed class MinecraftClient : IDisposable
     //GuiTick input dispatch, layout and control animation for one rendered frame
     private void GuiTick(double delta)
     {
+        using var trace = ClientTrace.BeginScope("render", "gui");
         //Screen switches queued by game logic land before input, so a frame never sees a half-replaced tree
         while (_guiTasks.TryDequeue(out var task))
         {

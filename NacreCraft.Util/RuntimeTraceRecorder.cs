@@ -43,7 +43,8 @@ public static class RuntimeTraceRecorder
     //Start begins a capture under the given directory and reports the file being written
     //The directory is the caller's to choose: the program root is a kernel notion that this library does not carry
     //Returns null when one is already running or a capture could not start; the reason goes to the log
-    public static string? Start(string directory)
+    //extraProviders adds application event sources on top of the runtime and sample providers
+    public static string? Start(string directory, IReadOnlyList<EventPipeProvider>? extraProviders = null)
     {
         lock (Sync)
         {
@@ -69,11 +70,12 @@ public static class RuntimeTraceRecorder
                 //numbers unattributable. Measured: 0 ticks at Informational, 7759 at Verbose over the same allocation load
                 //The keywords were never the problem, Default already carries GC and GCHeapAndTypeNames
                 //The price is a larger capture and more runtime work while it runs
-                var providers = new[]
+                var providers = new List<EventPipeProvider>
                 {
-                    new EventPipeProvider(RuntimeProviderName, EventLevel.Verbose, RuntimeKeywords, null),
-                    new EventPipeProvider(SampleProviderName, EventLevel.Informational, 0, null),
+                    new(RuntimeProviderName, EventLevel.Verbose, RuntimeKeywords, null),
+                    new(SampleProviderName, EventLevel.Informational, 0, null),
                 };
+                if (extraProviders is not null) providers.AddRange(extraProviders);
 
                 //Rundown is what lets a reader name types and methods instead of showing raw addresses
                 session = new DiagnosticsClient(Environment.ProcessId)

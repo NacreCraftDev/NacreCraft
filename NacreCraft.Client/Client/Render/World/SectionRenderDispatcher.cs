@@ -17,6 +17,7 @@ using NacreCraft.Client.Blaze3d.Audio;
 using NacreCraft.Client.Blaze3d.Framegraph;
 using NacreCraft.Client.Blaze3d.Preprocessor;
 using NacreCraft.Client.Blaze3d.Util;
+using NacreCraft.Util.Tracing;
 using NacreCraft.Client.Render;
 using NacreCraft.Client.Render.Model;
 using NacreCraft.Client.Render.Texture;
@@ -171,6 +172,7 @@ public sealed class SectionRenderDispatcher : IDisposable
     //Layer vertices are concatenated and indices offset by baseVertex; UploadedSlice is recorded for GetSectionSlice
     public void UploadTerrainBuffers()
     {
+        using var trace = ClientTrace.BeginScope("chunk", "upload");
         while (_uploadQueue.TryDequeue(out var section))
         {
             //Skip unloaded sections; UnloadSection already detached them from their region
@@ -275,6 +277,7 @@ public sealed class SectionRenderDispatcher : IDisposable
         {
             if (!_running) break;
             if (!section.TryBeginCompile()) continue;
+            using var trace = ClientTrace.BeginScope("chunk", "compile");
             SectionMesh? mesh = null;
             var compileSuccess = false;
             try

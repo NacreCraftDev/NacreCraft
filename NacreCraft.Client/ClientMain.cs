@@ -4,6 +4,7 @@ using NacreCraft.Game;
 using NacreCraft.Game.Bootstrap;
 using NacreCraft.Client;
 using NacreCraft.Client.Language;
+using NacreCraft.Client.Profiling;
 using NacreCraft.Game.World.Items;
 using NacreCraft.Game.World.Level.LevelGen;
 using NacreCraft.Game.World.Level.LevelGen.Dimension;
@@ -94,6 +95,11 @@ public static class ClientMain
         //4. Set --output-dir to override the base; if not passed, use AppContext.BaseDirectory
         //   Downstream reads uniformly from AppPaths to avoid relative paths being interpreted as the runtime working directory
         AppPaths.SetOverride(options.GetOptionOrDefault("output-dir", string.Empty));
+
+        //4.0 --trace begins a client runtime trace capture, the same switch the server exposes
+        //    Started after output-dir so the capture lands in the resolved traces directory and covers the whole boot
+        var useTrace = options.HasFlag("trace");
+        if (useTrace) ClientProfiler.Start();
 
         //5. Extract jar and audio assets to a fixed directory
         //   Core game logic later loads directly from assets and assets/sounds without depending on this step
@@ -243,6 +249,7 @@ public static class ClientMain
         minecraft.Run();
 
         //12. Clean up and exit
+        if (useTrace) ClientProfiler.Stop();
         options.Unsubscribe();
         Log.Info("NacreCraft client stopped");
         //Log.Debug("Run exit");

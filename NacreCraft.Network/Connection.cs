@@ -6,6 +6,7 @@ using NacreCraft.Logging;
 using NacreCraft.Network.Protocol;
 using NacreCraft.Registry;
 using NacreCraft.Util.Concurrency;
+using NacreCraft.Util.Tracing;
 
 namespace NacreCraft.Network;
 
@@ -279,6 +280,7 @@ public sealed class Connection : IDisposable
     //The encode buffer is reused per connection and the length prefix is assembled on the stack; both used to allocate a whole set of buffer objects per packet
     private void EncodeAndWrite(INonGenericProtocol protocol, object packet, RegistryAccess access)
     {
+        using var trace = ClientTrace.BeginScope("network", "send");
         var buf = _encodeBuf ??= new RegistryFriendlyByteBuf(access);
         buf.RegistryAccess = access;
         buf.Reset();
@@ -384,6 +386,7 @@ public sealed class Connection : IDisposable
     //A decode failure drops the packet without throwing so the read loop does not exit
     private void DecodePayload(byte[] payload, bool direct = false)
     {
+        using var trace = ClientTrace.BeginScope("network", "recv");
         if (_inboundProtocol == null || _packetListener == null) return;
         var dataBuf = new RegistryFriendlyByteBuf(RegistryAccess, payload);
         object? packet;
