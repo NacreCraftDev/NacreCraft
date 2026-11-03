@@ -16,4 +16,11 @@ public interface Coordinates
     bool IsXRelative { get; }
     bool IsYRelative { get; }
     bool IsZRelative { get; }
+
+    //GetBlockPos floors the resolved position to a block cell, maps to the vanilla default getBlockPos
+    BlockPos GetBlockPos(ServerCommandSource source)
+    {
+        var pos = GetPosition(source);
+        return new BlockPos((int)Math.Floor(pos.X), (int)Math.Floor(pos.Y), (int)Math.Floor(pos.Z));
+    }
 }

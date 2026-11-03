@@ -81,6 +81,10 @@ public sealed class ServerCommandSource : CommandSourceStack
     //A player source follows the player; a command block source uses the block position
     public Vec3 Position => Player?.Position ?? _position;
 
+    //Rotation the command source facing, maps to vanilla CommandSourceStack.getRotation
+    //A player source follows the player; any source without an entity reports zero rotation
+    public (float Yaw, float Pitch) Rotation => Player is { } player ? (player.Yaw, player.Pitch) : (0f, 0f);
+
     //Level the level this source executes in; command blocks pass their own level, player sources follow the player
     public ServerLevel? Level => Player?.Level ?? _level;
 

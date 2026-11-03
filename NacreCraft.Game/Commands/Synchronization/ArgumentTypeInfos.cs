@@ -410,7 +410,7 @@ public static class ArgumentTypeInfos
         Register("rotation", new SingletonArgumentInfo(typeof(RotationArgument), RotationArgument.Rotation)); //29
         Register("scoreboard_slot", new PlaceholderArgumentInfo());                         //30
         Register("score_holder", new PlaceholderArgumentInfo());                            //31
-        Register("swizzle", new PlaceholderArgumentInfo());                                 //32
+        Register("swizzle", new SingletonArgumentInfo(typeof(SwizzleArgument), () => SwizzleArgument.Swizzle())); //32
         Register("team", new PlaceholderArgumentInfo());                                    //33
         Register("item_slot", new SingletonArgumentInfo(typeof(SlotArgument), SlotArgument.Slot));    //34
         Register("item_slots", new PlaceholderArgumentInfo());                              //35

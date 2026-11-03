@@ -11,9 +11,9 @@ public sealed record LocalCoordinates(double Left, double Up, double Forwards) :
 {
     public Vec3 GetPosition(ServerCommandSource source)
     {
-        var player = source.PlayerOrThrow;
-        var offset = ApplyLocalCoordinatesToRotation(player.Yaw, player.Pitch, Left, Up, Forwards);
-        var pos = player.Position;
+        var (yaw, pitch) = source.Rotation;
+        var offset = ApplyLocalCoordinatesToRotation(yaw, pitch, Left, Up, Forwards);
+        var pos = source.Position;
         return new Vec3(offset.X + pos.X, offset.Y + pos.Y, offset.Z + pos.Z);
     }
 
