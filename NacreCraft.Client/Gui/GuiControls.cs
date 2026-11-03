@@ -33,6 +33,7 @@ using NacreCraft.Client.Gui.Font.Glyphs;
 using NacreCraft.Client.Model;
 using NacreCraft.Client.Model.Geom;
 using NacreCraft.Client.Resources.Metadata.Gui;
+using NacreCraft.Client.Blaze3d.Platform.Cursor;
 using NacreCraft.Logging;
 
 namespace NacreCraft.Client.Gui;
@@ -66,6 +67,9 @@ public sealed class GuiButton : GuiControl
     public GuiColor ImageTint { get; set; } = GuiColor.White;
 
     public event EventHandler<EventArgs>? Click;
+
+    //RequestedCursor a clickable button shows the pointing hand, a disabled one forbids the click
+    public override CursorType RequestedCursor => Enabled ? CursorTypes.PointingHand : CursorTypes.NotAllowed;
 
     public GuiButton(string text = "")
     {
@@ -257,6 +261,9 @@ public sealed class GuiTextBox : GuiControl
     public GuiColor CursorColor { get; set; } = GuiColor.White;
 
     public event EventHandler<EventArgs>? TextChanged;
+
+    //RequestedCursor a text box shows the text beam
+    public override CursorType RequestedCursor => CursorTypes.IBeam;
 
     private bool HasSelection => _selectionAnchor != -1 && _selectionAnchor != _caretIndex;
     private int SelectionStart => Math.Min(_selectionAnchor, _caretIndex);
@@ -532,6 +539,10 @@ public sealed class GuiSlider : GuiControl
 
     public event EventHandler<EventArgs>? ValueChanged;
 
+    //RequestedCursor dragging resizes horizontally, hovering a disabled slider forbids the drag
+    public override CursorType RequestedCursor
+        => Enabled ? (_dragging ? CursorTypes.ResizeEw : CursorTypes.PointingHand) : CursorTypes.NotAllowed;
+
     public GuiSlider(double min = 0, double max = 100, double value = 0)
     {
         Min = min;
@@ -644,6 +655,9 @@ public sealed class GuiCheckbox : GuiControl
     public GuiColor ForegroundColor { get; set; } = GuiColor.White;
 
     public event EventHandler<EventArgs>? CheckedChanged;
+
+    //RequestedCursor a checkbox toggles on click, so it shows the pointing hand
+    public override CursorType RequestedCursor => Enabled ? CursorTypes.PointingHand : CursorTypes.NotAllowed;
 
     public GuiCheckbox(string text = "", bool isChecked = false)
     {

@@ -12,6 +12,9 @@ using NacreCraft.Client.Blaze3d.Pipeline;
 using NacreCraft.Client.Blaze3d.Systems;
 using NacreCraft.Client.Blaze3d.Textures;
 using NacreCraft.Client.Blaze3d.Vulkan;
+using NacreCraft.Client.Blaze3d.Platform.Cursor;
+//Silk.NET.Input also declares a CursorType, so the NC one is aliased in this file
+using CursorType = NacreCraft.Client.Blaze3d.Platform.Cursor.CursorType;
 using NacreCraft.Client.Gui;
 using NacreCraft.Client.Gui.Font;
 using NacreCraft.Client.Gui.Render;
@@ -61,6 +64,8 @@ public sealed class VulkanGuiApp : VulkanAppBase
     private readonly ConcurrentQueue<InputEvent> _inputQueue = new();
     //IInputContext the input context returned by CreateInput, released on Dispose
     private IInputContext? _inputContext;
+    //_pendingCursor the shape the GUI asked for, applied on the render thread because GLFW cursor calls are main thread only
+    private CursorType? _pendingCursor;
     //_latestSnapshot written on the Render thread by SubmitFrame immediately before it is consumed
     //Stage 7 Tick/Render decoupling; the tick thread no longer touches the GUI scene at all
     private volatile GuiRenderState? _latestSnapshot;
@@ -506,6 +511,8 @@ public sealed class VulkanGuiApp : VulkanAppBase
     protected override void OnInitialized()
     {
         _inputContext = _window.CreateInput();
+        //The GUI asks for a cursor shape whenever the hovered widget changes
+        Window.CursorApplier = SetCursor;
         foreach (var mouse in _inputContext.Mice)
         {
             mouse.MouseDown += (_, b) => EnqueueMouse(b, down: true);
@@ -518,6 +525,17 @@ public sealed class VulkanGuiApp : VulkanAppBase
             keyboard.KeyUp += (_, k, _) => _inputQueue.Enqueue(new KeyInput((int)k, Down: false));
             keyboard.KeyChar += (_, c) => _inputQueue.Enqueue(new CharInput(c));
         }
+    }
+
+    //SetCursor records the GUI requested cursor shape, the render thread applies it
+    private void SetCursor(CursorType cursor) => _pendingCursor = cursor;
+
+    //OnFrameBegin applies the queued cursor before the surface is touched, maps to vanilla CursorType.select
+    protected override void OnFrameBegin()
+    {
+        var cursor = Interlocked.Exchange(ref _pendingCursor, null);
+        if (cursor is null || _inputContext is null) return;
+        foreach (var mouse in _inputContext.Mice) cursor.Select(mouse.Cursor);
     }
 
     //EnqueueMouse converts a Silk mouse button into a GuiMouseButton and enqueues a down/up event with the current cursor position

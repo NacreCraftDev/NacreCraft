@@ -86,6 +86,9 @@ public abstract unsafe class VulkanAppBase : IDisposable
     //OnInitialized fired after the window and Vulkan resources are initialized; subclasses may override to subscribe to input events
     protected virtual void OnInitialized() { }
 
+    //OnFrameBegin fired at the top of every frame on the render thread, before the surface is touched
+    protected virtual void OnFrameBegin() { }
+
     //OnBeforeRun hook before the main loop's _window.Run; subclasses may start background tasks like the Tick thread
     protected virtual void OnBeforeRun() { }
 
@@ -294,6 +297,7 @@ public abstract unsafe class VulkanAppBase : IDisposable
 
     private void DrawFrame(double obj)
     {
+        OnFrameBegin();
         //Debug timing: the frame rate is reported once a second, which is enough to tell a real drop from a one-off hitch
         if (Log.DebugEnabled)
         {

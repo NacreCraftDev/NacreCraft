@@ -32,6 +32,7 @@ using NacreCraft.Client.Gui.Font.Glyphs;
 using NacreCraft.Client.Model;
 using NacreCraft.Client.Model.Geom;
 using NacreCraft.Client.Resources.Metadata.Gui;
+using NacreCraft.Client.Blaze3d.Platform.Cursor;
 namespace NacreCraft.Client.Gui;
 
 //GuiControl GUI widget base class
@@ -182,6 +183,9 @@ public abstract class GuiControl : IDisposable, ILayoutElement
 
     //ConsumesArrowKey whether the widget edits with this arrow key instead of letting the window navigate focus
     protected internal virtual bool ConsumesArrowKey(int key) => false;
+
+    //RequestedCursor the cursor shape shown while this widget is hovered, maps to vanilla requestCursor
+    public virtual CursorType RequestedCursor => CursorTypes.Arrow;
 
     public virtual void Dispose() => _disposed = true;
 }

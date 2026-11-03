@@ -32,6 +32,7 @@ using NacreCraft.Client.Gui.Font.Glyphs;
 using NacreCraft.Client.Model;
 using NacreCraft.Client.Model.Geom;
 using NacreCraft.Client.Resources.Metadata.Gui;
+using NacreCraft.Client.Blaze3d.Platform.Cursor;
 using NacreCraft.Logging;
 namespace NacreCraft.Client.Gui;
 
@@ -87,6 +88,11 @@ public sealed class GuiWindow : GuiContainer
     //SetFocused is the normal writer so both widgets get notified; the internal setter only serves tests
     public GuiControl? FocusedControl { get; internal set; }
 
+    //CursorApplier applies a cursor shape to the platform window, injected by VulkanGuiApp
+    public Action<CursorType>? CursorApplier { get; set; }
+    //_appliedCursor the shape last sent out; cursor types are static instances so a reference check is enough
+    private CursorType? _appliedCursor;
+
     public GuiWindow(int surfaceWidth, int surfaceHeight)
     {
         UpdateSurfaceSize(surfaceWidth, surfaceHeight);
@@ -137,6 +143,17 @@ public sealed class GuiWindow : GuiContainer
         {
             hit.OnMouseDown(args);
         }
+        //A press can start a drag, which changes the cursor the widget asks for
+        ApplyCursor();
+    }
+
+    //ApplyCursor asks the platform window for the hovered widget's cursor, only when the shape changes
+    private void ApplyCursor()
+    {
+        var cursor = _hoveredControl?.RequestedCursor ?? CursorTypes.Arrow;
+        if (ReferenceEquals(cursor, _appliedCursor)) return;
+        _appliedCursor = cursor;
+        CursorApplier?.Invoke(cursor);
     }
 
     //SetFocused moves keyboard focus and notifies both widgets, maps to vanilla setFocused
@@ -174,6 +191,8 @@ public sealed class GuiWindow : GuiContainer
         {
             hit.OnMouseUp(args);
         }
+        //Releasing ends a drag, which changes the cursor the widget asks for
+        ApplyCursor();
     }
 
     //ProcessMouseMove handles mouse movement and maintains hover state, firing enter/leave events
@@ -192,6 +211,7 @@ public sealed class GuiWindow : GuiContainer
             //Hover changes the drawing of two controls, and the scene is only rebuilt when something marks it dirty,
             //so without this the highlight never follows the cursor
             MarkDirty();
+            ApplyCursor();
         }
 
         if (hit is null)
