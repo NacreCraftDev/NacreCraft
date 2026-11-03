@@ -92,6 +92,10 @@ public static class GameBootstrap
             //Content registries the original fills from code: pot patterns, villager types and professions
             ContentBootstrap.RegisterAll();
             Mark("content");
+            //Value provider descriptors are referenced by many decoded fields, register them before the data load
+            NacreCraft.Game.World.Level.LevelGen.IntProviders.Bootstrap();
+            NacreCraft.Game.World.Level.LevelGen.FloatProviders.Bootstrap();
+            Mark("value-providers");
             //Feature and placement modifier registries must be filled before data load, otherwise the whole configured_feature/placed_feature batch fails to decode
             NacreCraft.Game.World.Level.LevelGen.Features.FeatureBootstrap.RegisterAll();
             Mark("features");
