@@ -25,6 +25,8 @@ public sealed unsafe class VulkanRenderPass : RenderPassBackend
     private readonly CommandBuffer _cmd;
     private readonly VulkanDevice _device;
     private readonly RenderPassDescriptor _descriptor;
+    //Label the descriptor's label supplier, reused for the end-of-pass checkpoint
+    internal Func<string> Label => _descriptor.Label;
     private VulkanRenderPipeline? _pipeline;
     private GpuDescriptorSet[]? _descriptorSets;
     private bool _begun;

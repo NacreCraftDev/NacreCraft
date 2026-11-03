@@ -8,6 +8,7 @@ using NacreCraft.Client.Blaze3d.Shaders;
 using NacreCraft.Client.Blaze3d.Vertex;
 using NacreCraft.Client.Blaze3d.Vulkan;
 using NacreCraft.Client.Blaze3d.Pipeline;
+using NacreCraft.Client.Blaze3d.Vulkan.Checkpoints;
 namespace NacreCraft.Client.Blaze3d.Vulkan;
 
 //VulkanCommandEncoder Vulkan backend command encoder implementing CommandEncoderBackend
@@ -28,8 +29,10 @@ public sealed unsafe class VulkanCommandEncoder : CommandEncoderBackend
     private readonly List<VulkanBuffer> _stagingBuffers = new();
     //_pendingStagingBuffers during SubmitAsync the staging buffers move to the pending-release list until WaitForCompletion
     private readonly List<VulkanBuffer> _pendingStagingBuffers = new();
-    //Callbacks queued by CopyTextureToBuffer, fired after the GPU has finished the submit
+    //_pendingCallbacks callbacks queued by CopyTextureToBuffer, fired after the GPU has finished the submit
     private readonly List<System.Action> _pendingCallbacks = new();
+    //_checkpointStorage writes render pass markers so a device loss reports where the GPU stopped
+    private readonly CheckpointExtension.CheckpointStorage _checkpointStorage;
     //The render pass currently open, closed by SubmitRenderPass
     private VulkanRenderPass? _currentRenderPass;
     private bool _pendingSubmit;
@@ -47,6 +50,8 @@ public sealed unsafe class VulkanCommandEncoder : CommandEncoderBackend
         _commandPool = commandPool;
         _graphicsQueue = graphicsQueue;
         _dynRenderingExt = dynRenderingExt;
+        //Two frames in flight matches the frame loop, the same slot count vanilla uses for checkpoints
+        _checkpointStorage = gpuDevice.CheckpointExtension.CreateStorage(gpuDevice, graphicsQueue, 2);
         var allocInfo = new CommandBufferAllocateInfo
         {
             SType = StructureType.CommandBufferAllocateInfo,
@@ -68,12 +73,15 @@ public sealed unsafe class VulkanCommandEncoder : CommandEncoderBackend
     public RenderPassBackend CreateRenderPass(RenderPassDescriptor descriptor)
     {
         EnsureRecording();
+        _checkpointStorage.RecordCheckpoint(_handle, CheckpointExtension.CheckpointType.BeginRenderPass, descriptor.Label);
         _currentRenderPass = new VulkanRenderPass(_vk, _dynRenderingExt, _handle, _gpuDevice, descriptor);
         return _currentRenderPass;
     }
 
     public void SubmitRenderPass()
     {
+        if (_currentRenderPass is not null)
+            _checkpointStorage.RecordCheckpoint(_handle, CheckpointExtension.CheckpointType.EndRenderPass, _currentRenderPass.Label);
         _currentRenderPass?.End();
         _currentRenderPass = null;
     }
@@ -338,6 +346,8 @@ public sealed unsafe class VulkanCommandEncoder : CommandEncoderBackend
         _stagingBuffers.Clear();
         foreach (var cb in _pendingCallbacks) cb();
         _pendingCallbacks.Clear();
+        //The frame finished, so its checkpoint slot can be reused
+        _checkpointStorage.Rotate();
     }
 
     //SubmitAsync submits commands to the GPU queue without waiting, for the PIP double-buffered async path
@@ -378,6 +388,8 @@ public sealed unsafe class VulkanCommandEncoder : CommandEncoderBackend
         foreach (var cb in _pendingCallbacks) cb();
         _pendingCallbacks.Clear();
         _pendingSubmit = false;
+        //The async submit finished, so its checkpoint slot can be reused
+        _checkpointStorage.Rotate();
     }
 
     //BeginRecording restarts command recording so the encoder can be reused across frames

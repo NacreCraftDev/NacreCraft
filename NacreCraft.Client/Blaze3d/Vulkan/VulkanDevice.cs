@@ -51,6 +51,7 @@ using NacreCraft.Client.Model;
 using NacreCraft.Client.Model.Geom;
 using NacreCraft.Client.Resources.Metadata.Gui;
 using NacreCraft.Client.Blaze3d;
+using NacreCraft.Client.Blaze3d.Vulkan.Checkpoints;
 using NacreCraft.Logging;
 namespace NacreCraft.Client.Blaze3d.Vulkan;
 
@@ -82,6 +83,8 @@ public sealed unsafe class VulkanDevice : GpuDeviceBackend
     private readonly DeviceInfo _deviceInfo;
     //_supportedFeatures what the physical device reports, used both to request creation features and to fill DeviceInfo
     private readonly PhysicalDeviceFeatures _supportedFeatures;
+    //_checkpointExtension the marker backend the physical device exposes, Noop when it has none
+    private CheckpointExtension _checkpointExtension = NoopCheckpointExtension.Instance;
     private bool _disposed;
 
     public Vk Api => _vk;
@@ -98,6 +101,8 @@ public sealed unsafe class VulkanDevice : GpuDeviceBackend
     //PipelineCache declarative RenderPipeline → CompiledRenderPipeline compile cache avoiding recompilation
     public NacreCraft.Client.Blaze3d.Pipeline.PipelineCache PipelineCache { get; }
     public ShaderManager ShaderManager => _shaderManager;
+    //CheckpointExtension exposes the marker backend so an encoder can record render pass boundaries
+    public CheckpointExtension CheckpointExtension => _checkpointExtension;
 
     internal VulkanDevice(VulkanBackend backend, ShaderManager shaderManager, GpuDebugOptions debugOptions)
     {
@@ -372,7 +377,11 @@ public sealed unsafe class VulkanDevice : GpuDeviceBackend
             DrawIndirectFirstInstance = _supportedFeatures.DrawIndirectFirstInstance
         };
         //KHR_swapchain swapchain + KHR_dynamic_rendering replacing the traditional RenderPass
-        string[] deviceExtensions = { KhrSwapchain.ExtensionName, KhrDynamicRendering.ExtensionName };
+        var extensionNames = new List<string> { KhrSwapchain.ExtensionName, KhrDynamicRendering.ExtensionName };
+        //AMD buffer markers are host visible and always readable, so they win over NV diagnostic checkpoints
+        if (HasDeviceExtension("VK_AMD_buffer_marker")) extensionNames.Add("VK_AMD_buffer_marker");
+        else if (HasDeviceExtension("VK_NV_device_diagnostic_checkpoints")) extensionNames.Add("VK_NV_device_diagnostic_checkpoints");
+        var deviceExtensions = extensionNames.ToArray();
         var enabledExtNames = (byte**)SilkMarshal.StringArrayToPtr(deviceExtensions);
         //PhysicalDeviceDynamicRenderingFeaturesKHR enables the dynamic rendering feature via the PNext chain
         var dynamicRenderingFeatures = new PhysicalDeviceDynamicRenderingFeaturesKHR
@@ -401,6 +410,34 @@ public sealed unsafe class VulkanDevice : GpuDeviceBackend
         _vk.GetDeviceQueue(_device, _graphicsFamily, 0, out _graphicsQueue);
         _vk.GetDeviceQueue(_device, _presentFamily, 0, out _presentQueue);
         SilkMarshal.Free((nint)enabledExtNames);
+        _checkpointExtension = CreateCheckpointExtension();
+    }
+
+    //HasDeviceExtension whether the physical device reports the named device extension
+    private bool HasDeviceExtension(string name)
+    {
+        uint count = 0;
+        if (_vk.EnumerateDeviceExtensionProperties(_backend.PhysicalDevice, (string?)null, &count, (ExtensionProperties*)null) != Result.Success)
+            return false;
+        var properties = stackalloc ExtensionProperties[(int)count];
+        if (_vk.EnumerateDeviceExtensionProperties(_backend.PhysicalDevice, (string?)null, &count, properties) != Result.Success)
+            return false;
+        for (var i = 0; i < count; i++)
+        {
+            var extensionName = Marshal.PtrToStringAnsi((nint)properties[i].ExtensionName);
+            if (string.Equals(extensionName, name, StringComparison.Ordinal)) return true;
+        }
+        return false;
+    }
+
+    //CreateCheckpointExtension builds the marker backend matching the enabled extension
+    private CheckpointExtension CreateCheckpointExtension()
+    {
+        if (HasDeviceExtension("VK_AMD_buffer_marker"))
+            return new AmdCheckpointExtension(_vk, _backend.Instance, _device);
+        if (HasDeviceExtension("VK_NV_device_diagnostic_checkpoints"))
+            return new NvidiaCheckpointExtension(_vk, _backend.Instance, _device);
+        return NoopCheckpointExtension.Instance;
     }
 
     private void CreateCommandPool(QueueFamilyIndices indices)
@@ -453,6 +490,9 @@ public sealed unsafe class VulkanDevice : GpuDeviceBackend
     public void Dispose()
     {
         if (_disposed) return;
+        //Checkpoint buffers live in device memory, so they must be released before the device itself
+        _checkpointExtension.Dispose();
+        _checkpointExtension = NoopCheckpointExtension.Instance;
         _vk.DestroyDescriptorPool(_device, _descriptorPool, null);
         _vk.DestroyCommandPool(_device, _commandPool, null);
         _vk.DestroyDevice(_device, null);
