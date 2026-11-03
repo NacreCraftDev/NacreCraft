@@ -22,9 +22,9 @@ public static class DebugSubscriptions
     //Redstone wire orientations need the redstone Orientation type, which NC does not have yet
     public static readonly DebugSubscription RedstoneWireOrientations = RegisterSimple("redstone_wire_orientations");
     public static readonly DebugSubscription<Unit> VillageSections = RegisterWithValue("village_sections", Unit.StreamCodec);
-    public static readonly DebugSubscription<List<BlockPos>> Raids = RegisterWithValue("raids", new BlockPosListCodec());
+    public static readonly DebugSubscription<List<BlockPos>> Raids = RegisterWithValue("raids", ByteBufCodecs.ListOf(new BlockPosCodec()));
     public static readonly DebugSubscription<List<DebugStructureInfo>> Structures =
-        RegisterWithValue("structures", new StructureInfoListCodec());
+        RegisterWithValue("structures", ByteBufCodecs.ListOf(DebugStructureInfo.StreamCodec));
     public static readonly DebugSubscription<DebugGameEventListenerInfo> GameEventListeners =
         RegisterWithValue("game_event_listeners", DebugGameEventListenerInfo.StreamCodec);
     public static readonly DebugSubscription<BlockPos> NeighborUpdates =
@@ -70,42 +70,4 @@ internal sealed class BlockPosCodec : StreamCodec<RegistryFriendlyByteBuf, Block
     public BlockPos Decode(RegistryFriendlyByteBuf buf) => buf.ReadBlockPos();
 
     public void Encode(RegistryFriendlyByteBuf buf, BlockPos value) => buf.WriteBlockPos(value);
-}
-
-//BlockPosListCodec list of block positions, maps to BlockPos.STREAM_CODEC.apply(ByteBufCodecs.list())
-internal sealed class BlockPosListCodec : StreamCodec<RegistryFriendlyByteBuf, List<BlockPos>>
-{
-    private static readonly BlockPosCodec ElementCodec = new();
-
-    public List<BlockPos> Decode(RegistryFriendlyByteBuf buf)
-    {
-        var count = buf.ReadVarInt();
-        var list = new List<BlockPos>(Math.Min(count, ByteBufCodecs.MaxInitialCollectionSize));
-        for (var i = 0; i < count; i++) list.Add(ElementCodec.Decode(buf));
-        return list;
-    }
-
-    public void Encode(RegistryFriendlyByteBuf buf, List<BlockPos> value)
-    {
-        buf.WriteVarInt(value.Count);
-        foreach (var pos in value) ElementCodec.Encode(buf, pos);
-    }
-}
-
-//StructureInfoListCodec list of structure debug payloads, maps to DebugStructureInfo.STREAM_CODEC.apply(ByteBufCodecs.list())
-internal sealed class StructureInfoListCodec : StreamCodec<RegistryFriendlyByteBuf, List<DebugStructureInfo>>
-{
-    public List<DebugStructureInfo> Decode(RegistryFriendlyByteBuf buf)
-    {
-        var count = buf.ReadVarInt();
-        var list = new List<DebugStructureInfo>(Math.Min(count, ByteBufCodecs.MaxInitialCollectionSize));
-        for (var i = 0; i < count; i++) list.Add(DebugStructureInfo.StreamCodec.Decode(buf));
-        return list;
-    }
-
-    public void Encode(RegistryFriendlyByteBuf buf, List<DebugStructureInfo> value)
-    {
-        buf.WriteVarInt(value.Count);
-        foreach (var info in value) DebugStructureInfo.StreamCodec.Encode(buf, info);
-    }
 }

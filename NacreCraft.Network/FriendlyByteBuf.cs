@@ -86,6 +86,9 @@ public class FriendlyByteBuf : IDisposable
     //ReadShort reads a 2-byte big-endian short
     public short ReadShort() => BinaryPrimitives.ReadInt16BigEndian(_reader.ReadBytes(2));
 
+    //ReadUnsignedShort reads a 2-byte big-endian unsigned short widened to int
+    public int ReadUnsignedShort() => BinaryPrimitives.ReadUInt16BigEndian(_reader.ReadBytes(2));
+
     //ReadInt reads a 4-byte big-endian int
     public int ReadInt() => BinaryPrimitives.ReadInt32BigEndian(_reader.ReadBytes(4));
 
@@ -170,6 +173,15 @@ public class FriendlyByteBuf : IDisposable
 
     //ReadBytes reads a fixed-length byte array
     public byte[] ReadBytes(int length) => _reader.ReadBytes(length);
+
+    //ReadLongArray reads a long array with a VarInt length prefix, maps to vanilla readLongArray
+    public long[] ReadLongArray()
+    {
+        var count = ReadVarInt();
+        var result = new long[count];
+        for (var i = 0; i < count; i++) result[i] = ReadLong();
+        return result;
+    }
 
     //ReadUuid reads a 16-byte big-endian Guid
     public Guid ReadUuid()
@@ -384,6 +396,14 @@ public class FriendlyByteBuf : IDisposable
         if (value.Length > maxLength)
             throw new ArgumentException($"byte array length {value.Length} exceeds maximum {maxLength}", nameof(value));
         return WriteByteArray(value);
+    }
+
+    //WriteLongArray writes a long array with a VarInt length prefix, maps to vanilla writeLongArray
+    public FriendlyByteBuf WriteLongArray(long[] value)
+    {
+        WriteVarInt(value.Length);
+        WriteLongsBigEndian(value);
+        return this;
     }
 
     //WriteBytes writes a fixed-length byte array

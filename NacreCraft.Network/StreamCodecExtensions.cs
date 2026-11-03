@@ -1,9 +1,16 @@
 namespace NacreCraft.Network;
 
+//CodecOperation a codec transform that takes a codec and returns a derived one, maps to vanilla StreamCodec.CodecOperation
+public delegate StreamCodec<B, T> CodecOperation<B, S, T>(StreamCodec<B, S> codec);
+
 //StreamCodecExtensions derived codecs, maps to the default methods on vanilla net.minecraft.network.codec.StreamCodec
 //C# has no interface instance methods, so what vanilla writes as default methods lives here as extensions
 public static class StreamCodecExtensions
 {
+    //Apply runs a codec operation against this codec, maps to vanilla StreamCodec.apply
+    public static StreamCodec<B, T> Apply<B, S, T>(this StreamCodec<B, S> codec, CodecOperation<B, S, T> operation)
+        => operation(codec);
+
     //Of builds a codec from a separate encoder and decoder
     public static StreamCodec<B, V> Of<B, V>(StreamEncoder<B, V> encoder, StreamDecoder<B, V> decoder)
         where B : class
