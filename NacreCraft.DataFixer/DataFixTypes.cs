@@ -52,7 +52,11 @@ public sealed class DataFixTypes
     private DataFixTypes(DSL.ITypeReference type) => Type = type;
 
     //currentVersion: the current world data version
-    private static int CurrentVersion() => SharedConstants.WorldDataVersion;
+    internal static int CurrentVersion() => SharedConstants.WorldDataVersion;
+
+    //wrapCodec wraps a codec so it writes the current DataVersion and upgrades the payload before decoding, maps to vanilla wrapCodec
+    public Codec<A> WrapCodec<A>(Codec<A> codec, DataFixer dataFixer, int defaultVersion)
+        => new VersionedCodec<A>(this, codec, dataFixer, defaultVersion);
 
     //update applies updates to a Dynamic by version range, delegating to DataFixer.update
     public Dynamic<T> Update<T>(DataFixer fixerUpper, Dynamic<T> input, int fromVersion, int toVersion)
@@ -61,4 +65,57 @@ public sealed class DataFixTypes
     //updateToCurrentVersion upgrades to the current version
     public Dynamic<T> UpdateToCurrentVersion<T>(DataFixer fixerUpper, Dynamic<T> input, int dataVersion)
         => Update(fixerUpper, input, dataVersion, CurrentVersion());
+
+    //update upgrades a CompoundTag by version range, maps to the vanilla CompoundTag overload
+    public NacreCraft.Nbt.CompoundTag Update(DataFixer fixer, NacreCraft.Nbt.CompoundTag tag, int fromVersion, int toVersion)
+        => (NacreCraft.Nbt.CompoundTag)Update(fixer, new Dynamic<NacreCraft.Nbt.Tag>(NacreCraft.Nbt.NbtOps.Instance, tag), fromVersion, toVersion).Value;
+
+    //updateToCurrentVersion upgrades a CompoundTag to the current version
+    public NacreCraft.Nbt.CompoundTag UpdateToCurrentVersion(DataFixer fixer, NacreCraft.Nbt.CompoundTag tag, int fromVersion)
+        => Update(fixer, tag, fromVersion, CurrentVersion());
+}
+
+//VersionedCodec codec wrapper that round-trips the DataVersion field, maps to the anonymous codec of vanilla wrapCodec
+//Decoding reads DataVersion, strips it, runs the fixer to the current version and then parses
+//Encoding writes the payload and merges the current DataVersion into the map
+internal sealed class VersionedCodec<A> : ScalarCodec<A>
+{
+    private const string DataVersionKey = "DataVersion";
+
+    private readonly DataFixTypes _types;
+    private readonly Codec<A> _codec;
+    private readonly DataFixer _dataFixer;
+    private readonly int _defaultVersion;
+
+    public VersionedCodec(DataFixTypes types, Codec<A> codec, DataFixer dataFixer, int defaultVersion)
+    {
+        _types = types;
+        _codec = codec;
+        _dataFixer = dataFixer;
+        _defaultVersion = defaultVersion;
+    }
+
+    public override DataResult<A> Parse<U>(DynamicOps<U> ops, U input)
+    {
+        var fromVersion = ReadVersion(ops, input);
+        var withoutVersion = ops.Remove(input, DataVersionKey);
+        var fixedData = _types.UpdateToCurrentVersion(_dataFixer, new Dynamic<U>(ops, withoutVersion), fromVersion);
+        return _codec.Parse(fixedData.Ops, fixedData.Value);
+    }
+
+    public override DataResult<U> EncodeStart<U>(DynamicOps<U> ops, A value)
+        => _codec.EncodeStart(ops, value)
+            .FlatMap(data => ops.MergeToMap(data,
+                ops.CreateString(DataVersionKey), ops.CreateInt(DataFixTypes.CurrentVersion())));
+
+    //ReadVersion takes the DataVersion field, falling back to the codec's default when absent or not numeric
+    private int ReadVersion<U>(DynamicOps<U> ops, U input)
+    {
+        var map = ops.GetMap(input);
+        if (!map.Result().IsPresent) return _defaultVersion;
+        var versionTag = map.GetOrThrow().Get(DataVersionKey);
+        if (!versionTag.IsPresent) return _defaultVersion;
+        var number = ops.GetNumberValue(versionTag.Get());
+        return number.Result().IsPresent ? (int)number.GetOrThrow() : _defaultVersion;
+    }
 }
