@@ -45,11 +45,16 @@ public static class NativeStackGuard
     //meant a managed to native transition, a look at the thread's stack limits and a dynamic TLS access on every method
     //call, and the level generation path calls methods often enough for that to become the work
     //
+    //It is written to be inlined into every injected call site. A call left as a call costs a frame push and a return
+    //on every method entry of the whole ecosystem, which showed up as a large, call-count proportional slowdown; kept
+    //small and inline the entry costs a handful of instructions. The throw lives in its own method so the body stays
+    //under the inline budget, and the inline hint is only a hint, so the shape matters more than the attribute
+    //
     //The quiet flag is what the probe alone cannot express. On its own it keeps answering that the stack is short while
     //the exception is unwound and handled, and the process dies on its way to reporting the problem. A thread that has
     //tripped stays quiet until the probe says there is room again, which leaves room for the unwind, the catch block
     //and anything that logs along the way
-    [MethodImpl(MethodImplOptions.NoInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void EnsureStack()
     {
         if (_quiet)
@@ -61,6 +66,13 @@ public static class NativeStackGuard
 
         if (RuntimeHelpers.TryEnsureSufficientExecutionStack()) return;
 
+        Trip();
+    }
+
+    //Trip reports the overflow once per descent; never inlined, it is the cold half of EnsureStack
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void Trip()
+    {
         _quiet = true;
         throw new InsufficientExecutionStackException();
     }

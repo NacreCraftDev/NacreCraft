@@ -120,8 +120,8 @@ public static class BuiltInRegistries
     public static readonly Registry<MapDecorationType> MAP_DECORATION_TYPE = RegisterSimple<MapDecorationType>(Registries.MAP_DECORATION_TYPE);
     public static readonly Registry<object> ENCHANTMENT_EFFECT_COMPONENT_TYPE = RegisterSimple<object>(Registries.ENCHANTMENT_EFFECT_COMPONENT_TYPE);
     public static readonly Registry<MapCodec<LevelBasedValue>> ENCHANTMENT_LEVEL_BASED_VALUE_TYPE = RegisterSimple<MapCodec<LevelBasedValue>>(Registries.ENCHANTMENT_LEVEL_BASED_VALUE_TYPE);
-    public static readonly Registry<MapCodec<EnchantmentEntityEffect>> ENCHANTMENT_ENTITY_EFFECT_TYPE = RegisterSimple<MapCodec<EnchantmentEntityEffect>>(Registries.ENCHANTMENT_ENTITY_EFFECT_TYPE);
-    public static readonly Registry<MapCodec<EnchantmentLocationBasedEffect>> ENCHANTMENT_LOCATION_BASED_EFFECT_TYPE = RegisterSimple<MapCodec<EnchantmentLocationBasedEffect>>(Registries.ENCHANTMENT_LOCATION_BASED_EFFECT_TYPE);
+    public static readonly Registry<object> ENCHANTMENT_ENTITY_EFFECT_TYPE = RegisterSimple<object>(Registries.ENCHANTMENT_ENTITY_EFFECT_TYPE);
+    public static readonly Registry<object> ENCHANTMENT_LOCATION_BASED_EFFECT_TYPE = RegisterSimple<object>(Registries.ENCHANTMENT_LOCATION_BASED_EFFECT_TYPE);
     public static readonly Registry<MapCodec<EnchantmentValueEffect>> ENCHANTMENT_VALUE_EFFECT_TYPE = RegisterSimple<MapCodec<EnchantmentValueEffect>>(Registries.ENCHANTMENT_VALUE_EFFECT_TYPE);
     public static readonly Registry<MapCodec<EnchantmentProvider>> ENCHANTMENT_PROVIDER_TYPE = RegisterSimple<MapCodec<EnchantmentProvider>>(Registries.ENCHANTMENT_PROVIDER_TYPE);
     public static readonly Registry<ConsumeEffectType<object>> CONSUME_EFFECT_TYPE = RegisterSimple<ConsumeEffectType<object>>(Registries.CONSUME_EFFECT_TYPE);

@@ -225,8 +225,13 @@ public interface IGuiRenderContext
 //Avoids the GPU layer depending on the Silk.NET.Input namespace; TextBox uses these constants for editing keys
 public static class GuiKeys
 {
+    public const int Space = 32;
+    public const int Enter = 257;
+    public const int KeypadEnter = 335;
     public const int Left = 263;
     public const int Right = 262;
+    public const int Up = 265;
+    public const int Down = 264;
     public const int Home = 268;
     public const int End = 269;
     public const int BackSpace = 259;
@@ -239,4 +244,7 @@ public static class GuiKeys
     public const int C = 67;
     public const int V = 86;
     public const int X = 88;
+
+    //IsSelection whether the key confirms the focused widget, maps to vanilla InputWithModifiers.isSelection
+    public static bool IsSelection(int key) => key is Enter or Space or KeypadEnter;
 }

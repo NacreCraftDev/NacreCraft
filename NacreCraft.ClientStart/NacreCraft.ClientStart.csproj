@@ -6,9 +6,19 @@
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
   </PropertyGroup>
 
+  <!--ReleaseNoMods is a publish profile rather than a debugger configuration, so it keeps the Release optimization-->
+  <PropertyGroup Condition="'$(Configuration)' == 'ReleaseNoMods'">
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <!--The constant drives the conditional compilation that removes the loader call from the entry point-->
+  <PropertyGroup Condition="'$(EnableModLoader)' != 'true'">
+    <DefineConstants>$(DefineConstants);NC_NO_MODLOADER</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\NacreCraft\NacreCraft.csproj" />
-    <ProjectReference Include="..\NacreCraft.ModLoader\NacreCraft.ModLoader.csproj" />
+    <ProjectReference Include="..\NacreCraft.ModLoader\NacreCraft.ModLoader.csproj" Condition="'$(EnableModLoader)' == 'true'" />
     <ProjectReference Include="..\NacreCraft.Client\NacreCraft.Client.csproj" />
   </ItemGroup>
 

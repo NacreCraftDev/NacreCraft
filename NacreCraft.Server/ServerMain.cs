@@ -15,6 +15,7 @@ using NacreCraft.Logging;
 using NacreCraft.Registry;
 using NacreCraft.Registry.Environment;
 using NacreCraft.Resources;
+using NacreCraft.Server;
 using NacreCraft.Server.Diagnostics;
 using NacreCraft.Server.Gui;
 using NacreCraft.Server.ServerConsole;
@@ -101,6 +102,8 @@ public static class ServerMain
         //    Port, max-players, difficulty, online mode, PVP, view distance and so on
         //    Depends only on AppPaths and not on resources, pulled early so everything afterwards knows which language to speak
         var settings = ServerSettings.LoadOrGenerate(AppPaths.ServerPropertiesPath);
+        //Launch arguments win over the file for this run, so a port or a difficulty can be tried without editing server.properties
+        settings.ApplyOverrides(options.Options);
 
         //4.2 Load the language table by the language code in config, falls back to en_us for an unsupported code
         //    The kernel has already extracted language files to lang/, the kernel load used the default code and this step pins it down
@@ -204,6 +207,10 @@ public static class ServerMain
             new RegistryData<NacreCraft.Registry.JukeboxSong>(
                 (WritableRegistry<NacreCraft.Registry.JukeboxSong>)BuiltInRegistries.JUKEBOX_SONG,
                 NacreCraft.Game.World.Datapack.ContentCodecs.Song),
+            //enchantment entries reference each other through exclusive_set, the loader retries in rounds
+            new RegistryData<NacreCraft.Registry.Enchantment>(
+                (WritableRegistry<NacreCraft.Registry.Enchantment>)BuiltInRegistries.ENCHANTMENT,
+                NacreCraft.Game.World.Items.Enchanting.Enchantment.ElementCodec),
         });
         Log.Info($"Registry data loaded: {registryLoad.LoadedCount} elements, {registryLoad.Errors.Count} errors");
         foreach (var error in registryLoad.Errors) Log.Warning($"Registry element failed to load: {error}");
@@ -238,7 +245,8 @@ public static class ServerMain
         //12. Initialize world storage
         //   Follows native LevelStorageSource.createWorldStorage to load anvil region files
         //   NacreCraft.Storage implements LevelStorage wrapping RegionFileStorage as the world storage entry point
-        var levelStorage = new LevelStorage(AppPaths.WorldsDir);
+        //   The root is the program directory itself, so level-name points straight at <root>/world like vanilla
+        var levelStorage = new LevelStorage(ServerPaths.WorldsRoot);
         var levelAccess = levelStorage.CreateAccess(settings.LevelName);
         Log.Info($"World storage ready {levelAccess.WorldDir}");
 

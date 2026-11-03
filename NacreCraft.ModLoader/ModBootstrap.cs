@@ -39,9 +39,7 @@ public static class ModBootstrap
             //Replacements come up first so the injected one can be rewritten when its turn comes
             hooks.PreloadReplacers();
             PreloadTargets(hooks, kernelNames);
-            //RuntimePatch lands only after all target assemblies are loaded; placed before mod Init for a deterministic timing
-            hooks.ApplyRuntimePatches();
-            //Runtime injection also requires the target to be in the process, so it runs after kernel preloading
+            //Runtime injection requires the target to be in the process, so it runs after kernel preloading
             hooks.ApplyRuntimeInjects();
         }
 

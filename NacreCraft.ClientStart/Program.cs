@@ -2,7 +2,9 @@ using System.Runtime.CompilerServices;
 using NacreCraft;
 using NacreCraft.Game;
 using NacreCraft.Client;
+#if !NC_NO_MODLOADER
 using NacreCraft.ModLoader;
+#endif
 
 namespace NacreCraft.ClientStart;
 
@@ -18,13 +20,24 @@ public static class Program
     public static int Main(string[] args)
     {
         EmbeddedAssemblyLoader.Initialize();
+        args = PrepareArgs(args);
         BootMods();
         return Launch(args);
     }
 
+    //PrepareArgs merges Client.Args into the command line before anything reads the arguments
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static string[] PrepareArgs(string[] args)
+        => LaunchArgsFile.Merge(args, Path.Combine(AppPaths.BaseDirectory, "Client.Args"));
+
     //BootMods mod bootstrap; this layer only touches the loader, not client types
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void BootMods() => ModBootstrap.Run(ModEnvironment.Client);
+    private static void BootMods()
+    {
+#if !NC_NO_MODLOADER
+        ModBootstrap.Run(ModEnvironment.Client);
+#endif
+    }
 
     //Launch client startup flow; only at this layer is resolving NacreCraft.Client allowed
     [MethodImpl(MethodImplOptions.NoInlining)]

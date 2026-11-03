@@ -15,6 +15,7 @@ public sealed record BlockPredicate(
     DataComponentMatchers Components)
 {
     //Codec persistence codec, field names blocks/state/nbt/components, maps to vanilla CODEC
+    //The component matchers contribute their own components and predicates fields to this object, so they merge in
     public static readonly Codec<BlockPredicate> Codec = RecordCodecBuilder.Of4(
         HolderSetCodecs.BlockSet.OptionalFieldOf("blocks")
             .ForGetter((BlockPredicate predicate) => predicate.Blocks),
@@ -22,7 +23,7 @@ public sealed record BlockPredicate(
             .ForGetter((BlockPredicate predicate) => predicate.Properties),
         NbtPredicate.Codec.OptionalFieldOf("nbt")
             .ForGetter((BlockPredicate predicate) => predicate.Nbt),
-        DataComponentMatchers.Codec.FieldOf("components")
+        DataComponentMatchers.Codec
             .ForGetter((BlockPredicate predicate) => predicate.Components),
         (blocks, properties, nbt, components) => new BlockPredicate(blocks, properties, nbt, components));
 

@@ -54,7 +54,6 @@ public interface DialogBody { }
 public interface DimensionType { }
 public interface Enchantment { }
 public interface EnchantmentEntityEffect { }
-public interface EnchantmentLocationBasedEffect { }
 public interface EnchantmentProvider { }
 //EnchantmentValueEffect transforms a number by the enchantment level, maps to vanilla EnchantmentValueEffect
 public interface EnchantmentValueEffect

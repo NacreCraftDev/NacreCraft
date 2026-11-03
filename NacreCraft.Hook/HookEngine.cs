@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Text;
-using NacreCraft.Hook.Runtime;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 
@@ -20,12 +19,8 @@ public sealed partial class HookEngine
     private readonly Dictionary<string, string> _replacementPaths = new();
     //_replacementModules 按路径读进来的替换方模块 同一个程序集只读一遍
     private readonly Dictionary<string, ModuleDefinition> _replacementModules = new();
-    private readonly RuntimeHookEngine? _runtimeEngine;
     private int _rewriteCount;
     private bool _sealed;
-    //_runtimePatchesApplied RuntimePatch 只执行一次
-    //重复执行会让 RuntimeHookEngine 对同一个方法抛重复注册 这里先挡住
-    private bool _runtimePatchesApplied;
 
     //标签按参数分桶时用到的 BCL 方法 只在插桩时解析一次
     private static readonly MethodInfo StringConcat = typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string)])!;
@@ -33,12 +28,6 @@ public sealed partial class HookEngine
 
     public int RewriteCount => _rewriteCount;
     public IReadOnlyList<HookRule> Rules => _rules.AsReadOnly();
-    public RuntimeHookEngine? RuntimeEngine => _runtimeEngine;
-
-    public HookEngine()
-    {
-        _runtimeEngine = new RuntimeHookEngine();
-    }
 
     public HookEngine AddRule(HookRule rule)
     {
@@ -366,16 +355,6 @@ public sealed partial class HookEngine
         return new HookResult(bytes, _rewriteCount - countBefore, AppliedRuleCount, Outcomes);
     }
 
-    public void ApplyRuntimePatch(MethodInfo original, MethodInfo replacement)
-    {
-        _runtimeEngine?.Patch(original, replacement);
-    }
-
-    public void ApplyRuntimePatch(string originalTypeFullName, string methodName, Type replacementType, string replacementMethodName)
-    {
-        _runtimeEngine?.Patch(originalTypeFullName, methodName, replacementType, replacementMethodName);
-    }
-
     //DumpMethodIl 输出指定方法在本引擎规则下的 IL 便于确认插桩结果
     //改写与反汇编都在内存里完成 不碰磁盘
     public string DumpMethodIl(byte[] assemblyBytes, string typeFullName, string methodName)
@@ -414,88 +393,6 @@ public sealed partial class HookEngine
             builder.AppendLine($"  {instruction}");
 
         return builder.ToString();
-    }
-
-    public bool RemoveRuntimePatch(string originalTypeFullName, string methodName)
-    {
-        return _runtimeEngine?.Unpatch(originalTypeFullName, methodName) ?? false;
-    }
-
-    public void RemoveAllRuntimePatches()
-    {
-        _runtimeEngine?.UnpatchAll();
-    }
-
-    public TDelegate? GetTrampoline<TDelegate>(MethodInfo original) where TDelegate : Delegate
-    {
-        return _runtimeEngine?.GetTrampoline<TDelegate>(original);
-    }
-
-    //ApplyRuntimePatches 执行全部 RuntimePatch 规则 由调用方在目标类型已加载之后调
-    //改写时执行太早 那一刻目标程序集正在被加载 目标类型还没进来 FindLoadedType 必然落空
-    //内核在预载完目标程序集、模组 Init 之前调这里 时机确定可复现
-    public void ApplyRuntimePatches()
-    {
-        if (_runtimePatchesApplied)
-            return;
-        _runtimePatchesApplied = true;
-
-        var runtimeRules = _rules.Where(r => r.PatchMode == PatchMode.RuntimePatch).ToList();
-        if (runtimeRules.Count == 0)
-            return;
-        ApplyRuntimePatches(runtimeRules);
-    }
-
-    private void ApplyRuntimePatches(List<HookRule> runtimeRules)
-    {
-        foreach (var rule in runtimeRules)
-        {
-            var originalType = FindLoadedType(rule.OriginalType);
-            if (originalType == null)
-            {
-                Console.Error.WriteLine($"[NacreCraft.Hook] Runtime patch skipped: type {rule.OriginalType} not found in loaded assemblies");
-                continue;
-            }
-
-            var originalMethod = originalType.GetMethod(rule.OriginalMethod,
-                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
-            if (originalMethod == null)
-            {
-                Console.Error.WriteLine($"[NacreCraft.Hook] Runtime patch skipped: method {rule.OriginalType}::{rule.OriginalMethod} not found");
-                continue;
-            }
-
-            var replacement = ResolveReplacement(rule);
-            if (replacement is null)
-            {
-                Console.Error.WriteLine($"[NacreCraft.Hook] Runtime patch skipped: replacement type {rule.ReplacementAssembly}!{rule.ReplacementTypeName} not resolved");
-                continue;
-            }
-
-            var replacementMethod = replacement.Value.Type.GetMethod(rule.ReplacementMethod,
-                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
-            if (replacementMethod == null)
-            {
-                Console.Error.WriteLine($"[NacreCraft.Hook] Runtime patch skipped: replacement method {rule.ReplacementTypeName}::{rule.ReplacementMethod} not found");
-                continue;
-            }
-
-            _runtimeEngine?.Patch(originalMethod, replacementMethod);
-        }
-    }
-
-    private static Type? FindLoadedType(string fullName)
-    {
-        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            try
-            {
-                var type = asm.GetType(fullName);
-                if (type != null) return type;
-            }
-            catch { }
-        }
-        return null;
     }
 
     private void Seal() => _sealed = true;
@@ -575,16 +472,16 @@ public sealed partial class HookEngine
     }
 
     //BuildNoOptimizeTargets 收集需要禁止优化的目标方法 键是 类型全名::方法名
-    //只有替换方法体与运行时 patch 这两种模式依赖"目标方法的入口是唯一入口"
+    //替换方法体要求"目标方法的入口是唯一入口"
     //内联会把目标方法固化进调用方 分层编译还会在方法变热时重编译并把入口指到新代码
-    //两者叠加的后果是无论改 IL 还是 patch 入口 都够不着真正在跑的那份实现
+    //两者叠加的后果是改过的 IL 够不着真正在跑的那份实现
     //CallSite 改的是调用点 Probe/Mark 改的是目标自身 二者都在 JIT 之前完成 内联基于改后的 IL 不受影响
     private static HashSet<string> BuildNoOptimizeTargets(List<HookRule> rules)
     {
         var targets = new HashSet<string>(StringComparer.Ordinal);
         foreach (var rule in rules)
         {
-            if (rule.HookType != HookType.MethodBody && rule.PatchMode != PatchMode.RuntimePatch)
+            if (rule.HookType != HookType.MethodBody)
                 continue;
             targets.Add($"{rule.OriginalType}::{rule.OriginalMethod}");
         }
@@ -594,7 +491,7 @@ public sealed partial class HookEngine
     //MarkNotOptimized 给目标方法打上不可优化位
     //miNoOptimization 在建表期有两处效果 一是 SetNotInline 禁掉内联与 GDV 候选
     //二是让方法不满足 IsEligibleForTieredCompilation 于是不参与分层 入口不会被 Tier1 重编译重置
-    //只标 NoInlining 只能解决前一半 实测中分层提升照样把 patch 的 jmp 冲掉
+    //只标 NoInlining 只能解决前一半 实测中分层提升照样把改写的入口冲掉
     private static void MarkNotOptimized(MethodDefinition method)
     {
         if (method.IsAbstract || method.IsPInvokeImpl)

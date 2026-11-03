@@ -35,9 +35,9 @@ public static class Registries
     public static readonly ResourceKey<Registry<MapCodec<DialogBody>>> DIALOG_BODY_TYPE = CreateRegistryKey<MapCodec<DialogBody>>("dialog_body_type");
     public static readonly ResourceKey<Registry<MapCodec<Dialog>>> DIALOG_TYPE = CreateRegistryKey<MapCodec<Dialog>>("dialog_type");
     public static readonly ResourceKey<Registry<object>> ENCHANTMENT_EFFECT_COMPONENT_TYPE = CreateRegistryKey<object>("enchantment_effect_component_type");
-    public static readonly ResourceKey<Registry<MapCodec<EnchantmentEntityEffect>>> ENCHANTMENT_ENTITY_EFFECT_TYPE = CreateRegistryKey<MapCodec<EnchantmentEntityEffect>>("enchantment_entity_effect_type");
+    public static readonly ResourceKey<Registry<object>> ENCHANTMENT_ENTITY_EFFECT_TYPE = CreateRegistryKey<object>("enchantment_entity_effect_type");
     public static readonly ResourceKey<Registry<MapCodec<LevelBasedValue>>> ENCHANTMENT_LEVEL_BASED_VALUE_TYPE = CreateRegistryKey<MapCodec<LevelBasedValue>>("enchantment_level_based_value_type");
-    public static readonly ResourceKey<Registry<MapCodec<EnchantmentLocationBasedEffect>>> ENCHANTMENT_LOCATION_BASED_EFFECT_TYPE = CreateRegistryKey<MapCodec<EnchantmentLocationBasedEffect>>("enchantment_location_based_effect_type");
+    public static readonly ResourceKey<Registry<object>> ENCHANTMENT_LOCATION_BASED_EFFECT_TYPE = CreateRegistryKey<object>("enchantment_location_based_effect_type");
     public static readonly ResourceKey<Registry<MapCodec<EnchantmentProvider>>> ENCHANTMENT_PROVIDER_TYPE = CreateRegistryKey<MapCodec<EnchantmentProvider>>("enchantment_provider_type");
     public static readonly ResourceKey<Registry<MapCodec<EnchantmentValueEffect>>> ENCHANTMENT_VALUE_EFFECT_TYPE = CreateRegistryKey<MapCodec<EnchantmentValueEffect>>("enchantment_value_effect_type");
     public static readonly ResourceKey<Registry<Codec<EntitySubPredicate>>> ENTITY_SUB_PREDICATE_TYPE = CreateRegistryKey<Codec<EntitySubPredicate>>("entity_sub_predicate_type");

@@ -150,7 +150,6 @@ public sealed class ModHookRule
 
     //PatchModeName: the patch mode name, maps to NacreCraft.Hook's PatchMode, taking ILRewrite or RuntimeInject
     //ILRewrite rewrites bytes before the target assembly loads; RuntimeInject uses ReJIT to rewrite already loaded code
-    //RuntimePatch is a retiring entry patch and should not be used by new rules
     [JsonPropertyName("patchMode")]
     public string PatchModeName { get; set; } = "ILRewrite";
 

@@ -70,8 +70,22 @@ public static class LootItemConditions
 
     static LootItemConditions()
     {
-        Register("survives_explosion", ExplosionCondition.MAP_CODEC);
+        //Registration order follows vanilla LootItemConditions.bootstrap
+        Register("inverted", InvertedCondition.MAP_CODEC);
+        Register("any_of", AnyOfCondition.MAP_CODEC);
+        Register("all_of", AllOfCondition.MAP_CODEC);
+        Register("random_chance", RandomChanceCondition.MAP_CODEC);
+        Register("random_chance_with_enchanted_bonus", RandomChanceWithEnchantedBonusCondition.MAP_CODEC);
+        Register("entity_properties", EntityPropertiesCondition.MAP_CODEC);
+        Register("killed_by_player", KilledByPlayerCondition.MAP_CODEC);
+        Register("block_state_property", BlockStatePropertyCondition.MAP_CODEC);
         Register("match_tool", MatchTool.MAP_CODEC);
+        Register("table_bonus", TableBonusCondition.MAP_CODEC);
+        Register("survives_explosion", ExplosionCondition.MAP_CODEC);
+        Register("damage_source_properties", DamageSourcePropertiesCondition.MAP_CODEC);
+        Register("location_check", LocationCheckCondition.MAP_CODEC);
+        Register("weather_check", WeatherCheckCondition.MAP_CODEC);
+        Register("enchantment_active_check", EnchantmentActiveCheckCondition.MAP_CODEC);
     }
 
     private static MapCodec<LootItemCondition> Lookup(Identifier id)

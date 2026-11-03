@@ -100,13 +100,31 @@ public abstract class GuiControl : IDisposable, ILayoutElement
     //ClearDirtyTree clears its own dirty after a Render recording; GuiContainer override recurses into children
     internal virtual void ClearDirtyTree() => _isDirty = false;
 
-    //TabStop whether the widget participates in Tab focus navigation, default false; only widgets set to true can be Tab-focused
-    public bool TabStop { get; set; }
+    //TabStop whether the widget participates in focus navigation, default true as vanilla lets every active widget take focus
+    //GuiContainer overrides the default to false so a panel itself is skipped and only its children are candidates
+    public bool TabStop { get; set; } = true;
 
     //TabIndex Tab navigation order, default 0; smaller values focus first, ties follow widget tree order
     public int TabIndex { get; set; }
 
+    private bool _focused;
+
+    //IsFocused whether the window currently routes keyboard input here, maintained by GuiWindow.SetFocused
+    public bool IsFocused
+    {
+        get => _focused;
+        internal set
+        {
+            if (_focused == value) return;
+            _focused = value;
+            MarkDirty();
+        }
+    }
+
     public GuiContainer? Parent { get; internal set; }
+
+    //Window the hosting window, found by walking up the parent chain; a window itself already is one
+    public GuiWindow? Window => this as GuiWindow ?? Parent?.Window;
 
     public bool ContainsPoint(int x, int y) => _bounds.Contains(x, y);
 
@@ -161,6 +179,9 @@ public abstract class GuiControl : IDisposable, ILayoutElement
     //TextBox override starts/stops caret blinking
     protected internal virtual void OnGotFocus() { }
     protected internal virtual void OnLostFocus() { }
+
+    //ConsumesArrowKey whether the widget edits with this arrow key instead of letting the window navigate focus
+    protected internal virtual bool ConsumesArrowKey(int key) => false;
 
     public virtual void Dispose() => _disposed = true;
 }

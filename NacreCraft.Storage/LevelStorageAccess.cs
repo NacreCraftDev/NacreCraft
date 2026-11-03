@@ -52,16 +52,11 @@ public sealed class LevelStorageAccess : IDisposable
     }
 
     //GetDimensionPath gets the dimension data directory path
-    //overworld is worldDir directly; other dimensions are under worldDir/dim_<name>
+    //Every dimension, the overworld included, sits under dimensions/<namespace>/<path>; vanilla outlines the folder this
+    //way in DimensionType.getStorageFolder so a save keeps all dimensions side by side instead of at the world root
     public string GetDimensionPath(ResourceKey<Level> levelKey)
     {
-        Log.Debug($"GetDimensionPath entry levelKey={levelKey}");
-        if (levelKey.Identifier == LevelKeys.OVERWORLD.Identifier)
-        {
-            Log.Debug($"GetDimensionPath exit result={_worldDir}");
-            return _worldDir;
-        }
-        var result = Path.Combine(_worldDir, "dim_" + levelKey.Identifier.Path);
+        var result = Path.Combine(_worldDir, "dimensions", levelKey.Identifier.Namespace, levelKey.Identifier.Path);
         Log.Debug($"GetDimensionPath exit result={result}");
         return result;
     }

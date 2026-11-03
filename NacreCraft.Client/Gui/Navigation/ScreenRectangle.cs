@@ -45,6 +45,62 @@ public readonly record struct ScreenRectangle(int X, int Y, int Width, int Heigh
     public int Right => X + Width;
     public int Bottom => Y + Height;
 
+    //Of builds a rectangle from an axis and its primary/secondary bounds, maps to vanilla of
+    public static ScreenRectangle Of(ScreenAxis primaryAxis, int primaryIndex, int secondaryIndex,
+        int primaryLength, int secondaryLength)
+        => primaryAxis == ScreenAxis.Horizontal
+            ? new ScreenRectangle(primaryIndex, secondaryIndex, primaryLength, secondaryLength)
+            : new ScreenRectangle(secondaryIndex, primaryIndex, secondaryLength, primaryLength);
+
+    //Step moves the rectangle one unit along direction, maps to vanilla step
+    public ScreenRectangle Step(ScreenDirection direction)
+    {
+        var position = new ScreenPosition(X, Y).Step(direction);
+        return new ScreenRectangle(position.X, position.Y, Width, Height);
+    }
+
+    //GetLength returns the extent along axis, maps to vanilla getLength
+    public int GetLength(ScreenAxis axis) => axis == ScreenAxis.Horizontal ? Width : Height;
+
+    //GetBoundInDirection returns the inclusive edge coordinate on the given side, maps to vanilla getBoundInDirection
+    public int GetBoundInDirection(ScreenDirection direction)
+    {
+        var axis = direction.GetAxis();
+        var origin = new ScreenPosition(X, Y).GetCoordinate(axis);
+        return direction.IsPositive() ? origin + GetLength(axis) - 1 : origin;
+    }
+
+    //GetBorder returns the one-pixel strip just outside the given side, maps to vanilla getBorder
+    public ScreenRectangle GetBorder(ScreenDirection direction)
+    {
+        var startFirst = GetBoundInDirection(direction);
+        var orthogonalAxis = direction.GetAxis().Orthogonal();
+        var startSecond = GetBoundInDirection(orthogonalAxis.GetNegative());
+        var length = GetLength(orthogonalAxis);
+        return Of(direction.GetAxis(), startFirst, startSecond, 1, length).Step(direction);
+    }
+
+    //Overlaps whether both axes overlap, maps to vanilla overlaps
+    public bool Overlaps(ScreenRectangle other)
+        => OverlapsInAxis(other, ScreenAxis.Horizontal) && OverlapsInAxis(other, ScreenAxis.Vertical);
+
+    //OverlapsInAxis whether the extents overlap along axis, touching edges included, maps to vanilla overlapsInAxis
+    public bool OverlapsInAxis(ScreenRectangle other, ScreenAxis axis)
+    {
+        var thisLower = GetBoundInDirection(axis.GetNegative());
+        var otherLower = other.GetBoundInDirection(axis.GetNegative());
+        var thisHigher = GetBoundInDirection(axis.GetPositive());
+        var otherHigher = other.GetBoundInDirection(axis.GetPositive());
+        return Math.Max(thisLower, otherLower) <= Math.Min(thisHigher, otherHigher);
+    }
+
+    //GetCenterInAxis returns the integer center coordinate along axis, maps to vanilla getCenterInAxis
+    public int GetCenterInAxis(ScreenAxis axis)
+        => (GetBoundInDirection(axis.GetPositive()) + GetBoundInDirection(axis.GetNegative())) / 2;
+
+    //ContainsPoint whether the point lies inside the rectangle, maps to vanilla containsPoint
+    public bool ContainsPoint(int x, int y) => x >= Left && x < Right && y >= Top && y < Bottom;
+
     //Intersects whether two rectangles intersect, maps to vanilla intersects
     public bool Intersects(ScreenRectangle other)
         => other.Left < Right && other.Right > Left && other.Top < Bottom && other.Bottom > Top;

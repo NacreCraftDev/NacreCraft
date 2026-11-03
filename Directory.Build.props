@@ -16,6 +16,15 @@
   </PropertyGroup>
 
   <PropertyGroup>
+    <!--EnableModLoader decides whether the mod loader, its hook engine and the load-time rewriting are part of the build-->
+    <!--Off produces a publish that only runs the kernel: a mod dropped next to it is ignored instead of rejected, and-->
+    <!--none of the loader assemblies reach the output. Pass -p:EnableModLoader=false, or build the ReleaseNoMods-->
+    <!--configuration, which turns it off by itself-->
+    <EnableModLoader Condition="'$(EnableModLoader)' == '' And '$(Configuration)' == 'ReleaseNoMods'">false</EnableModLoader>
+    <EnableModLoader Condition="'$(EnableModLoader)' == ''">true</EnableModLoader>
+  </PropertyGroup>
+
+  <PropertyGroup>
     <Authors>NacreCraft Contributors</Authors>
     <Product>NacreCraft</Product>
     <Copyright>Copyright (c) NacreCraft Contributors</Copyright>

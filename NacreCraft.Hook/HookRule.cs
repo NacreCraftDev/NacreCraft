@@ -36,6 +36,16 @@ public enum HookType
     CallArg,
 }
 
+//PatchMode 规则生效的时机
+//ILRewrite 在目标程序集第一次被加载之前改写字节 内联因此看不到未插桩的原体
+//RuntimeInject 借原生层把新方法体在运行时提交给 CLR 与 ILRewrite 共用全部锚点参数
+//要改已经加载甚至已经跑起来的代码时用这个
+public enum PatchMode
+{
+    ILRewrite,
+    RuntimeInject,
+}
+
 //HookPlacement 锚点命中后替换调用的落位方式
 //Replace 顶替锚点 原调用不再执行 需要回调自己补回
 //Before 保留锚点 在它之前插入一次调用
@@ -205,7 +215,6 @@ public sealed class HookRule
         };
         var mode = PatchMode switch
         {
-            PatchMode.RuntimePatch => " (runtime)",
             PatchMode.RuntimeInject => " (rejit)",
             _ => ""
         };

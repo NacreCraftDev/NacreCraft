@@ -11,7 +11,7 @@ using NacreCraft.Registry;
 namespace NacreCraft.Game.Server;
 
 //PlayerDataStorage player data storage, maps to vanilla PlayerDataStorage
-//Path <world dir>/playerdata/<uuid>.dat; the root is directly the player NBT with no Data wrapper, matching vanilla
+//Path <world dir>/players/<uuid>.dat; the root is directly the player NBT with no Data wrapper, matching vanilla
 //Currently persists position/facing/health/attributes/game type/xp/inventory; status effects are added once the matching system is wired up
 public sealed class PlayerDataStorage
 {
@@ -21,7 +21,7 @@ public sealed class PlayerDataStorage
     private readonly string _directory;
 
     public PlayerDataStorage(string worldDir)
-        => _directory = Path.Combine(worldDir, "playerdata");
+        => _directory = Path.Combine(worldDir, "players");
 
     //Save writes the player save; a temp file atomic replace prevents a half write from corrupting it
     //A disk write failure only logs without throwing, to avoid one player's save problem halting the main loop

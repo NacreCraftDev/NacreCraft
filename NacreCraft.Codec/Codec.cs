@@ -49,7 +49,7 @@ public abstract class AbstractMapCodec<T> : Codec<T>
 {
     //Fail forwards a field failure to the record result, keeping the original message
     protected static DataResult<T> Fail<R>(DataResult<R> source)
-        => DataResult<T>.Error(() => source.ErrorMessage ?? "field decode failed");
+        => DataResult<T>.Error(() => source.ErrorMessage ?? $"field decode failed in {typeof(T).Name}");
 
     //The default implementation accumulates into a builder with EncodeTo and then calls Build(empty)
     public virtual DataResult<U> EncodeStart<U>(DynamicOps<U> ops, T value)

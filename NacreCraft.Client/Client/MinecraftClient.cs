@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 using NacreCraft.Client.Level;
+using NacreCraft.Client.Player;
 using NacreCraft.Client.Language;
 using NacreCraft.Client.Render;
 using NacreCraft.Client.Render.Atlas;
@@ -66,6 +67,8 @@ public sealed class MinecraftClient : IDisposable
 
     private volatile bool _running;
     private long _frameCount;
+    //_lastPlayerTickCount last world tick the local player physics ran on, so physics follows the 20 Hz world tick rather than the frame rate
+    private long _lastPlayerTickCount;
     private readonly CancellationTokenSource _shutdownCts = new();
     //SleepBudgetMillis per-frame sleep budget; tests set 0 to speed up, production uses the 16ms default
     private int _sleepBudgetMillis = TargetFrameMillis;
@@ -102,8 +105,12 @@ public sealed class MinecraftClient : IDisposable
     //GameConfig client config, the options.txt load result
     public GameConfig Config { get; }
 
-    //Player local player entity; HUD and game logic read Health/Food/Pos etc.
-    public World.Entity.Player Player { get; } = new();
+    //Player local player entity, owns the client movement physics and the position packets; HUD and game logic read Health/Food/Pos etc.
+    public LocalPlayer Player { get; }
+
+    //Current the client that is running right now, which is how a mod reaches the local player and the screens
+    //The startup creates a single instance and Dispose clears it, so a mod never holds a disposed client
+    public static MinecraftClient? Current { get; private set; }
 
     //GpuApp held Vulkan GUI app, non-null in window-driven mode
     public VulkanGuiApp? GpuApp => _gpuApp;
@@ -140,6 +147,9 @@ public sealed class MinecraftClient : IDisposable
         Config = config;
         _gpuApp = gpuApp;
         _connection = connection;
+        //The local player binds itself to the client level through AttachEntity, which is what gives it collisions
+        Player = new LocalPlayer(_level);
+        if (connection is not null) Player.Connection = connection;
         _rsr = rsr;
         _resourceManager = resourceManager;
         _language = language;
@@ -158,6 +168,7 @@ public sealed class MinecraftClient : IDisposable
         }
         //The world render chain is built by the startup loading stage rather than a swapchain event, so the loading
         //overlay has real work to show; EnsureWorldRenderer stays idempotent for callers that run it more than once
+        Current = this;
     }
 
     //EnsureWorldRenderer builds the block atlas and LevelRenderer into gpuApp the first time the swapchain is ready
@@ -252,6 +263,9 @@ public sealed class MinecraftClient : IDisposable
             onConnected: conn =>
             {
                 _connection = conn;
+                //The player starts sending movement packets only once the play connection exists
+                Player.Connection = conn;
+                Player.ResetAck();
                 if (conn.Listener is ClientGamePacketListenerImpl listener)
                 {
                     //The container screen is switched in a network callback; the network layer does not know the GUI layer, and the row count is decided by the menu type
@@ -457,10 +471,22 @@ public sealed class MinecraftClient : IDisposable
         //The local world advances one frame after packet processing, converting this frame to a number of ticks by the server-sent tick rate
         //When the server is frozen it does not advance ticks, so entity animation stops
         _level.Tick(delta);
+        TickLocalPlayer();
         //Sky brightness currently has no client time source, constant noon; it will be computed from time once time sync is added
         _lightTexture?.Update(1.0f);
         UpdateCamera();
         _frameCount++;
+    }
+
+    //TickLocalPlayer advances the local player physics once per world tick
+    //The world tick already follows the server tick rate, so a frozen world stops the player too instead of drifting ahead
+    private void TickLocalPlayer()
+    {
+        var elapsed = _level.TickCount - _lastPlayerTickCount;
+        if (elapsed <= 0) return;
+        _lastPlayerTickCount = _level.TickCount;
+        //A frame that catches up many ticks still runs only a few steps, a long stall must not replay hundreds of them
+        for (var i = 0; i < Math.Min(elapsed, 10); i++) Player.ClientTick();
     }
 
     //GuiTick input dispatch, layout and control animation for one rendered frame
@@ -511,6 +537,10 @@ public sealed class MinecraftClient : IDisposable
 
     public void Dispose()
     {
+        //Only the instance that registered itself may clear the slot, so a late dispose cannot hide a newer client
+        if (ReferenceEquals(Current, this))
+            Current = null;
+
         if (_gpuApp is not null && _screens is not null)
         {
             _gpuApp.RawKeyDown -= _screens.HandleRawKeyDown;

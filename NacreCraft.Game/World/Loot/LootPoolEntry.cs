@@ -1,6 +1,7 @@
 using NacreCraft.Codec;
 using NacreCraft.Game.World.Items;
 using NacreCraft.Registry;
+using NacreCraft.Registry.Codec;
 
 namespace NacreCraft.Game.World.Loot;
 
@@ -114,4 +115,59 @@ public sealed class AlternativesEntry : CompositeEntryBase
             if (child.Expand(context, output)) return true;
         return false;
     }
+}
+
+//EmptyEntry occupies a weight slot without producing anything, maps to vanilla EmptyLootItem
+public sealed class EmptyEntry : LootPoolSingletonContainer
+{
+    public static readonly MapCodec<LootPoolEntryContainer> MAP_CODEC =
+        RecordCodecBuilder.Of4<LootPoolEntryContainer, int, int, IReadOnlyList<LootItemCondition>,
+            IReadOnlyList<LootItemFunction>>(
+            Codecs.Int.OptionalFieldOf("weight", 1).ForGetter<LootPoolEntryContainer, int>(e => ((EmptyEntry)e).Weight),
+            Codecs.Int.OptionalFieldOf("quality", 0).ForGetter<LootPoolEntryContainer, int>(e => ((EmptyEntry)e).Quality),
+            LootItemConditions.TYPED_CODEC.ListOf().OptionalFieldOf("conditions", Array.Empty<LootItemCondition>())
+                .ForGetter<LootPoolEntryContainer, IReadOnlyList<LootItemCondition>>(e => e.Conditions),
+            LootItemFunctions.TYPED_CODEC.ListOf().OptionalFieldOf("functions", Array.Empty<LootItemFunction>())
+                .ForGetter<LootPoolEntryContainer, IReadOnlyList<LootItemFunction>>(e => ((EmptyEntry)e).Functions),
+            (weight, quality, conditions, functions) => new EmptyEntry(weight, quality, conditions, functions));
+
+    private EmptyEntry(int weight, int quality, IReadOnlyList<LootItemCondition> conditions,
+        IReadOnlyList<LootItemFunction> functions) : base(weight, quality, conditions, functions)
+    {
+    }
+
+    public override Identifier TypeId => Identifier.WithDefaultNamespace("empty");
+
+    protected override void CreateItemStack(Action<ItemStack> output, LootContext context)
+    {
+    }
+}
+
+//LootTableEntry draws from another loot table, maps to vanilla LootTableReference
+public sealed class LootTableEntry : LootPoolSingletonContainer
+{
+    public static readonly MapCodec<LootPoolEntryContainer> MAP_CODEC =
+        RecordCodecBuilder.Of5<LootPoolEntryContainer, Identifier, int, int, IReadOnlyList<LootItemCondition>,
+            IReadOnlyList<LootItemFunction>>(
+            IdentifierCodec.Instance.FieldOf("value")
+                .ForGetter<LootPoolEntryContainer, Identifier>(e => ((LootTableEntry)e).Value),
+            Codecs.Int.OptionalFieldOf("weight", 1).ForGetter<LootPoolEntryContainer, int>(e => ((LootTableEntry)e).Weight),
+            Codecs.Int.OptionalFieldOf("quality", 0)
+                .ForGetter<LootPoolEntryContainer, int>(e => ((LootTableEntry)e).Quality),
+            LootItemConditions.TYPED_CODEC.ListOf().OptionalFieldOf("conditions", Array.Empty<LootItemCondition>())
+                .ForGetter<LootPoolEntryContainer, IReadOnlyList<LootItemCondition>>(e => e.Conditions),
+            LootItemFunctions.TYPED_CODEC.ListOf().OptionalFieldOf("functions", Array.Empty<LootItemFunction>())
+                .ForGetter<LootPoolEntryContainer, IReadOnlyList<LootItemFunction>>(e => ((LootTableEntry)e).Functions),
+            (value, weight, quality, conditions, functions) =>
+                new LootTableEntry(value, weight, quality, conditions, functions));
+
+    private LootTableEntry(Identifier value, int weight, int quality, IReadOnlyList<LootItemCondition> conditions,
+        IReadOnlyList<LootItemFunction> functions) : base(weight, quality, conditions, functions) => Value = value;
+
+    public Identifier Value { get; }
+
+    public override Identifier TypeId => Identifier.WithDefaultNamespace("loot_table");
+
+    protected override void CreateItemStack(Action<ItemStack> output, LootContext context)
+        => LootTables.Active.Get(Value)?.GetRandomItems(context, stack => output(stack));
 }

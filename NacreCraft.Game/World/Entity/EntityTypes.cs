@@ -38,6 +38,27 @@ public static class EntityTypes
         public override int RawId => 151;
     }
 
+    //LightningBoltType lightning bolt type, maps to vanilla EntityTypes.LIGHTNING_BOLT
+    //A zero sized entity with the largest update interval, it only carries the channeling strike
+    public sealed class LightningBoltType : EntityType<object>
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("lightning_bolt");
+        public override int RawId => 77;
+        public override int TrackingRangeChunks => 16;
+        public override float Width => 0f;
+        public override float Height => 0f;
+    }
+
+    //TridentType thrown trident type, maps to vanilla EntityTypes.TRIDENT
+    public sealed class TridentType : EntityType<object>
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("trident");
+        public override int RawId => 136;
+        public override int TrackingRangeChunks => 4;
+        public override float Width => 0.5f;
+        public override float Height => 0.5f;
+    }
+
     //PlayerType player type, used for player tracking and AddEntity broadcast
     public sealed class PlayerType : EntityType<object>
     {
@@ -140,6 +161,12 @@ public static class EntityTypes
     //Player entities go through playerdata and are not stored as entities, so no factory is given and they are skipped when restoring from entity saves
     public static readonly PlayerType PLAYER = new();
 
+    //LIGHTNING_BOLT lightning bolt type, spawned by the channeling enchantment
+    public static readonly LightningBoltType LIGHTNING_BOLT = new();
+
+    //TRIDENT thrown trident type, the channeling entity predicate checks for it
+    public static readonly TridentType TRIDENT = new();
+
     //_byRawId reverse map from network index to type, used by AddEntity decoding to resolve the entity type
     private static readonly Dictionary<int, EntityType<object>> ByRawId = new();
 
@@ -159,6 +186,8 @@ public static class EntityTypes
         Register(SMALL_FIREBALL);
         Register(TNT);
         Register(PLAYER);
+        Register(LIGHTNING_BOLT);
+        Register(TRIDENT);
     }
 
     //ById resolves an entity type by network index, null when unregistered

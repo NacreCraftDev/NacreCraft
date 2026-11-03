@@ -3,7 +3,9 @@ using NacreCraft;
 using NacreCraft.Config;
 using NacreCraft.Game;
 using NacreCraft.Logging;
+#if !NC_NO_MODLOADER
 using NacreCraft.ModLoader;
+#endif
 
 namespace NacreCraft.ServerStart;
 
@@ -19,9 +21,16 @@ public static class Program
     public static int Main(string[] args)
     {
         EmbeddedAssemblyLoader.Initialize();
+        args = PrepareArgs(args);
         BootMods(args);
         return Launch(args);
     }
+
+    //PrepareArgs merges Server.Args into the command line before anything reads the arguments
+    //BootMods scans for --debug and ServerMain reads nogui/noconsole/trace itself, so the merge has to finish first
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static string[] PrepareArgs(string[] args)
+        => LaunchArgsFile.Merge(args, Path.Combine(AppPaths.BaseDirectory, "Server.Args"));
 
     //BootMods mod bootstrap; this layer only touches the loader, not server types
     //--debug must open the log output here: injection runs before kernel Initialize, and one step late drops the whole run of debug records
@@ -38,7 +47,9 @@ public static class Program
             Log.SetVerbose(true);
         }
 
+#if !NC_NO_MODLOADER
         ModBootstrap.Run(ModEnvironment.Server);
+#endif
     }
 
     //Launch server startup flow; only at this layer is resolving NacreCraft.Server allowed

@@ -98,6 +98,17 @@ public sealed class GuiButton : GuiControl
         Click?.Invoke(this, EventArgs.Empty);
     }
 
+    //OnKeyDown activates on Enter or Space, maps to vanilla AbstractButton keyPressed isSelection
+    protected internal override void OnKeyDown(KeyEventArgs e)
+    {
+        if (Enabled && GuiKeys.IsSelection(e.Key))
+        {
+            OnMouseClick(new MouseEventArgs(GuiMouseButton.None, X + Width / 2, Y + Height / 2, e.Modifiers));
+            return;
+        }
+        base.OnKeyDown(e);
+    }
+
     protected internal override void OnMouseEnter(MouseEventArgs e)
     {
         _hover = true;
@@ -118,7 +129,7 @@ public sealed class GuiButton : GuiControl
         {
             if (!string.IsNullOrEmpty(DisabledBackgroundSprite)) sprite = DisabledBackgroundSprite;
         }
-        else if (_pressed || _hover)
+        else if (_pressed || _hover || IsFocused)
         {
             if (!string.IsNullOrEmpty(HoverBackgroundSprite)) sprite = HoverBackgroundSprite;
         }
@@ -129,7 +140,7 @@ public sealed class GuiButton : GuiControl
         }
         else
         {
-            var color = _pressed ? PressedColor : (_hover ? HoverColor : BackgroundColor);
+            var color = _pressed ? PressedColor : (_hover || IsFocused ? HoverColor : BackgroundColor);
             context.DrawQuad(X, Y, Width, Height, color);
         }
         if (!string.IsNullOrEmpty(Text))
@@ -354,6 +365,10 @@ public sealed class GuiTextBox : GuiControl
         }
         base.OnKeyPress(e);
     }
+
+    //ConsumesArrowKey the caret moves with horizontal arrows and Home/End, so the window must not steal them
+    protected internal override bool ConsumesArrowKey(int key)
+        => key is GuiKeys.Left or GuiKeys.Right or GuiKeys.Home or GuiKeys.End;
 
     //OnKeyDown handles editing keys Left/Right/Home/End/BackSpace/Delete/Ctrl+C/V/X/A
     protected internal override void OnKeyDown(KeyEventArgs e)
@@ -584,13 +599,28 @@ public sealed class GuiSlider : GuiControl
         base.OnMouseLeave(e);
     }
 
+    //ConsumesArrowKey the slider steps with the horizontal arrows while focused, maps to AbstractSliderButton keyPressed
+    protected internal override bool ConsumesArrowKey(int key)
+        => key is GuiKeys.Left or GuiKeys.Right;
+
+    //OnKeyDown nudges Value by Step, the Value setter clamps and aligns
+    protected internal override void OnKeyDown(KeyEventArgs e)
+    {
+        if (Enabled && IsFocused && Step > 0 && e.Key is GuiKeys.Left or GuiKeys.Right)
+        {
+            Value += e.Key == GuiKeys.Right ? Step : -Step;
+            return;
+        }
+        base.OnKeyDown(e);
+    }
+
     public override void Render(IGuiRenderContext context)
     {
         //Track centered, 4px tall
         var trackY = Y + Height / 2 - 2;
         context.DrawQuad(X, trackY, Width, 4, TrackColor);
         //Handle 8xHeight, centered
-        var handleColor = _dragging ? HandleActiveColor : (_hover ? HandleActiveColor : HandleColor);
+        var handleColor = _dragging || _hover || IsFocused ? HandleActiveColor : HandleColor;
         context.DrawQuad(HandleX(), Y, 8, Height, handleColor);
         //Text at the top-left shows Label or Value
         var text = string.IsNullOrEmpty(Label) ? Value.ToString("0.##") : $"{Label}: {Value:0.##}";
@@ -645,6 +675,17 @@ public sealed class GuiCheckbox : GuiControl
         base.OnMouseClick(e);
     }
 
+    //OnKeyDown toggles on Enter or Space, maps to vanilla Checkbox reusing AbstractButton keyPressed
+    protected internal override void OnKeyDown(KeyEventArgs e)
+    {
+        if (Enabled && GuiKeys.IsSelection(e.Key))
+        {
+            OnMouseClick(new MouseEventArgs(GuiMouseButton.None, X + Width / 2, Y + Height / 2, e.Modifiers));
+            return;
+        }
+        base.OnKeyDown(e);
+    }
+
     protected internal override void OnMouseEnter(MouseEventArgs e)
     {
         _hover = true;
@@ -661,7 +702,7 @@ public sealed class GuiCheckbox : GuiControl
     {
         //The box size is taken from Height
         var boxSize = Height;
-        var bg = _hover ? HoverColor : BoxColor;
+        var bg = _hover || IsFocused ? HoverColor : BoxColor;
         context.DrawQuad(X, Y, boxSize, boxSize, bg);
         //When checked, inset 2px and fill green
         if (Checked)

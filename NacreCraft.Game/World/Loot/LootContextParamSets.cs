@@ -16,6 +16,113 @@ public static class LootContextParamSets
 
     public static readonly ContextKeySet Empty = Register("empty", _ => { });
 
+    public static readonly ContextKeySet Chest = Register("chest", b => b
+        .Required(LootContextParams.Origin)
+        .Optional(LootContextParams.ThisEntity));
+
+    public static readonly ContextKeySet Command = Register("command", b => b
+        .Required(LootContextParams.Origin)
+        .Optional(LootContextParams.ThisEntity));
+
+    public static readonly ContextKeySet Selector = Register("selector", b => b
+        .Required(LootContextParams.Origin)
+        .Required(LootContextParams.ThisEntity));
+
+    public static readonly ContextKeySet VillagerTrade = Register("villager_trade", b => b
+        .Required(LootContextParams.Origin)
+        .Required(LootContextParams.ThisEntity)
+        .Required(LootContextParams.AdditionalCostComponentAllowed));
+
+    public static readonly ContextKeySet Fishing = Register("fishing", b => b
+        .Required(LootContextParams.Origin)
+        .Required(LootContextParams.Tool)
+        .Optional(LootContextParams.ThisEntity));
+
+    public static readonly ContextKeySet Equipment = Register("equipment", b => b
+        .Required(LootContextParams.Origin)
+        .Required(LootContextParams.ThisEntity));
+
+    public static readonly ContextKeySet Archaeology = Register("archaeology", b => b
+        .Required(LootContextParams.Origin)
+        .Required(LootContextParams.ThisEntity)
+        .Required(LootContextParams.Tool));
+
+    public static readonly ContextKeySet Gift = Register("gift", b => b
+        .Required(LootContextParams.Origin)
+        .Required(LootContextParams.ThisEntity));
+
+    public static readonly ContextKeySet PiglinBarter = Register("barter", b => b
+        .Required(LootContextParams.ThisEntity));
+
+    public static readonly ContextKeySet Vault = Register("vault", b => b
+        .Required(LootContextParams.Origin)
+        .Optional(LootContextParams.ThisEntity)
+        .Optional(LootContextParams.Tool));
+
+    public static readonly ContextKeySet AdvancementReward = Register("advancement_reward", b => b
+        .Required(LootContextParams.ThisEntity)
+        .Required(LootContextParams.Origin));
+
+    public static readonly ContextKeySet AdvancementEntity = Register("advancement_entity", b => b
+        .Required(LootContextParams.ThisEntity)
+        .Required(LootContextParams.Origin));
+
+    public static readonly ContextKeySet AdvancementLocation = Register("advancement_location", b => b
+        .Required(LootContextParams.ThisEntity)
+        .Required(LootContextParams.Origin)
+        .Required(LootContextParams.Tool)
+        .Required(LootContextParams.BlockState));
+
+    public static readonly ContextKeySet BlockUse = Register("block_use", b => b
+        .Required(LootContextParams.ThisEntity)
+        .Required(LootContextParams.Origin)
+        .Required(LootContextParams.BlockState));
+
+    public static readonly ContextKeySet Shearing = Register("shearing", b => b
+        .Required(LootContextParams.Origin)
+        .Required(LootContextParams.ThisEntity)
+        .Required(LootContextParams.Tool));
+
+    public static readonly ContextKeySet EntityInteract = Register("entity_interact", b => b
+        .Required(LootContextParams.TargetEntity)
+        .Optional(LootContextParams.InteractingEntity)
+        .Required(LootContextParams.Tool));
+
+    public static readonly ContextKeySet BlockInteract = Register("block_interact", b => b
+        .Required(LootContextParams.BlockState)
+        .Optional(LootContextParams.BlockEntity)
+        .Optional(LootContextParams.InteractingEntity)
+        .Optional(LootContextParams.Tool));
+
+    public static readonly ContextKeySet EnchantedDamage = Register("enchanted_damage", b => b
+        .Required(LootContextParams.ThisEntity)
+        .Required(LootContextParams.EnchantmentLevel)
+        .Required(LootContextParams.Origin)
+        .Required(LootContextParams.DamageSource)
+        .Optional(LootContextParams.DirectAttackingEntity)
+        .Optional(LootContextParams.AttackingEntity));
+
+    public static readonly ContextKeySet EnchantedItem = Register("enchanted_item", b => b
+        .Required(LootContextParams.Tool)
+        .Required(LootContextParams.EnchantmentLevel));
+
+    public static readonly ContextKeySet EnchantedLocation = Register("enchanted_location", b => b
+        .Required(LootContextParams.ThisEntity)
+        .Required(LootContextParams.EnchantmentLevel)
+        .Required(LootContextParams.Origin)
+        .Required(LootContextParams.EnchantmentActive));
+
+    public static readonly ContextKeySet EnchantedEntity = Register("enchanted_entity", b => b
+        .Required(LootContextParams.ThisEntity)
+        .Required(LootContextParams.EnchantmentLevel)
+        .Required(LootContextParams.Origin));
+
+    public static readonly ContextKeySet HitBlock = Register("hit_block", b => b
+        .Required(LootContextParams.ThisEntity)
+        .Required(LootContextParams.EnchantmentLevel)
+        .Required(LootContextParams.Origin)
+        .Required(LootContextParams.BlockState));
+
     public static readonly ContextKeySet Block = Register("block", b => b
         .Required(LootContextParams.BlockState)
         .Required(LootContextParams.Origin)
@@ -42,7 +149,8 @@ public static class LootContextParamSets
         .Required(LootContextParams.BlockState)
         .Required(LootContextParams.BlockEntity)
         .Required(LootContextParams.Tool)
-        .Required(LootContextParams.ExplosionRadius));
+        .Required(LootContextParams.ExplosionRadius)
+        .Required(LootContextParams.AdditionalCostComponentAllowed));
 
     //Get resolves a parameter set by id, the reverse of the lookup the "type" field needs
     public static ContextKeySet? Get(Identifier id) => Registry.GetValueOrDefault(id);

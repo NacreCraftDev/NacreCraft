@@ -41,6 +41,12 @@ public abstract class GuiContainer : GuiControl
 {
     private readonly List<GuiControl> _children = new();
 
+    protected GuiContainer()
+    {
+        //A container is a layout node, focus belongs to its children
+        TabStop = false;
+    }
+
     public IReadOnlyList<GuiControl> Children => _children;
 
     //Layout layout engine; null means no automatic layout and children use their own X/Y
@@ -58,6 +64,9 @@ public abstract class GuiContainer : GuiControl
     public bool Remove(GuiControl child)
     {
         if (!_children.Remove(child)) return false;
+        //Focus cannot outlive its widget, maps to vanilla Screen.removeWidget
+        if (Window?.FocusedControl is { } focused && IsInSubtree(focused, child))
+            Window.SetFocused(null);
         child.Parent = null;
         MarkDirty();
         return true;
@@ -65,9 +74,18 @@ public abstract class GuiContainer : GuiControl
 
     public void Clear()
     {
+        Window?.SetFocused(null);
         foreach (var child in _children) child.Parent = null;
         _children.Clear();
         MarkDirty();
+    }
+
+    //IsInSubtree whether candidate sits inside root's subtree, walking the parent chain
+    private static bool IsInSubtree(GuiControl candidate, GuiControl root)
+    {
+        for (var current = candidate; current is not null; current = current.Parent)
+            if (ReferenceEquals(current, root)) return true;
+        return false;
     }
 
     //ClearDirtyTree after a re-Render recording clears its own dirty flag and recurses into children

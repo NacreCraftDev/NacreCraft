@@ -2,6 +2,7 @@ using NacreCraft.Commands;
 using NacreCraft.Commands.Tree;
 using NacreCraft.Client.Player.Inventory;
 using NacreCraft.Client.Level;
+using NacreCraft.Client.Player;
 using NacreCraft.Network.Protocol.Common;
 using NacreCraft.Network.Chat;
 using NacreCraft.Network.Protocol.Cookie;
@@ -88,9 +89,9 @@ public sealed class ClientGamePacketListenerImpl : ClientGamePacketListener
         var z = relatives.Contains(RelativeFlag.Z) ? _player.Pos.Z + packet.Z : packet.Z;
         var yRot = relatives.Contains(RelativeFlag.YRot) ? _player.YRot + packet.YRot : packet.YRot;
         var xRot = relatives.Contains(RelativeFlag.XRot) ? _player.XRot + packet.XRot : packet.XRot;
-        _player.Pos = new Vec3(x, y, z);
-        _player.YRot = yRot;
-        _player.XRot = xRot;
+        _player.SetPos(new Vec3(x, y, z), yRot, xRot);
+        //Server-authoritative: drop the local velocity, snap the ack state and allow position packets from now on
+        if (_player is LocalPlayer local) local.OnServerPosition();
         _connection.Send(new ServerboundAcceptTeleportationPacket(packet.Id));
         _connection.Send(new ServerboundMovePlayerPacket(x, y, z, yRot, xRot, false, false, true, true));
     }
@@ -443,6 +444,7 @@ public sealed class ClientGamePacketListenerImpl : ClientGamePacketListener
     {
         _player.YRot = packet.RelativeY ? _player.YRot + packet.YRot : packet.YRot;
         _player.XRot = packet.RelativeX ? _player.XRot + packet.XRot : packet.XRot;
+        if (_player is LocalPlayer local) local.ResetAck();
     }
     //HandlePlayerAbilities ability flags and speeds, maps to vanilla LocalPlayer.abilities
     public void HandlePlayerAbilities(ClientboundPlayerAbilitiesPacket packet)
@@ -453,6 +455,13 @@ public sealed class ClientGamePacketListenerImpl : ClientGamePacketListener
         State.Instabuild = packet.Instabuild;
         State.FlyingSpeed = packet.FlyingSpeed;
         State.WalkingSpeed = packet.WalkingSpeed;
+        //The local physics reads the ability flags directly, the spectator auto-fly path relies on this
+        if (_player is LocalPlayer local)
+        {
+            local.IsFlying = packet.IsFlying;
+            local.CanFly = packet.CanFly;
+            local.FlyingSpeedAbility = packet.FlyingSpeed;
+        }
     }
 
     //HandleGameRuleValues full game rule snapshot; stored until the client consults rules
@@ -556,9 +565,10 @@ public sealed class ClientGamePacketListenerImpl : ClientGamePacketListener
         }
     }
 
-    //HandleSetScore sets or updates one score entry
+    //HandleSetScore sets or updates one score entry, keeping the per-row display and number format
     public void HandleSetScore(ClientboundSetScorePacket packet)
-        => State.Scores[(packet.Owner, packet.ObjectiveName)] = packet.Score;
+        => State.Scores[(packet.Owner, packet.ObjectiveName)] =
+            new ClientPacketState.ScoreEntry(packet.Score, packet.Display, packet.NumberFormat);
 
     //HandleResetScore removes one score entry, or every score of the owner when the objective name is empty
     public void HandleResetScore(ClientboundResetScorePacket packet)

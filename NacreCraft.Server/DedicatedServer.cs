@@ -400,9 +400,10 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
         //An old save restores world game time and spawn, a new world keeps the defaults 0 and (0,64,0)
         _overworld.GameTime = _levelData.GameTime;
         _spawnPos = new Vec3(_levelData.SpawnX, _levelData.SpawnY, _levelData.SpawnZ);
-        //SavedDataStorage is attached to the overworld data directory, maps to vanilla overworld.getDataStorage
-        _dataStorage = new SavedDataStorage(
-            Path.Combine(levelAccess.GetDimensionPath(LevelKeys.OVERWORLD), "data"), _dataFixer);
+        //SavedDataStorage sits in the world's own data directory, not inside a dimension folder
+        //Vanilla reaches it through LevelResource.DATA on the level directory, so it stays next to level.dat no matter how
+        //the dimensions are laid out underneath
+        _dataStorage = new SavedDataStorage(Path.Combine(levelAccess.WorldDir, "data"), _dataFixer);
         _dataStorage.SetRegistryAccess(RegistryAccessForConnection);
         //Player data storage is attached to playerdata under the world root, maps to vanilla PlayerDataStorage
         _playerData = new PlayerDataStorage(levelAccess.WorldDir);

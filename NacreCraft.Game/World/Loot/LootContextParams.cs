@@ -40,4 +40,11 @@ public static class LootContextParams
         ContextKey<NacreCraft.Game.World.Items.ItemStack>.Vanilla("tool");
 
     public static readonly ContextKey<float> ExplosionRadius = ContextKey<float>.Vanilla("explosion_radius");
+
+    public static readonly ContextKey<int> EnchantmentLevel = ContextKey<int>.Vanilla("enchantment_level");
+
+    public static readonly ContextKey<bool> EnchantmentActive = ContextKey<bool>.Vanilla("enchantment_active");
+
+    public static readonly ContextKey<bool> AdditionalCostComponentAllowed =
+        ContextKey<bool>.Vanilla("additional_cost_component_allowed");
 }

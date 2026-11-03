@@ -74,6 +74,8 @@ public sealed class ScreenManager
             old.Removed();
             Log.Debug($"SetScreen exit old={old.Title}");
         }
+        //Focus belongs to the outgoing screen, so drop it before its controls disappear
+        _window.SetFocused(null);
         _window.Clear();
         _current = screen;
         //When screen is null, clear the background/foreground hooks to avoid render residue from the old Screen

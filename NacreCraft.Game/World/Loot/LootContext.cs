@@ -1,3 +1,4 @@
+using NacreCraft.Codec;
 using NacreCraft.Registry.Context;
 using NacreCraft.Storage;
 using NacreCraft.Util.Random;
@@ -32,6 +33,60 @@ public sealed class LootContext
     public bool PushVisitedElement(object element) => _visited.Add(element);
 
     public void PopVisitedElement(object element) => _visited.Remove(element);
+
+    //EntityTarget which entity of the context an entity condition reads, maps to vanilla LootContext.EntityTarget
+    public enum EntityTarget
+    {
+        This,
+        Attacker,
+        DirectAttacker,
+        AttackingPlayer,
+        TargetEntity,
+        InteractingEntity,
+    }
+
+    //EntityTargets name codec and lookup for the entity target, maps to vanilla LootContext.EntityTarget.CODEC
+    public static class EntityTargets
+    {
+        //Codec encodes the target by its serialized name
+        public static readonly Codec<EntityTarget> Codec = Codecs.String.ComapFlatMap(
+            name => TryParse(name) is { } target
+                ? DataResult<EntityTarget>.Success(target)
+                : DataResult<EntityTarget>.Error(() => $"Invalid entity target {name}"),
+            GetSerializedName);
+
+        //GetEntity reads the entity the target points at, null when the context does not carry it
+        public static NacreCraft.Registry.Entity? GetEntity(EntityTarget target, LootContext context) => target switch
+        {
+            EntityTarget.This => context.GetOptionalParameter(LootContextParams.ThisEntity),
+            EntityTarget.Attacker => context.GetOptionalParameter(LootContextParams.AttackingEntity),
+            EntityTarget.DirectAttacker => context.GetOptionalParameter(LootContextParams.DirectAttackingEntity),
+            EntityTarget.AttackingPlayer => context.GetOptionalParameter(LootContextParams.LastDamagePlayer),
+            EntityTarget.TargetEntity => context.GetOptionalParameter(LootContextParams.TargetEntity),
+            _ => context.GetOptionalParameter(LootContextParams.InteractingEntity),
+        };
+
+        public static string GetSerializedName(EntityTarget target) => target switch
+        {
+            EntityTarget.This => "this",
+            EntityTarget.Attacker => "attacker",
+            EntityTarget.DirectAttacker => "direct_attacker",
+            EntityTarget.AttackingPlayer => "attacking_player",
+            EntityTarget.TargetEntity => "target_entity",
+            _ => "interacting_entity",
+        };
+
+        private static EntityTarget? TryParse(string name) => name switch
+        {
+            "this" => EntityTarget.This,
+            "attacker" => EntityTarget.Attacker,
+            "direct_attacker" => EntityTarget.DirectAttacker,
+            "attacking_player" => EntityTarget.AttackingPlayer,
+            "target_entity" => EntityTarget.TargetEntity,
+            "interacting_entity" => EntityTarget.InteractingEntity,
+            _ => null,
+        };
+    }
 
     public sealed class Builder
     {

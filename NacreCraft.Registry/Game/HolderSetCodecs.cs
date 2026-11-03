@@ -106,6 +106,17 @@ public static class HolderSetCodecs
     //AttributeRef single attribute reference codec used by attribute modifier entries
     public static readonly Codec<Holder<EntityAttribute.Attribute>> AttributeRef =
         new HolderRefCodec<EntityAttribute.Attribute>(BuiltInRegistries.ATTRIBUTE);
+
+    //SoundEventRef single sound event reference codec used by enchantment effect components
+    public static readonly Codec<Holder<SoundEvent>> SoundEventRef =
+        new HolderRefCodec<SoundEvent>(BuiltInRegistries.SOUND_EVENT);
+
+    //BlockRef single block reference codec used by the block state property condition and copy_state
+    public static readonly Codec<Holder<Block>> BlockRef = new HolderRefCodec<Block>(BuiltInRegistries.BLOCK);
+
+    //MobEffectSet mob effect set codec used by the apply_mob_effect enchantment effect
+    public static readonly Codec<HolderSet<MobEffect>> MobEffectSet =
+        new HolderSetCodec<MobEffect>(BuiltInRegistries.MOB_EFFECT);
 }
 
 //HolderRefCodec single-element registry reference codec, the string form of vanilla RegistryFileCodec

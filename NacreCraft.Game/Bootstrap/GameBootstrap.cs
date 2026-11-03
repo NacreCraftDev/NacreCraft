@@ -131,6 +131,15 @@ public static class GameBootstrap
             //Value effects only need level based values, and the effect component table needs them later
             NacreCraft.Game.World.Items.Enchanting.EnchantmentValueEffects.Bootstrap();
             Mark("enchantment-value-effects");
+            //Entity effects reference level based values and float providers only
+            NacreCraft.Game.World.Items.Enchanting.EnchantmentEntityEffects.Bootstrap();
+            Mark("enchantment-entity-effects");
+            //Location based effects hold the entity effects plus the attribute effect
+            NacreCraft.Game.World.Items.Enchanting.EnchantmentLocationBasedEffects.Bootstrap();
+            Mark("enchantment-location-based-effects");
+            //Effect components wrap the three effect tables plus conditions, the enchantment table needs them
+            NacreCraft.Game.World.Items.Enchanting.EnchantmentEffectComponents.Bootstrap();
+            Mark("enchantment-effect-components");
             ArgumentTypeInfos.Bootstrap();
             Mark("argument-types");
             //Entity attributes are registered before entity types; entity construction builds its table from attributes, and this must also precede registry freeze

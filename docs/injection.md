@@ -443,8 +443,6 @@ Both rules enter the rule table — no cross-mod deduplication is done. When rew
 
 **Runtime injection goes through this check too**: the conflict detection key includes `patchMode`, so one mod writing `ILRewrite` and another writing `RuntimeInject` does not count as a collision (two independent paths, each doing its own thing); only two of the same mode are judged conflicting and warned. Its actual landing is likewise first-come, first-served — `GetReJITParameters` claims by "module + method", matching the first request, so later ones are sent but do not land.
 
-**The one hard crash point**: when two mods both patch the same method in `RuntimePatch` mode, the second hits `RuntimeHookEngine`'s duplicate-registration check and throws `InvalidOperationException`, and this path is not caught, so startup fails outright. `RuntimePatch` is on its way out (see [6](#6-runtime-injection-modifying-already-running-code)); do not use it in new rules.
-
 **Verification case**: the `modinjection` module of `NacreCraft.Test`, entries `same anchor first mod wins quietly` and `one bad rule does not sink the rest`.
 
 ### 12.1 Per-rule outcomes

@@ -43,7 +43,9 @@ public static class LootPoolEntries
 
     static LootPoolEntries()
     {
+        Register("empty", EmptyEntry.MAP_CODEC);
         Register("item", LootItem.MAP_CODEC);
+        Register("loot_table", LootTableEntry.MAP_CODEC);
         Register("alternatives", AlternativesEntry.MAP_CODEC);
     }
 

@@ -9,18 +9,26 @@ namespace NacreCraft;
 public sealed class PropertiesConfig
 {
     private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal);
+    //Overrides are launch-argument values that sit on top of the file; they are deliberately kept out of _values so Save never writes them back
+    private readonly Dictionary<string, string> _overrides = new(StringComparer.Ordinal);
     private readonly List<string> _comments = new();
 
     //Indexer reads/writes the value for a key; returns an empty string when absent
     public string this[string key]
     {
-        get => _values.GetValueOrDefault(key, string.Empty);
+        get => GetOrDefault(key, string.Empty);
         set => _values[key] = value;
     }
 
-    //GetOrDefault looks up a key; returns the default when absent
+    //GetOrDefault looks up a key; an override wins over the file value, then the default applies
     public string GetOrDefault(string key, string defaultValue)
-        => _values.TryGetValue(key, out var v) ? v : defaultValue;
+    {
+        if (_overrides.TryGetValue(key, out var o)) return o;
+        return _values.TryGetValue(key, out var v) ? v : defaultValue;
+    }
+
+    //SetOverride overlays a value for the current run only; nothing is written back to the file
+    public void SetOverride(string key, string value) => _overrides[key] = value;
 
     //GetInt parses an int; returns defaultValue when absent or failed
     public int GetInt(string key, int defaultValue)

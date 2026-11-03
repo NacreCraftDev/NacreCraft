@@ -2,6 +2,7 @@ using NacreCraft.Game.Network.Protocol.Game;
 using NacreCraft.Game.World.Entity;
 using NacreCraft.Game.World.Items;
 using NacreCraft.Network.Chat;
+using NacreCraft.Network.Chat.Numbers;
 using NacreCraft.Primitives;
 using NacreCraft.Registry;
 
@@ -70,8 +71,18 @@ public sealed class ClientPacketState
     //Scoreboard
     public readonly Dictionary<string, ScoreboardObjective> Objectives = new();
     public readonly Dictionary<string, string> DisplaySlots = new();
-    public readonly Dictionary<(string Owner, string Objective), int> Scores = new();
+    public readonly Dictionary<(string Owner, string Objective), ScoreEntry> Scores = new();
     public readonly Dictionary<string, ScoreboardTeam> Teams = new();
+
+    //FormatScore renders a score row the way vanilla does: the row format, then the objective format, then the plain number
+    public Component FormatScore(string owner, string objective)
+    {
+        if (!Scores.TryGetValue((owner, objective), out var entry)) return Component.Empty();
+        if (entry.NumberFormat is { } rowFormat) return rowFormat.Format(entry.Value);
+        if (Objectives.TryGetValue(objective, out var objectiveEntry) && objectiveEntry.NumberFormat is { } objectiveFormat)
+            return objectiveFormat.Format(entry.Value);
+        return Component.Literal(entry.Value.ToString());
+    }
 
     //Misc mirrors
     public readonly Dictionary<Guid, object?> BossBars = new();
@@ -109,7 +120,10 @@ public sealed class ClientPacketState
     public readonly record struct MobEffectState(Holder<MobEffect> Effect, int Amplifier, int DurationTicks, byte Flags);
 
     //ScoreboardObjective objective definition plus its display name
-    public sealed record ScoreboardObjective(string Name, Component DisplayName, object? RenderType, object? NumberFormat, bool Removed);
+    public sealed record ScoreboardObjective(string Name, Component DisplayName, object? RenderType, NumberFormat? NumberFormat, bool Removed);
+
+    //ScoreEntry one score row: value plus the optional per-row display text and number format
+    public readonly record struct ScoreEntry(int Value, Component? Display, NumberFormat? NumberFormat);
 
     //ScoreboardTeam current team definition, null fields mean "not part of this update"
     public sealed class ScoreboardTeam

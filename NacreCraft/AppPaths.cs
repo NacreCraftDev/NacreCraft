@@ -29,9 +29,6 @@ public static class AppPaths
     //Aligned with the vanilla gameDir/resourcepacks layout; each entry is a folder carrying pack.mcmeta
     public static string ResourcePacksDir => Path.Combine(BaseDirectory, "resourcepacks");
 
-    //WorldsDir worlds/ subdirectory of the world save root, for LevelStorage
-    public static string WorldsDir => Path.Combine(BaseDirectory, "worlds");
-
     //LogsDir logs/ subdirectory of the log root; the log directory has one owner and this is it
     public static string LogsDir => Path.Combine(BaseDirectory, "logs");
 

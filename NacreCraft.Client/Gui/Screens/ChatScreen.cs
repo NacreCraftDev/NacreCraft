@@ -52,7 +52,7 @@ public sealed class ChatScreen : Screen
         var inputY = GuiHeight - 30;
         _inputBox = AddWidget(new GuiTextBox { X = 4, Y = inputY, Width = GuiWidth - 8, Height = 20 });
         _historyLabel = AddWidget(new GuiLabel { X = 4, Y = inputY - 100, Width = GuiWidth - 8, Height = 90, ForegroundColor = GuiColor.White });
-        Window.FocusedControl = _inputBox;
+        Window.SetFocused(_inputBox);
     }
 
     public override void Tick()

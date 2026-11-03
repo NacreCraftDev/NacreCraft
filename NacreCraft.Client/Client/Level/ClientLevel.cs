@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Threading;
 using NacreCraft.Game.Network.Protocol.Game;
 using NacreCraft.Game.World.Items;
+using NacreCraft.Game.World.Phys.Collision;
 using NacreCraft.Nbt;
 using NacreCraft.Primitives;
 using NacreCraft.Registry;
@@ -22,8 +23,27 @@ namespace NacreCraft.Client.Level;
 //W8 added a ReaderWriterLockSlim to protect the section's internal PalettedContainer; SetBlockState takes the write lock, dispatcher Build takes the read lock
 //_chunks/_lights use ConcurrentDictionary for dictionary-level thread safety; LoadChunk/UnloadChunk take no extra lock to avoid blocking compilation
 //SectionDirty fires outside the write lock to prevent a deadlock from reading ClientLevel inside the callback; dispatcher subscribes and calls MarkDirty to spread
-public sealed class ClientLevel
+public sealed class ClientLevel : CollisionGetter
 {
+    //World height range, matching the -64..320 bounds the chunk packet declares
+    public const int WorldMinSectionY = -4;
+    public const int WorldSectionsCount = 24;
+
+    int LevelHeightAccessor.MinSectionY => WorldMinSectionY;
+    int LevelHeightAccessor.MaxSectionY => WorldMinSectionY + WorldSectionsCount - 1;
+    int LevelHeightAccessor.SectionsCount => WorldSectionsCount;
+
+    //BlockGetter.GetBlockState interface form, forwarding to the BlockPos overload
+    BlockState BlockGetter.GetBlockState(int x, int y, int z) => GetBlockState(new BlockPos(x, y, z));
+
+    //AttachEntity binds the level reference and the collision query to an entity, maps to the level side of vanilla attach
+    //Without this the entity's Move sees CollisionShapes == null and walks through blocks
+    public void AttachEntity(NacreCraft.Registry.Entity entity)
+    {
+        entity.Level = this;
+        entity.CollisionShapes = box => ((CollisionGetter)this).GetBlockCollisions(entity, box).ToList();
+    }
+
     //Chunk storage indexed by ChunkPos, ConcurrentDictionary dictionary-level thread safety
     private readonly ConcurrentDictionary<ChunkPos, ChunkAccess> _chunks = new();
     //Light storage indexed by SectionPos.AsLong, ConcurrentDictionary dictionary-level thread safety

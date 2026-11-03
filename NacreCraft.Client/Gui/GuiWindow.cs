@@ -84,8 +84,8 @@ public sealed class GuiWindow : GuiContainer
     private static int s_renderDiag;
 
     //FocusedControl the widget currently receiving keyboard input
-    //ProcessMouseDown sets the hit widget as focus; ProcessKeyDown dispatches to it
-    public GuiControl? FocusedControl { get; set; }
+    //SetFocused is the normal writer so both widgets get notified; the internal setter only serves tests
+    public GuiControl? FocusedControl { get; internal set; }
 
     public GuiWindow(int surfaceWidth, int surfaceHeight)
     {
@@ -121,12 +121,13 @@ public sealed class GuiWindow : GuiContainer
         x /= GuiScale;
         y /= GuiScale;
         var hit = HitTest(x, y);
-        if (hit is null) return;
-        if (FocusedControl is not null && FocusedControl != hit)
-            FocusedControl.OnLostFocus();
-        var prevFocused = FocusedControl;
-        FocusedControl = hit;
-        if (prevFocused != hit) hit.OnGotFocus();
+        if (hit is null)
+        {
+            //A click outside every widget clears focus, as vanilla does
+            SetFocused(null);
+            return;
+        }
+        SetFocused(hit);
         var args = new MouseEventArgs(button, x, y, CurrentModifiers());
         if (hit == this)
         {
@@ -135,6 +136,24 @@ public sealed class GuiWindow : GuiContainer
         else
         {
             hit.OnMouseDown(args);
+        }
+    }
+
+    //SetFocused moves keyboard focus and notifies both widgets, maps to vanilla setFocused
+    public void SetFocused(GuiControl? next)
+    {
+        var previous = FocusedControl;
+        if (ReferenceEquals(previous, next)) return;
+        if (previous is not null)
+        {
+            previous.IsFocused = false;
+            previous.OnLostFocus();
+        }
+        FocusedControl = next;
+        if (next is not null)
+        {
+            next.IsFocused = true;
+            next.OnGotFocus();
         }
     }
 
@@ -193,6 +212,15 @@ public sealed class GuiWindow : GuiContainer
     //GLFW_KEY_TAB key code; Tab triggers focus navigation and is not dispatched to the focused widget
     private const int TabKey = 258;
 
+    //ArrowDirections maps arrow key codes to the navigation direction they request
+    private static readonly Dictionary<int, ScreenDirection> ArrowDirections = new()
+    {
+        [GuiKeys.Up] = ScreenDirection.Up,
+        [GuiKeys.Down] = ScreenDirection.Down,
+        [GuiKeys.Left] = ScreenDirection.Left,
+        [GuiKeys.Right] = ScreenDirection.Right
+    };
+
     //ProcessKeyDown handles key-down and dispatches to the focused widget
     //Tab triggers FocusNext focus navigation; with character input it calls OnKeyPress for TextBox text accumulation
     //First UpdateModifiers maintains the Shift/Ctrl state, builds KeyEventArgs and passes Modifiers for TextBox to detect combos
@@ -201,7 +229,15 @@ public sealed class GuiWindow : GuiContainer
         UpdateModifiers(key, true);
         if (key == TabKey)
         {
-            FocusNext();
+            //Shift reverses the walk, maps to vanilla TabNavigation.forward
+            FocusNext(forward: !_shiftDown);
+            return;
+        }
+        //Arrow keys navigate focus geometrically unless the focused widget edits with that key, maps to vanilla arrow navigation
+        if (ArrowDirections.TryGetValue(key, out var direction)
+            && (FocusedControl is null || FocusedControl == this || !FocusedControl.ConsumesArrowKey(key)))
+        {
+            FocusDirection(direction);
             return;
         }
         var args = new KeyEventArgs(key, ch, CurrentModifiers());
@@ -264,22 +300,22 @@ public sealed class GuiWindow : GuiContainer
             base.OnKeyPress(args);
     }
 
-    //FocusNext moves focus to the next TabStop widget by TabIndex order, wrapping back to the first
+    //FocusNext moves focus to the next TabStop widget by TabIndex order, wrapping at both ends
+    //forward=false is Shift+Tab, matching vanilla TabNavigation.forward
     //Before switching it calls OnLostFocus on the old widget and OnGotFocus on the new, letting TextBox start/stop caret blinking
-    public void FocusNext()
+    public void FocusNext(bool forward = true)
     {
         var tabStops = new List<GuiControl>();
         CollectTabStops(this, tabStops);
         if (tabStops.Count == 0) return;
-        tabStops.Sort((a, b) => a.TabIndex.CompareTo(b.TabIndex));
+        //OrderBy is stable, so widgets sharing a TabIndex keep their tree order
+        tabStops = tabStops.OrderBy(control => control.TabIndex).ToList();
         var currentIdx = FocusedControl is null ? -1 : tabStops.IndexOf(FocusedControl);
-        var nextIdx = (currentIdx + 1) % tabStops.Count;
-        var next = tabStops[nextIdx];
-        if (FocusedControl is not null && FocusedControl != next)
-            FocusedControl.OnLostFocus();
-        var prevFocused = FocusedControl;
-        FocusedControl = next;
-        if (prevFocused != next) next.OnGotFocus();
+        //A missing current index starts at the first widget forward, the last widget backward
+        var nextIdx = forward
+            ? (currentIdx + 1) % tabStops.Count
+            : (currentIdx <= 0 ? tabStops.Count : currentIdx) - 1;
+        SetFocused(tabStops[nextIdx]);
     }
 
     //CollectTabStops depth-walks the widget tree collecting widgets with TabStop=true, Visible and Enabled
@@ -293,6 +329,87 @@ public sealed class GuiWindow : GuiContainer
                 result.Add(child);
         }
     }
+
+    //FocusDirection moves focus to the nearest widget along the direction, maps to vanilla arrow navigation
+    public void FocusDirection(ScreenDirection direction)
+    {
+        var candidates = new List<GuiControl>();
+        CollectTabStops(this, candidates);
+        if (candidates.Count == 0) return;
+
+        //Without a current focus the search starts from the window's opposite border, as vanilla does
+        var origin = FocusedControl is { } focused
+            ? ToScreenRectangle(focused).GetBorder(direction)
+            : ToScreenRectangle(this).GetBorder(direction.GetOpposite());
+        var next = FindFocusInDirection(origin, direction, FocusedControl, candidates)
+            ?? FindFocusVaguelyInDirection(origin, direction, FocusedControl, candidates);
+        if (next is null) return;
+        SetFocused(next);
+    }
+
+    //FindFocusInDirection prefers candidates overlapping the orthogonal axis, maps to vanilla nextFocusPathInDirection
+    private static GuiControl? FindFocusInDirection(ScreenRectangle origin, ScreenDirection direction, GuiControl? excluded, List<GuiControl> candidates)
+    {
+        var otherAxis = direction.GetAxis().Orthogonal();
+        var positiveOther = otherAxis.GetPositive();
+        var originFirstBound = origin.GetBoundInDirection(direction.GetOpposite());
+        var potential = new List<GuiControl>();
+        foreach (var candidate in candidates)
+        {
+            if (candidate == excluded) continue;
+            var rectangle = ToScreenRectangle(candidate);
+            if (!rectangle.OverlapsInAxis(origin, otherAxis)) continue;
+            var candidateFirstBound = rectangle.GetBoundInDirection(direction.GetOpposite());
+            if (direction.IsAfter(candidateFirstBound, originFirstBound))
+            {
+                potential.Add(candidate);
+                continue;
+            }
+            if (candidateFirstBound != originFirstBound) continue;
+            if (!direction.IsAfter(rectangle.GetBoundInDirection(direction), origin.GetBoundInDirection(direction))) continue;
+            potential.Add(candidate);
+        }
+        var comparePrimary = direction.CoordinateValueComparator();
+        var compareSecondary = positiveOther.CoordinateValueComparator();
+        potential.Sort((a, b) =>
+        {
+            var rectangleA = ToScreenRectangle(a);
+            var rectangleB = ToScreenRectangle(b);
+            var primary = comparePrimary(
+                rectangleA.GetBoundInDirection(direction.GetOpposite()),
+                rectangleB.GetBoundInDirection(direction.GetOpposite()));
+            if (primary != 0) return primary;
+            return compareSecondary(
+                rectangleA.GetBoundInDirection(positiveOther.GetOpposite()),
+                rectangleB.GetBoundInDirection(positiveOther.GetOpposite()));
+        });
+        return potential.Count > 0 ? potential[0] : null;
+    }
+
+    //FindFocusVaguelyInDirection falls back to the nearest center distance along the direction, maps to vanilla nextFocusPathVaguelyInDirection
+    private static GuiControl? FindFocusVaguelyInDirection(ScreenRectangle origin, ScreenDirection direction, GuiControl? excluded, List<GuiControl> candidates)
+    {
+        var axis = direction.GetAxis();
+        var otherAxis = axis.Orthogonal();
+        var originSideCenter = ScreenPosition.Of(axis, origin.GetBoundInDirection(direction), origin.GetCenterInAxis(otherAxis));
+        var potential = new List<(GuiControl Control, long Distance)>();
+        foreach (var candidate in candidates)
+        {
+            if (candidate == excluded) continue;
+            var rectangle = ToScreenRectangle(candidate);
+            var candidateSideCenter = ScreenPosition.Of(axis, rectangle.GetBoundInDirection(direction.GetOpposite()), rectangle.GetCenterInAxis(otherAxis));
+            if (!direction.IsAfter(candidateSideCenter.GetCoordinate(axis), originSideCenter.GetCoordinate(axis))) continue;
+            var dx = (long)originSideCenter.X - candidateSideCenter.X;
+            var dy = (long)originSideCenter.Y - candidateSideCenter.Y;
+            potential.Add((candidate, dx * dx + dy * dy));
+        }
+        if (potential.Count == 0) return null;
+        potential.Sort((a, b) => a.Distance.CompareTo(b.Distance));
+        return potential[0].Control;
+    }
+
+    private static ScreenRectangle ToScreenRectangle(GuiControl control)
+        => new(control.X, control.Y, control.Width, control.Height);
 
     public override void Render(IGuiRenderContext context)
     {

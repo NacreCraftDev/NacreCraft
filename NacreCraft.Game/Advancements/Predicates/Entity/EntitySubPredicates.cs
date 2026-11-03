@@ -22,6 +22,8 @@ public static class EntitySubPredicates
         Register("movement_affected_by", MovementAffectedByPredicate.Codec);
         Register("equipment", EntityEquipmentPredicate.Codec);
         Register("effects", EntityEffectsPredicate.Codec);
+        Register("vehicle", EntityVehiclePredicate.Codec);
+        Register("type_specific/player", PlayerPredicate.Codec);
     }
 
     //Register adapts a concrete sub-predicate's codec into the interface version and registers it by name

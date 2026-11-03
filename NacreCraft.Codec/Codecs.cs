@@ -41,6 +41,22 @@ public static class Codecs
 
     //Unit reads and writes nothing and always yields the same instance, mirroring vanilla MapCodec.unit
     public static MapCodec<T> Unit<T>(T value) => new UnitMapCodec<T>(value);
+
+    //AsCodec lifts a map shaped codec to a Codec, mirroring vanilla MapCodec.codec
+    public static Codec<T> AsCodec<T>(MapCodec<T> codec) => new MapCodecBackedCodec<T>(codec);
+}
+
+//MapCodecBackedCodec reads and writes through a MapCodec, the value keeps its map shape on the wire
+internal sealed class MapCodecBackedCodec<T> : ScalarCodec<T>
+{
+    private readonly MapCodec<T> _inner;
+
+    public MapCodecBackedCodec(MapCodec<T> inner) => _inner = inner;
+
+    public override DataResult<T> Parse<U>(DynamicOps<U> ops, U input)
+        => ops.GetMap(input).FlatMap(map => _inner.Decode(ops, map));
+
+    public override DataResult<U> EncodeStart<U>(DynamicOps<U> ops, T value) => _inner.EncodeStart(ops, value);
 }
 
 //UnboundedMapCodec is the map implementation with independent key and value codecs

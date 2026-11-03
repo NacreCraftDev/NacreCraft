@@ -336,10 +336,6 @@ public sealed class ModHooks
     public byte[] Rewrite(string assemblyName, byte[] bytes)
         => _targets.Contains(assemblyName) ? _engine.Rewrite(bytes) : bytes;
 
-    //ApplyRuntimePatches: applies RuntimePatch rules
-    //Must be called only after all kernel assemblies are loaded; at rewrite time the target type is not in yet and cannot be found
-    public void ApplyRuntimePatches() => _engine.ApplyRuntimePatches();
-
     //ApplyRuntimeInjects: submits runtime injection rules to the CLR's ReJIT
     //Only targets already loaded at this moment are recognized; an unloaded assembly does not even give a module name, and the native layer has nothing to match
     //The whole batch is skipped when the native injection layer is not attached; such rules do not error, leaving only a warning

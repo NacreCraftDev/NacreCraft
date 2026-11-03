@@ -125,6 +125,18 @@ public sealed class ServerSettings : Settings<ServerSettings>
     //SaveCurrent immediately writes the current config back to server.properties
     public void SaveCurrent() => Save(AppPaths.ServerPropertiesPath);
 
+    //ApplyOverrides lays launch-argument values on top of the loaded file for this run only
+    //Only keys the file already declares are taken, so unrelated launch arguments are ignored; the file is never rewritten
+    public void ApplyOverrides(IReadOnlyDictionary<string, string> overrides)
+    {
+        foreach (var (key, value) in overrides)
+        {
+            if (!Properties.ContainsKey(key)) continue;
+            Properties.SetOverride(key, value);
+            Log.Info($"Launch argument overrides {key}={value}");
+        }
+    }
+
     //Load and apply defaults; if the file does not exist, generate a default server.properties
     public static ServerSettings LoadOrGenerate(string path)
     {
