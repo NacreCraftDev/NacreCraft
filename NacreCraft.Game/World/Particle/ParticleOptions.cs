@@ -1,5 +1,6 @@
 using NacreCraft.Game.World.Items;
 using NacreCraft.Game.World.Level.GameEvents;
+using NacreCraft.Primitives;
 using NacreCraft.Registry.State;
 
 namespace NacreCraft.Game.World.Particle;
@@ -144,4 +145,41 @@ public sealed class ExplosionParticleInfo(ParticleOptions particle, float scalin
     public float Scaling { get; } = scaling;
 
     public float Speed { get; } = speed;
+}
+
+//TrailParticleOption flying target, color and duration, maps to vanilla TrailParticleOption
+public sealed class TrailParticleOption(TrailParticleType type, Vec3 target, int color, int duration) : ParticleOptions
+{
+    public override ParticleType Type { get; } = type;
+
+    public Vec3 Target { get; } = target;
+
+    public int Color { get; } = color;
+
+    public int Duration { get; } = duration;
+}
+
+//GeyserParticleOptions water block count, maps to vanilla GeyserParticleOptions
+public sealed class GeyserParticleOptions(GeyserParticleType type, int waterBlocks) : ParticleOptions
+{
+    public override ParticleType Type { get; } = type;
+
+    public int WaterBlocks { get; } = waterBlocks;
+}
+
+//GeyserBaseParticleOptions water block count and burst impulse, maps to vanilla GeyserBaseParticleOptions
+public sealed class GeyserBaseParticleOptions(GeyserBaseParticleType type, int waterBlocks, float burstImpulseBase) : ParticleOptions
+{
+    public override ParticleType Type { get; } = type;
+
+    public int WaterBlocks { get; } = waterBlocks;
+
+    public float BurstImpulseBase { get; } = burstImpulseBase;
+}
+
+//ParticleLimit a hard cap on how many of one particle may live at once, maps to vanilla ParticleLimit
+public sealed record ParticleLimit(int Limit)
+{
+    //SporeBlossom the limit applied to spore blossom air particles, maps to vanilla ParticleLimit.SPORE_BLOSSOM
+    public static readonly ParticleLimit SporeBlossom = new(1000);
 }

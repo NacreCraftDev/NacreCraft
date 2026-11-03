@@ -1,6 +1,7 @@
 using NacreCraft.Game.World.Items;
 using NacreCraft.Game.World.Level.GameEvents;
 using NacreCraft.Network;
+using NacreCraft.Primitives;
 using NacreCraft.Registry.State;
 
 namespace NacreCraft.Game.World.Particle;
@@ -166,4 +167,48 @@ public sealed class VibrationParticleType(bool overrideLimiter) : ParticleType(o
 
     public override ParticleOptions ReadParameters(RegistryFriendlyByteBuf buf)
         => new VibrationParticleOption(this, PositionSource.StreamCodec.Decode(buf), buf.ReadVarInt());
+}
+
+//TrailParticleType target, color and duration parameters, maps to vanilla TrailParticleOption.STREAM_CODEC
+public sealed class TrailParticleType(bool overrideLimiter) : ParticleType(overrideLimiter)
+{
+    public override void WriteParameters(RegistryFriendlyByteBuf buf, ParticleOptions options)
+    {
+        var trail = (TrailParticleOption)options;
+        buf.WriteDouble(trail.Target.X);
+        buf.WriteDouble(trail.Target.Y);
+        buf.WriteDouble(trail.Target.Z);
+        buf.WriteInt(trail.Color);
+        buf.WriteVarInt(trail.Duration);
+    }
+
+    public override ParticleOptions ReadParameters(RegistryFriendlyByteBuf buf)
+    {
+        var target = new Vec3(buf.ReadDouble(), buf.ReadDouble(), buf.ReadDouble());
+        return new TrailParticleOption(this, target, buf.ReadInt(), buf.ReadVarInt());
+    }
+}
+
+//GeyserParticleType water block count parameter, maps to vanilla GeyserParticleOptions.streamCodec
+public sealed class GeyserParticleType(bool overrideLimiter) : ParticleType(overrideLimiter)
+{
+    public override void WriteParameters(RegistryFriendlyByteBuf buf, ParticleOptions options)
+        => buf.WriteInt(((GeyserParticleOptions)options).WaterBlocks);
+
+    public override ParticleOptions ReadParameters(RegistryFriendlyByteBuf buf)
+        => new GeyserParticleOptions(this, buf.ReadInt());
+}
+
+//GeyserBaseParticleType water block count and burst impulse parameters, maps to vanilla GeyserBaseParticleOptions.streamCodec
+public sealed class GeyserBaseParticleType(bool overrideLimiter) : ParticleType(overrideLimiter)
+{
+    public override void WriteParameters(RegistryFriendlyByteBuf buf, ParticleOptions options)
+    {
+        var geyser = (GeyserBaseParticleOptions)options;
+        buf.WriteInt(geyser.WaterBlocks);
+        buf.WriteFloat(geyser.BurstImpulseBase);
+    }
+
+    public override ParticleOptions ReadParameters(RegistryFriendlyByteBuf buf)
+        => new GeyserBaseParticleOptions(this, buf.ReadInt(), buf.ReadFloat());
 }

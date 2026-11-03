@@ -5,7 +5,6 @@ namespace NacreCraft.Game.World.Particle;
 
 //ParticleTypes built-in particle types registration plus particle option stream codec, maps to vanilla net.minecraft.core.particles.ParticleTypes
 //Registration order strictly follows the vanilla static field declaration order; the registry id must equal the client registry id or the client identifies the wrong particle
-//Types whose parameter shape is not ported still occupy an id but throw on parameter encode/decode, see UnsupportedParticleType
 public static class ParticleTypes
 {
     private static bool _bootstrapped;
@@ -34,11 +33,10 @@ public static class ParticleTypes
         Simple("sulfur_bubbles", false);                                  //4
         Simple("noxious_gas", false);                                     //5
         Simple("noxious_gas_cloud", false);                               //6
-        //geyser series parameters are a vector and a target point, depending on a nonexistent geyser subsystem
-        Unsupported("geyser", true);                                      //7
-        Unsupported("geyser_base", true);                                 //8
-        Unsupported("geyser_poof", true);                                 //9
-        Unsupported("geyser_plume", true);                                //10
+        GeyserType("geyser", true);                                       //7
+        GeyserBaseType("geyser_base", true);                              //8
+        GeyserBaseType("geyser_poof", true);                              //9
+        GeyserType("geyser_plume", true);                                 //10
         Simple("cloud", false);                                           //11
         Simple("copper_fire_flame", false);                               //12
         Simple("crit", false);                                            //13
@@ -84,8 +82,7 @@ public static class ParticleTypes
         SpellType("instant_effect", false);                               //53
         ItemType("item", false);                                          //54
         Vibration = VibrationType("vibration", true);                     //55
-        //trail's parameters are a target coordinate and a color, depending on nonexistent vector serialization
-        Unsupported("trail", false);                                      //56
+        TrailType("trail", false);                                        //56
         Simple("pause_mob_growth", false);                                //57
         Simple("reset_mob_growth", false);                                //58
         Simple("item_slime", false);                                      //59
@@ -193,8 +190,14 @@ public static class ParticleTypes
     private static VibrationParticleType VibrationType(string path, bool overrideLimiter)
         => Register(path, new VibrationParticleType(overrideLimiter));
 
-    private static UnsupportedParticleType Unsupported(string path, bool overrideLimiter)
-        => Register(path, new UnsupportedParticleType(path, overrideLimiter));
+    private static TrailParticleType TrailType(string path, bool overrideLimiter)
+        => Register(path, new TrailParticleType(overrideLimiter));
+
+    private static GeyserParticleType GeyserType(string path, bool overrideLimiter)
+        => Register(path, new GeyserParticleType(overrideLimiter));
+
+    private static GeyserBaseParticleType GeyserBaseType(string path, bool overrideLimiter)
+        => Register(path, new GeyserBaseParticleType(overrideLimiter));
 
     //Register registered in call order; the registry id is decided by registration order
     private static T Register<T>(string path, T type) where T : ParticleType
