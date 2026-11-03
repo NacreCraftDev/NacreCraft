@@ -25,8 +25,16 @@ public sealed class SynchedEntityData
     //Stored ordered by index; the send order matches vanilla's ascending index order
     private readonly SortedDictionary<byte, Entry> _entries = new();
 
+    //_owner the holder receiving change notifications, null when the data is used standalone
+    private readonly SyncedDataHolder? _owner;
+
     //_dirty is set by any Set change and cleared by ClearDirty after a tracking round
     private bool _dirty;
+
+    public SynchedEntityData() { }
+
+    //Vanilla always builds the data with its holder, so every change can call back into the entity
+    public SynchedEntityData(SyncedDataHolder owner) => _owner = owner;
 
     //Version change counter; kept for diagnostics and for callers that poll it
     public int Version { get; private set; }
@@ -62,22 +70,29 @@ public sealed class SynchedEntityData
             : throw new InvalidOperationException($"Entity metadata {index} not defined");
 
     //Set changes a typed entry; no change means no dirty mark, matching vanilla set marking dirty only on difference
+    //A real change notifies the holder through onSyncedDataUpdated, which is how the entity reacts to its own fields
     public void Set<T>(EntityDataAccessor<T> accessor, T value, bool forceDirty = false)
-        => Set(accessor.Index, value!, forceDirty);
+    {
+        if (SetCore(accessor.Index, value!, forceDirty)) _owner?.OnSyncedDataUpdated(accessor);
+    }
 
     //Set changes an entry by raw index
-    public void Set(byte index, object value) => Set(index, value, false);
+    public void Set(byte index, object value) => SetCore(index, value, false);
 
     //Set changes an entry by raw index, forceDirty keeps the vanilla escape hatch that resends an unchanged value
-    public void Set(byte index, object value, bool forceDirty)
+    public void Set(byte index, object value, bool forceDirty) => SetCore(index, value, forceDirty);
+
+    //SetCore applies the change and reports whether anything changed; the raw-index overloads cannot name an accessor, so only the caller decides what to do next
+    private bool SetCore(byte index, object value, bool forceDirty)
     {
         if (!_entries.TryGetValue(index, out var entry))
             throw new InvalidOperationException($"Entity metadata {index} not defined");
-        if (!forceDirty && Equals(entry.Value, value)) return;
+        if (!forceDirty && Equals(entry.Value, value)) return false;
         entry.Value = value;
         entry.Dirty = true;
         _dirty = true;
         Version++;
+        return true;
     }
 
     //CollectAll returns every entry in ascending index order, used when a new observer pairs with the entity
@@ -131,10 +146,16 @@ public sealed class SynchedEntityData
     }
 }
 
-//ISyncedEntity an entity with synced metadata
-//The tracker only knows this interface and no longer special-cases concrete types like ServerPlayer/ItemEntity
-public interface ISyncedEntity
+//SyncedDataHolder an entity whose metadata is synchronized to clients, maps to vanilla net.minecraft.network.syncher.SyncedDataHolder
+//Vanilla calls back once per changed entry, plus once with the whole batch a client assigned; NC has no client assign path yet, so only the per-entry callback fires
+public interface SyncedDataHolder
 {
     //SyncedData entity metadata container
     SynchedEntityData SyncedData { get; }
+
+    //OnSyncedDataUpdated called after one entry really changed
+    void OnSyncedDataUpdated<T>(EntityDataAccessor<T> accessor);
+
+    //OnSyncedDataUpdated called once with the whole batch assigned from a packet
+    void OnSyncedDataUpdated(IReadOnlyList<SynchedValue> values);
 }

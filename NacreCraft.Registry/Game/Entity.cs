@@ -55,7 +55,7 @@ public interface IEntityInsideHost
 //Entity abstract base class, maps to vanilla net.minecraft.world.entity.Entity
 //Holds core fields EntityId/Pos/Uuid/Velocity/YRot/XRot; Level uses object as a placeholder until the Level subsystem is ready
 //Vanilla holds a CompoundTag persistence field, simplified here so subclasses extend as needed
-public abstract class Entity : ITrackedEntity, ISyncedEntity
+public abstract class Entity : ITrackedEntity, SyncedDataHolder
 {
     //_entityCounter global entity id counter, maps to vanilla ServerLevel.ENTITY_COUNTER
     //Placed here rather than on the level so entities and players share one id space; two counters would collide
@@ -68,7 +68,15 @@ public abstract class Entity : ITrackedEntity, ISyncedEntity
     public const byte PoseIndex = 6;
 
     //SyncedData entity metadata container; subclasses Define the entries they own at construction
-    public SynchedEntityData SyncedData { get; } = new();
+    //Built on first use so the container can hold this entity as its change notification target
+    private SynchedEntityData? _syncedData;
+    public SynchedEntityData SyncedData => _syncedData ??= new SynchedEntityData(this);
+
+    //OnSyncedDataUpdated hook for one changed entry, maps to vanilla onSyncedDataUpdated(EntityDataAccessor)
+    public virtual void OnSyncedDataUpdated<T>(EntityDataAccessor<T> accessor) { }
+
+    //OnSyncedDataUpdated hook for the whole batch assigned from a packet, maps to vanilla onSyncedDataUpdated(List)
+    public virtual void OnSyncedDataUpdated(IReadOnlyList<SynchedValue> values) { }
 
     //Gravity gravitational acceleration, maps to vanilla 0.08
     public const double Gravity = 0.08;

@@ -27,7 +27,7 @@ namespace NacreCraft.Game.Server;
 //Minimal implementation holding Connection/GameProfile/position/game type for PlayerList to manage
 //Does not extend NacreCraft.Registry.Entity to avoid confusion with the existing entity system; this round only does the network-layer player
 //Implements ITrackedEntity so players and entities share one tracking sync path
-//Implements ISyncedEntity so metadata sync shares a mechanism with entities such as drops
+//Implements SyncedDataHolder so metadata sync shares a mechanism with entities such as drops
 public sealed class ServerPlayer : Player
 {
     public GameProfile Profile { get; }

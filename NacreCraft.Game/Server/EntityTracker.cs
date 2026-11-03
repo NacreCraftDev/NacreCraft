@@ -191,7 +191,7 @@ public sealed class EntityTracker
         foreach (var entity in candidates)
         {
             entity.Attributes?.ClearAttributesToSync();
-            if (entity is ISyncedEntity synced) synced.SyncedData.ClearDirty();
+            if (entity is SyncedDataHolder synced) synced.SyncedData.ClearDirty();
         }
         DiagnosticPlayerCount += players.Count;
     }
@@ -292,7 +292,7 @@ public sealed class EntityTracker
                              + $"onGround={snapshot.OnGround}");
                 packets.Add(BuildAddEntity(snapshot));
                 //When pairing, metadata is fully sent; players need a pose and drops need an item stack, so the client builds the right model
-                if (entity is ISyncedEntity synced)
+                if (entity is SyncedDataHolder synced)
                 {
                     var values = synced.SyncedData.CollectAll();
                     if (values.Count > 0) packets.Add(BuildSyncedData(entity.EntityId, values));
@@ -418,7 +418,7 @@ public sealed class EntityTracker
     private static void AddSyncedDataPacket(ObserverState state, ITrackedEntity entity,
         List<Packet<ClientGamePacketListener>> packets)
     {
-        if (entity is not ISyncedEntity synced) return;
+        if (entity is not SyncedDataHolder synced) return;
         var values = synced.SyncedData.GetDirtyValues();
         if (values is null || values.Count == 0) return;
         packets.Add(BuildSyncedData(entity.EntityId, values));
