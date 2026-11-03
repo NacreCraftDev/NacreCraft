@@ -116,7 +116,7 @@ public sealed class IntegerArgumentInfo : ArgumentTypeInfo
     }
 }
 
-//LongArgumentInfo long argument, the value goes through VarLong
+//LongArgumentInfo long argument, the value goes through a fixed-width long
 public sealed class LongArgumentInfo : ArgumentTypeInfo
 {
     public static readonly LongArgumentInfo Instance = new();
@@ -134,15 +134,15 @@ public sealed class LongArgumentInfo : ArgumentTypeInfo
         var hasMin = value.Minimum != long.MinValue;
         var hasMax = value.Maximum != long.MaxValue;
         buf.WriteByte(ArgumentUtils.CreateNumberFlags(hasMin, hasMax));
-        if (hasMin) buf.WriteVarLong(value.Minimum);
-        if (hasMax) buf.WriteVarLong(value.Maximum);
+        if (hasMin) buf.WriteLong(value.Minimum);
+        if (hasMax) buf.WriteLong(value.Maximum);
     }
 
     public override Template DeserializeFromNetwork(FriendlyByteBuf buf)
     {
         var flags = buf.ReadByte();
-        var min = ArgumentUtils.NumberHasMin(flags) ? buf.ReadVarLong() : long.MinValue;
-        var max = ArgumentUtils.NumberHasMax(flags) ? buf.ReadVarLong() : long.MaxValue;
+        var min = ArgumentUtils.NumberHasMin(flags) ? buf.ReadLong() : long.MinValue;
+        var max = ArgumentUtils.NumberHasMax(flags) ? buf.ReadLong() : long.MaxValue;
         return new ArgumentTemplate(this, LongArgumentType.LongArg(min, max));
     }
 }
@@ -239,7 +239,8 @@ public sealed class StringArgumentInfo : ArgumentTypeInfo
     {
         0 => StringArgumentType.Word(),
         1 => StringArgumentType.String(),
-        _ => StringArgumentType.GreedyString(),
+        2 => StringArgumentType.GreedyString(),
+        _ => throw new InvalidOperationException($"unknown string argument type id {id}"),
     };
 }
 
