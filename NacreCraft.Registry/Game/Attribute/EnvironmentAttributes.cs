@@ -12,10 +12,10 @@ public static class EnvironmentAttributes
         AttributeType<bool>.OfNotInterpolated(Codecs.Bool, AttributeModifier.BooleanLibrary);
 
     private static readonly AttributeType<float> FloatType =
-        AttributeType<float>.OfInterpolated(Codecs.Float, AttributeModifier.FloatLibrary);
+        AttributeType<float>.OfInterpolated(Codecs.Float, AttributeModifier.FloatLibrary, LerpFunction<float>.OfFloat());
 
     private static readonly AttributeType<int> RgbColorType =
-        AttributeType<int>.OfInterpolated(HexColorCodec.StringRgb, AttributeModifier.RgbColorLibrary);
+        AttributeType<int>.OfInterpolated(HexColorCodec.StringRgb, AttributeModifier.RgbColorLibrary, LerpFunction<int>.OfColor());
 
     private static readonly AttributeType<IReadOnlyList<AmbientParticle>> AmbientParticlesType =
         AttributeType<IReadOnlyList<AmbientParticle>>.OfNotInterpolated(AmbientParticle.Codec.ListOf());

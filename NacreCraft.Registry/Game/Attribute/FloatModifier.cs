@@ -28,6 +28,8 @@ public static class FloatModifier
         public float Apply(float subject, float argument) => _function(subject, argument);
 
         public Codec<float> ArgumentCodec(EnvironmentAttribute<float> attribute) => Codecs.Float;
+
+        public LerpFunction<float> ArgumentKeyframeLerp(EnvironmentAttribute<float> attribute) => LerpFunction<float>.OfFloat();
     }
 
     //AlphaBlendModifier interpolates between subject and argument by alpha
@@ -36,6 +38,17 @@ public static class FloatModifier
         public float Apply(float subject, FloatWithAlpha argument) => Mth.Lerp(argument.Alpha, subject, argument.Value);
 
         public Codec<FloatWithAlpha> ArgumentCodec(EnvironmentAttribute<float> attribute) => FloatWithAlpha.Codec;
+
+        //Both the value and the alpha blend, maps to vanilla FloatModifier.ALPHA_BLEND
+        public LerpFunction<FloatWithAlpha> ArgumentKeyframeLerp(EnvironmentAttribute<float> attribute)
+            => new FloatWithAlphaLerp();
+    }
+
+    //FloatWithAlphaLerp interpolates the wrapped value and its alpha separately
+    private sealed class FloatWithAlphaLerp : LerpFunction<FloatWithAlpha>
+    {
+        public FloatWithAlpha Apply(float alpha, FloatWithAlpha from, FloatWithAlpha to)
+            => new(Mth.Lerp(alpha, from.Value, to.Value), Mth.Lerp(alpha, from.Alpha, to.Alpha));
     }
 }
 

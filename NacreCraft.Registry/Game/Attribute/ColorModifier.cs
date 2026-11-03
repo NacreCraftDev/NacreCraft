@@ -1,4 +1,5 @@
 using NacreCraft.Codec;
+using NacreCraft.Util;
 
 namespace NacreCraft.Registry.Environment;
 
@@ -23,6 +24,8 @@ public static class ColorModifier
         public int Apply(int subject, int argument) => Argb.AlphaBlend(subject, argument);
 
         public Codec<int> ArgumentCodec(EnvironmentAttribute<int> attribute) => HexColorCodec.StringArgb;
+
+        public LerpFunction<int> ArgumentKeyframeLerp(EnvironmentAttribute<int> attribute) => LerpFunction<int>.OfColor();
     }
 
     //RgbColorModifier modifier that touches only rgb channels
@@ -35,6 +38,8 @@ public static class ColorModifier
         public int Apply(int subject, int argument) => _function(subject, argument);
 
         public Codec<int> ArgumentCodec(EnvironmentAttribute<int> attribute) => HexColorCodec.StringRgb;
+
+        public LerpFunction<int> ArgumentKeyframeLerp(EnvironmentAttribute<int> attribute) => LerpFunction<int>.OfColor();
     }
 
     //ArgbColorModifier modifier that also handles alpha
@@ -47,6 +52,8 @@ public static class ColorModifier
         public int Apply(int subject, int argument) => _function(subject, argument);
 
         public Codec<int> ArgumentCodec(EnvironmentAttribute<int> attribute) => ArgbArgumentCodec.Instance;
+
+        public LerpFunction<int> ArgumentKeyframeLerp(EnvironmentAttribute<int> attribute) => LerpFunction<int>.OfColor();
     }
 
     //BlendToGrayColorModifier blends color toward gray by brightness
@@ -56,6 +63,17 @@ public static class ColorModifier
             => Argb.SrgbLerp(argument.Factor, subject, Argb.ScaleRgb(Argb.Greyscale(subject), argument.Brightness));
 
         public Codec<BlendToGray> ArgumentCodec(EnvironmentAttribute<int> attribute) => NacreCraft.Registry.Environment.BlendToGray.Codec;
+
+        //Both blend parameters move together, maps to vanilla ColorModifier.BLEND_TO_GRAY
+        public LerpFunction<BlendToGray> ArgumentKeyframeLerp(EnvironmentAttribute<int> attribute)
+            => new BlendToGrayLerp();
+    }
+
+    //BlendToGrayLerp interpolates the brightness and the blend factor separately
+    private sealed class BlendToGrayLerp : LerpFunction<BlendToGray>
+    {
+        public BlendToGray Apply(float alpha, BlendToGray from, BlendToGray to)
+            => new(Mth.Lerp(alpha, from.Brightness, to.Brightness), Mth.Lerp(alpha, from.Factor, to.Factor));
     }
 }
 

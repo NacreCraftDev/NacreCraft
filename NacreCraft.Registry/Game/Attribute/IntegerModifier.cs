@@ -25,5 +25,7 @@ public static class IntegerModifier
         public int Apply(int subject, int argument) => _function(subject, argument);
 
         public Codec<int> ArgumentCodec(EnvironmentAttribute<int> attribute) => Codecs.Int;
+
+        public LerpFunction<int> ArgumentKeyframeLerp(EnvironmentAttribute<int> attribute) => LerpFunction<int>.OfInteger();
     }
 }

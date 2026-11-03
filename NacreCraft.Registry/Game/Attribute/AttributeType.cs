@@ -14,23 +14,30 @@ public sealed class AttributeType<Value>
 
     public Codec<AttributeModifier<Value, object>> ModifierCodec { get; }
 
+    //KeyframeLerp how two keyframe arguments of this type blend, maps to vanilla AttributeType.keyframeLerp
+    public LerpFunction<Value> KeyframeLerp { get; }
+
     private AttributeType(Codec<Value> valueCodec,
-        IReadOnlyDictionary<AttributeModifier.OperationId, AttributeModifier<Value, object>> modifierLibrary)
+        IReadOnlyDictionary<AttributeModifier.OperationId, AttributeModifier<Value, object>> modifierLibrary,
+        LerpFunction<Value> keyframeLerp)
     {
         ValueCodec = valueCodec;
         ModifierLibrary = modifierLibrary;
+        KeyframeLerp = keyframeLerp;
         ModifierCodec = new ModifierCodecImpl(this);
     }
 
     //OfInterpolated interpolatable value type; this port keeps only the data-side attributes
     public static AttributeType<Value> OfInterpolated(Codec<Value> valueCodec,
-        IReadOnlyDictionary<AttributeModifier.OperationId, AttributeModifier<Value, object>> modifierLibrary)
-        => new(valueCodec, modifierLibrary);
+        IReadOnlyDictionary<AttributeModifier.OperationId, AttributeModifier<Value, object>> modifierLibrary,
+        LerpFunction<Value> keyframeLerp)
+        => new(valueCodec, modifierLibrary, keyframeLerp);
 
     //OfNotInterpolated non-interpolatable value type; with no library only override is allowed
+    //A non-interpolated type steps at the segment end, matching vanilla's LerpFunction.ofStep(1.0f)
     public static AttributeType<Value> OfNotInterpolated(Codec<Value> valueCodec,
         IReadOnlyDictionary<AttributeModifier.OperationId, AttributeModifier<Value, object>>? modifierLibrary = null)
-        => new(valueCodec, modifierLibrary ?? EmptyLibrary);
+        => new(valueCodec, modifierLibrary ?? EmptyLibrary, LerpFunction<Value>.OfStep(1.0f));
 
     //CheckAllowedModifier checks whether the modifier belongs to this type
     public void CheckAllowedModifier(AttributeModifier<Value, object> modifier)

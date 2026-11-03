@@ -24,4 +24,7 @@ public sealed class BooleanModifier : AttributeModifier<bool, bool>
     public bool Apply(bool subject, bool argument) => _function(subject, argument);
 
     public Codec<bool> ArgumentCodec(EnvironmentAttribute<bool> attribute) => Codecs.Bool;
+
+    //Booleans cannot blend, so a segment keeps the source value until it ends
+    public LerpFunction<bool> ArgumentKeyframeLerp(EnvironmentAttribute<bool> attribute) => LerpFunction<bool>.OfConstant();
 }

@@ -19,6 +19,12 @@ public static class ExtraCodecs
         value => ParseGuardedPath(directory, value),
         value => ToRelativePath(directory, value));
 
+    //NonNegativeInt integer codec rejecting negative values, maps to vanilla ExtraCodecs.NON_NEGATIVE_INT
+    public static readonly Codec<int> NonNegativeInt = IntRange(0, int.MaxValue);
+
+    //PositiveInt integer codec rejecting zero and negative values, maps to vanilla ExtraCodecs.POSITIVE_INT
+    public static readonly Codec<int> PositiveInt = IntRange(1, int.MaxValue);
+
     private static DataResult<string> ParseGuardedPath(string directory, string text)
     {
         if (Path.IsPathRooted(text)) return DataResult<string>.Error(() => $"Illegal absolute path: {text}");

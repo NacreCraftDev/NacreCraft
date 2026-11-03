@@ -8,6 +8,9 @@ public interface AttributeModifier<Subject, Argument>
     Subject Apply(Subject subject, Argument argument);
 
     Codec<Argument> ArgumentCodec(EnvironmentAttribute<Subject> attribute);
+
+    //ArgumentKeyframeLerp how two keyframe arguments blend, maps to vanilla argumentKeyframeLerp
+    LerpFunction<Argument> ArgumentKeyframeLerp(EnvironmentAttribute<Subject> attribute);
 }
 
 //AttributeModifier static entry point providing override and the modifier library for each value type, maps to vanilla AttributeModifier
@@ -140,6 +143,10 @@ internal sealed class OverrideModifier<Value> : AttributeModifier<Value, object>
 
     public Codec<object> ArgumentCodec(EnvironmentAttribute<Value> attribute)
         => new ObjectValueCodec<Value>(attribute.ValueCodec);
+
+    //The argument is the value itself, so it blends with the attribute type's keyframe lerp
+    public LerpFunction<object> ArgumentKeyframeLerp(EnvironmentAttribute<Value> attribute)
+        => new BoxedLerp<Value>(attribute.Type.KeyframeLerp);
 }
 
 //ObjectArgumentModifier erases the concrete Argument type to object so it can go into the modifier library
@@ -153,6 +160,15 @@ internal sealed class ObjectArgumentModifier<Subject, Argument> : AttributeModif
 
     public Codec<object> ArgumentCodec(EnvironmentAttribute<Subject> attribute)
         => new ObjectValueCodec<Argument>(_inner.ArgumentCodec(attribute));
+
+    public LerpFunction<object> ArgumentKeyframeLerp(EnvironmentAttribute<Subject> attribute)
+        => new BoxedLerp<Argument>(_inner.ArgumentKeyframeLerp(attribute));
+}
+
+//BoxedLerp adapts a typed lerp to the erased object argument the modifier library uses
+internal sealed class BoxedLerp<T>(LerpFunction<T> inner) : LerpFunction<object>
+{
+    public object Apply(float alpha, object from, object to) => inner.Apply(alpha, (T)from, (T)to)!;
 }
 
 //OperationIdCodecImpl string encoding/decoding for the operation id
