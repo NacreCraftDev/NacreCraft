@@ -74,6 +74,45 @@ public sealed class ModelPart
     public ModelPart GetChild(string name) => _children.TryGetValue(name, out var c)
         ? c : throw new KeyNotFoundException($"ModelPart child node not found {name}");
 
+    //OffsetPos adds an animated position offset, maps to vanilla offsetPos
+    public void OffsetPos(Vector3 offset)
+    {
+        X += offset.X;
+        Y += offset.Y;
+        Z += offset.Z;
+    }
+
+    //OffsetRotation adds an animated rotation offset, maps to vanilla offsetRotation
+    public void OffsetRotation(Vector3 offset)
+    {
+        XRot += offset.X;
+        YRot += offset.Y;
+        ZRot += offset.Z;
+    }
+
+    //OffsetScale adds an animated scale offset, maps to vanilla offsetScale
+    public void OffsetScale(Vector3 offset)
+    {
+        XScale += offset.X;
+        YScale += offset.Y;
+        ZScale += offset.Z;
+    }
+
+    //CreatePartLookup maps bone names to parts so an animation can be baked, maps to vanilla createPartLookup
+    public Func<string, ModelPart?> CreatePartLookup()
+    {
+        var parts = new Dictionary<string, ModelPart> { ["root"] = this };
+        AddAllChildren(parts);
+        return name => parts.GetValueOrDefault(name);
+    }
+
+    //AddAllChildren registers direct children first and then recurses, first name wins like vanilla putIfAbsent
+    private void AddAllChildren(Dictionary<string, ModelPart> output)
+    {
+        foreach (var (name, part) in _children) output.TryAdd(name, part);
+        foreach (var part in _children.Values) part.AddAllChildren(output);
+    }
+
     //Render renders this part and its subtree
     //poseStack transform stack builder vertex output lightCoords light coordinates overlayCoords overlay coordinates color color multiplier
     public void Render(PoseStack poseStack, EntityVertexBuilder builder, int lightCoords, int overlayCoords, int color)
