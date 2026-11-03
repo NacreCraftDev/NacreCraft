@@ -22,7 +22,11 @@ public sealed record RunnableWithPriority(int Priority, Action Task)
 //Plain sequential queue wrapping a ConcurrentQueue, maps to vanilla QueueStrictQueue
 public sealed class QueueStrictQueue : StrictQueue<Action>
 {
-    private readonly ConcurrentQueue<Action> _queue = new();
+    private readonly ConcurrentQueue<Action> _queue;
+
+    public QueueStrictQueue() : this(new ConcurrentQueue<Action>()) { }
+
+    public QueueStrictQueue(ConcurrentQueue<Action> queue) => _queue = queue;
 
     public Action? Pop() => _queue.TryDequeue(out var task) ? task : null;
     public bool Push(Action task) { _queue.Enqueue(task); return true; }

@@ -8,7 +8,7 @@ public sealed class PriorityConsecutiveExecutor : AbstractConsecutiveExecutor<Ru
     public PriorityConsecutiveExecutor(int priorityCount, IExecutor executor, string name)
         : base(new FixedPriorityQueue(priorityCount), executor, name) { }
 
-    protected override RunnableWithPriority WrapRunnable(Action runnable)
+    public override RunnableWithPriority WrapRunnable(Action runnable)
         => new(0, runnable);
 
     protected override void RunTask(RunnableWithPriority task) => task.Run();

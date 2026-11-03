@@ -1,11 +1,12 @@
 using NacreCraft.Logging;
+using NacreCraft.Util.Profiling.Metrics;
 
 namespace NacreCraft.Util.Thread;
 
 //Consecutive executor abstract base class, maps to vanilla AbstractConsecutiveExecutor
 //State machine SLEEPING/RUNNING/CLOSED switched by CAS to guarantee single-threaded serial execution
 //Core mechanism: schedule enqueues then CAS-wakes executor.Execute(this.Run) to trigger the execution loop
-public abstract class AbstractConsecutiveExecutor<T> where T : class
+public abstract class AbstractConsecutiveExecutor<T> : TaskScheduler<T>, ProfilerMeasured where T : class
 {
     private const int Sleeping = 0;
     private const int Running = 1;
@@ -21,15 +22,18 @@ public abstract class AbstractConsecutiveExecutor<T> where T : class
         _queue = queue;
         _executor = executor;
         _name = name;
+        MetricsRegistry.Instance.Add(this);
     }
 
     public string Name => _name;
     public int Size => _queue.Size;
-    public bool HasWork => _status == Running && !_queue.IsEmpty;
+    public bool HasWork => IsRunning && !_queue.IsEmpty;
     protected bool IsRunning => _status == Running;
     protected bool IsClosed => _status == Closed;
 
-    protected abstract T WrapRunnable(Action runnable);
+    public abstract T WrapRunnable(Action runnable);
+
+    //RunTask runs one task; the strict queue's task type decides how
     protected abstract void RunTask(T task);
 
     private bool CanBeScheduled() => !IsClosed && !_queue.IsEmpty;
@@ -41,8 +45,16 @@ public abstract class AbstractConsecutiveExecutor<T> where T : class
         if (_status != Running) return false;
         var task = _queue.Pop();
         if (task is null) return false;
-        try { RunTask(task); }
-        catch (Exception e) { Log.Exception(e, $"Error running task on {_name}"); }
+        try
+        {
+            NacreCraft.Util.Util.RunNamed(() => RunTask(task), _name);
+        }
+        catch (Exception e)
+        {
+            //Vanilla lets the exception reach the executor thread; a .NET threadpool worker would take the process down,
+            //so it is recorded here and the loop keeps going
+            Log.Exception(e, $"Error executing task on {_name}");
+        }
         return true;
     }
 
@@ -59,11 +71,15 @@ public abstract class AbstractConsecutiveExecutor<T> where T : class
 
     public void RunAll()
     {
-        do
+        try
+        {
+            while (PollTask()) { }
+        }
+        finally
         {
             Interlocked.CompareExchange(ref _status, Sleeping, Running);
             RegisterForExecution();
-        } while (PollTask());
+        }
     }
 
     public void Schedule(T task)
@@ -83,6 +99,9 @@ public abstract class AbstractConsecutiveExecutor<T> where T : class
             catch (Exception e2) { Log.Exception(e2, $"Could not schedule ConsecutiveExecutor {_name}"); }
         }
     }
+
+    public List<MetricSampler> ProfiledMetrics()
+        => new() { MetricSampler.Create($"{_name}-queue-size", MetricCategory.ConsecutiveExecutors, () => Size) };
 
     public override string ToString() => $"{_name} {_status} {_queue.IsEmpty}";
 }

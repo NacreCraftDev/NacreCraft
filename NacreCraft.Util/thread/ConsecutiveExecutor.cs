@@ -7,6 +7,6 @@ public sealed class ConsecutiveExecutor : AbstractConsecutiveExecutor<Action>
     public ConsecutiveExecutor(IExecutor executor, string name)
         : base(new QueueStrictQueue(), executor, name) { }
 
-    protected override Action WrapRunnable(Action runnable) => runnable;
+    public override Action WrapRunnable(Action runnable) => runnable;
     protected override void RunTask(Action task) => task();
 }
