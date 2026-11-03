@@ -7,6 +7,9 @@ namespace NacreCraft.Storage;
 //At build time the base directory is laid out as a node tree; before changes files are copied into the temp directory, and finally the move operations are collected and written to disk together
 public sealed class CopyOnWriteFileSystem
 {
+    //MoveRetries how often a revert move is retried before it counts as failed, maps to the 10 attempts of Util.safeMoveFile
+    private const int MoveRetries = 10;
+
     private readonly string _baseDirectory;
     private readonly string _tmpDirectory;
     private readonly Func<string, bool> _skippedPaths;
@@ -74,9 +77,11 @@ public sealed class CopyOnWriteFileSystem
     public string CreateTemporaryFilePath() => Path.Combine(_tmpDirectory, $"tmp_{Interlocked.Increment(ref _tmpFileIndex)}");
 
     //BuildFileTreeFrom recursively lays out the base directory as a node tree
+    //The base directory itself is checked first, a symlinked or read only world folder fails before any child is visited
     private DirectoryNode BuildFileTreeFrom(string baseDirectory)
     {
         var fileTree = new DirectoryNode(_rootPath);
+        CheckAttributes(baseDirectory);
         Walk(baseDirectory, baseDirectory, fileTree);
         return fileTree;
     }
@@ -148,10 +153,17 @@ public sealed class CopyOnWriteFileSystem
         }
     }
 
-    //CreateDirectories creates directories one by one; the parent must already exist
+    //CreateDirectories creates directories one by one; the parent must already exist and an existing target is an error
     public static void CreateDirectories(IReadOnlyList<string> directories)
     {
-        foreach (var directory in directories) Directory.CreateDirectory(directory);
+        foreach (var directory in directories)
+        {
+            if (Directory.Exists(directory) || File.Exists(directory))
+            {
+                throw new CowFSFileAlreadyExistsException(directory);
+            }
+            Directory.CreateDirectory(directory);
+        }
     }
 
     //HardLinkFiles hard-links unchanged files to the target to save space
@@ -206,17 +218,27 @@ public sealed class CopyOnWriteFileSystem
         return failed;
     }
 
+    //SafeMoveFile retries the move and verifies the target landed as a regular file, maps to Util.safeMoveFile
+    //Ten immediate attempts, no delay, the same shape the vanilla helper uses for files held open by another process
     private static bool SafeMoveFile(string from, string to, bool overwrite)
     {
-        try
+        for (var retry = 0; retry < MoveRetries; retry++)
         {
-            File.Move(from, to, overwrite);
-            return true;
+            var moved = false;
+            try
+            {
+                File.Move(from, to, overwrite);
+                moved = true;
+            }
+            catch (IOException exception)
+            {
+                Log.Error($"Failed to rename {from} to {to}: {exception.Message}");
+            }
+            if (moved && File.Exists(to) && !Directory.Exists(to)) return true;
+            Log.Error($"Failed to move from {from} to {to}, retrying {retry}/{MoveRetries}");
         }
-        catch (IOException)
-        {
-            return false;
-        }
+        Log.Error($"Failed to move from {from} to {to}, aborting, progress might be lost");
+        return false;
     }
 
     //CreateHardLink, cross-platform hard links with separate syscalls for Windows and Unix

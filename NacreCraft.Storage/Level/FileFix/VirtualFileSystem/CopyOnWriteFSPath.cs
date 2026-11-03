@@ -54,7 +54,12 @@ public sealed class CopyOnWriteFSPath
 
     public int GetNameCount() => _path.Length == 0 && _isAbsolute ? 0 : Segments().Count;
 
-    public CopyOnWriteFSPath GetName(int index) => new(Segments()[index], FileSystem, false);
+    //GetName splits out one segment; the root path has no segment and rejects the request
+    public CopyOnWriteFSPath GetName(int index)
+    {
+        if (IsRoot()) throw new ArgumentException("The root path has no name");
+        return new CopyOnWriteFSPath(Segments()[index], FileSystem, false);
+    }
 
     public CopyOnWriteFSPath Subpath(int beginIndex, int endIndex)
     {

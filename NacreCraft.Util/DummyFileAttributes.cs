@@ -12,19 +12,19 @@ public abstract class DummyFileAttributes
     //File file placeholder attributes
     public static readonly DummyFileAttributes File = new FileEntry();
 
-    public DateTimeOffset LastModifiedTime => Epoch;
+    public virtual DateTimeOffset LastModifiedTime => Epoch;
 
-    public DateTimeOffset LastAccessTime => Epoch;
+    public virtual DateTimeOffset LastAccessTime => Epoch;
 
-    public DateTimeOffset CreationTime => Epoch;
+    public virtual DateTimeOffset CreationTime => Epoch;
 
-    public bool IsSymbolicLink => false;
+    public virtual bool IsSymbolicLink => false;
 
-    public bool IsOther => false;
+    public virtual bool IsOther => false;
 
-    public long Size => 0L;
+    public virtual long Size => 0L;
 
-    public object? FileKey => null;
+    public virtual object? FileKey => null;
 
     public abstract bool IsRegularFile { get; }
 
