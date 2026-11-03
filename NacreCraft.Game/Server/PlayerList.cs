@@ -33,6 +33,9 @@ public sealed class PlayerList
 
     public int MaxPlayers { get; }
 
+    //Server the owning server, for subsystems a player reaches through its player list
+    public MinecraftServer Server => _server;
+
     public PlayerList(MinecraftServer server, int maxPlayers)
     {
         _server = server;

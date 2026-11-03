@@ -902,7 +902,8 @@ public sealed class ServerGamePacketListenerImpl : ServerGamePacketListener, Tic
     public void HandleConfigurationAcknowledged(ServerboundConfigurationAcknowledgedPacket packet) { }
     public void HandleChunkBatchReceived(ServerboundChunkBatchReceivedPacket packet)
         => Player?.ChunkSender?.OnChunkBatchReceived(packet.DesiredChunksPerTick);
-    public void HandleDebugSubscriptionRequest(ServerboundDebugSubscriptionRequestPacket packet) { }
+    public void HandleDebugSubscriptionRequest(ServerboundDebugSubscriptionRequestPacket packet)
+        => Player?.RequestDebugSubscriptions(packet.Subscriptions);
     public void HandleClientTickEnd(ServerboundClientTickEndPacket packet) { }
 
     //The following 6 methods inherited from ServerCommonPacketListener are empty this round

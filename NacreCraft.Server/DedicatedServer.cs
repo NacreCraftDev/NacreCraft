@@ -9,6 +9,8 @@ using NacreCraft.Game.Network;
 using NacreCraft.Game.Server.Rcon;
 using NacreCraft.Game.Server.Rcon.Thread;
 using NacreCraft.Game.Server.Progress;
+using NacreCraft.Game.Util.Debug;
+using NacreCraft.Game.Util.DebugChart;
 using NacreCraft.Game.Util.Monitoring.Jmx;
 using NacreCraft.Network.Protocol.Configuration;
 using NacreCraft.Network.Protocol.Common;
@@ -60,6 +62,10 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
     private readonly Dictionary<ResourceKey<Level>, PersistentServerLevel> _levels = new();
     private readonly List<Connection> _connections = new();
     private readonly PlayerList _playerList;
+    private readonly ServerDebugSubscribers _debugSubscribers;
+    private readonly RemoteSampleLogger _tickTimeLogger;
+    private bool _isTickTimeLoggingEnabled;
+    private readonly Dictionary<PersistentServerLevel, LevelDebugSynchronizers> _debugSynchronizers = new();
     //_opList the operator list, source of permission level checks and /op /deop reads and writes
     private readonly OpList _opList;
     //_banList the player ban list, source of login checks and /ban /pardon /banlist reads and writes
@@ -270,6 +276,23 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
     //EntityTracker the entity tracker, driven directly by diagnostics and tests
     public override EntityTracker EntityTracker => _entityTracker;
 
+    //DebugSubscribers the debug subscription bookkeeping, maps to vanilla MinecraftServer.debugSubscribers
+    public override ServerDebugSubscribers DebugSubscribers => _debugSubscribers;
+
+    //GetDebugSynchronizers the per-level debug value synchronizers, maps to vanilla ServerLevel.debugSynchronizers
+    public LevelDebugSynchronizers GetDebugSynchronizers(PersistentServerLevel level)
+    {
+        if (!_debugSynchronizers.TryGetValue(level, out var synchronizers))
+            _debugSynchronizers[level] = synchronizers = new LevelDebugSynchronizers(this, level);
+        return synchronizers;
+    }
+
+    //GetTickTimeLogger the debug chart tick time sampler, maps to vanilla DedicatedServer.getTickTimeLogger
+    protected override SampleLogger? GetTickTimeLogger() => _tickTimeLogger;
+
+    //IsTickTimeLoggingEnabled whether anyone subscribed to tick time samples
+    public override bool IsTickTimeLoggingEnabled() => _isTickTimeLoggingEnabled;
+
     //DebugPlayers the fake player manager, the operation entry for /debug join and /debug player
     public override DebugPlayerManager DebugPlayers => _debugPlayers;
 
@@ -383,6 +406,10 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
         _levels[LevelKeys.OVERWORLD] = _overworld;
         RegisterLevel(LevelKeys.OVERWORLD, _overworld);
         _playerList = new PlayerList(this, settings.MaxPlayers);
+        _debugSubscribers = new ServerDebugSubscribers(this);
+        //The tick time chart samples every TpsDebugDimensions entry, maps to vanilla DedicatedServer's RemoteSampleLogger
+        _tickTimeLogger = new RemoteSampleLogger(
+            Enum.GetValues<TpsDebugDimensions>().Length, _debugSubscribers, RemoteDebugSampleType.TickTime);
         //Tick rate state changes are synced to clients through the player set, maps to vanilla tickRateManager using server.getPlayerList() to broadcast
         TickRate.Players = _playerList;
         //Dimensions beyond the overworld are built from the level definitions, none without a data pack definition to avoid fabricating fake dimensions with the wrong generator
@@ -894,6 +921,10 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
     //5. periodic autosave
     protected override void Tick()
     {
+        //Rebuild the debug subscription sets before any level syncs this frame, maps to the debugSubscribers section of vanilla tickChildren
+        _debugSubscribers.Tick();
+        //Each level then pushes the values its subscribers asked for, maps to the debugSynchronizers tick inside vanilla ServerLevel.tick
+        foreach (var level in _levels.Values) GetDebugSynchronizers(level).Tick(_debugSubscribers);
         //The commandFunctions section of tickChildren, ticks/loads tag functions, the manager filters by runsNormally internally
         Functions.Tick();
         //Scheduled events fire by overworld game time, maps to vanilla scheduled_events semantics
@@ -1070,6 +1101,8 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
             SaveAllPlayerData();
         }
         TickStageProfiler.Record(TickStage.AutoSave, stageStart);
+        //Refresh whether tick time sampling is wanted for the next frame, maps to vanilla endMetricsRecordingTick
+        _isTickTimeLoggingEnabled = _debugSubscribers.HasAnySubscriberFor(DebugSubscriptions.DedicatedServerTickTime);
     }
 
     //SaveLevelData writes the world game time back to level.dat, a synchronous write failure does not interrupt the main loop

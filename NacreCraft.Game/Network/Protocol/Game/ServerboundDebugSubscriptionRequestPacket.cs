@@ -1,32 +1,51 @@
-using System.Collections.Generic;
+using NacreCraft.Game.Util.Debug;
+using NacreCraft.Network;
 
 namespace NacreCraft.Game.Network.Protocol.Game;
 
-//ServerboundDebugSubscriptionRequestPacket debug subscription request packet, maps to vanilla ServerboundDebugSubscriptionRequestPacket
-//Field: Subscriptions(List<int> set of subscription registry ids)
-public sealed record ServerboundDebugSubscriptionRequestPacket(List<int> Subscriptions) : Packet<ServerGamePacketListener>
+//ServerboundDebugSubscriptionRequestPacket debug subscription request, maps to vanilla ServerboundDebugSubscriptionRequestPacket
+//Field: Subscriptions(the set of debug subscriptions the player enabled, encoded as registry ids)
+public sealed record ServerboundDebugSubscriptionRequestPacket(HashSet<DebugSubscription> Subscriptions) : Packet<ServerGamePacketListener>
 {
-    public static StreamCodec<FriendlyByteBuf, ServerboundDebugSubscriptionRequestPacket> StreamCodec { get; } = new DebugSubscriptionRequestCodec();
+    //Vanilla caps the decoded set at 32 entries
+    private const int MaxSubscriptions = 32;
+
+    public static StreamCodec<RegistryFriendlyByteBuf, ServerboundDebugSubscriptionRequestPacket> StreamCodec { get; } = new DebugSubscriptionRequestCodec();
 
     public PacketType<ServerGamePacketListener> Type => GamePacketTypes.ServerboundDebugSubscriptionRequest;
 
     public void Handle(ServerGamePacketListener handler) => handler.HandleDebugSubscriptionRequest(this);
 
-    private sealed class DebugSubscriptionRequestCodec : StreamCodec<FriendlyByteBuf, ServerboundDebugSubscriptionRequestPacket>
+    private sealed class DebugSubscriptionRequestCodec : StreamCodec<RegistryFriendlyByteBuf, ServerboundDebugSubscriptionRequestPacket>
     {
-        //Sent when toggling subscriptions in the F3 debug screen; vanilla encodes it as a collection: varint count plus a registry id per entry
-        public ServerboundDebugSubscriptionRequestPacket Decode(FriendlyByteBuf buf)
+        public ServerboundDebugSubscriptionRequestPacket Decode(RegistryFriendlyByteBuf buf)
         {
             var count = buf.ReadVarInt();
-            var subscriptions = new List<int>(count);
-            for (var i = 0; i < count; i++) subscriptions.Add(buf.ReadVarInt());
-            return new(subscriptions);
+            if (count > MaxSubscriptions)
+                throw new InvalidOperationException($"debug subscription count out of range {count} > {MaxSubscriptions}");
+            var registry = buf.Lookup(Registries.DEBUG_SUBSCRIPTION);
+            var subscriptions = new HashSet<DebugSubscription>();
+            for (var i = 0; i < count; i++)
+            {
+                var id = buf.ReadVarInt();
+                var subscription = registry.ById(id) as DebugSubscription
+                    ?? throw new InvalidOperationException($"unknown debug subscription id {id}");
+                subscriptions.Add(subscription);
+            }
+            return new ServerboundDebugSubscriptionRequestPacket(subscriptions);
         }
 
-        public void Encode(FriendlyByteBuf buf, ServerboundDebugSubscriptionRequestPacket value)
+        public void Encode(RegistryFriendlyByteBuf buf, ServerboundDebugSubscriptionRequestPacket value)
         {
+            var registry = buf.Lookup(Registries.DEBUG_SUBSCRIPTION);
             buf.WriteVarInt(value.Subscriptions.Count);
-            foreach (var subscription in value.Subscriptions) buf.WriteVarInt(subscription);
+            foreach (var subscription in value.Subscriptions)
+            {
+                var id = registry.GetId(subscription);
+                if (id == IdMap<object>.Default)
+                    throw new InvalidOperationException($"debug subscription not registered: {subscription}");
+                buf.WriteVarInt(id);
+            }
         }
     }
 }

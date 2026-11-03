@@ -29,7 +29,7 @@ public static class Registries
     public static readonly ResourceKey<Registry<DataComponentPredicateType<object>>> DATA_COMPONENT_PREDICATE_TYPE = CreateRegistryKey<DataComponentPredicateType<object>>("data_component_predicate_type");
     public static readonly ResourceKey<Registry<object>> DATA_COMPONENT_TYPE = CreateRegistryKey<object>("data_component_type");
     public static readonly ResourceKey<Registry<GameRule<object>>> GAME_RULE = CreateRegistryKey<GameRule<object>>("game_rule");
-    public static readonly ResourceKey<Registry<DebugSubscription<object>>> DEBUG_SUBSCRIPTION = CreateRegistryKey<DebugSubscription<object>>("debug_subscription");
+    public static readonly ResourceKey<Registry<object>> DEBUG_SUBSCRIPTION = CreateRegistryKey<object>("debug_subscription");
     public static readonly ResourceKey<Registry<DecoratedPotPattern>> DECORATED_POT_PATTERN = CreateRegistryKey<DecoratedPotPattern>("decorated_pot_pattern");
     public static readonly ResourceKey<Registry<MapCodec<object>>> DENSITY_FUNCTION_TYPE = CreateRegistryKey<MapCodec<object>>("worldgen/density_function_type");
     public static readonly ResourceKey<Registry<MapCodec<DialogBody>>> DIALOG_BODY_TYPE = CreateRegistryKey<MapCodec<DialogBody>>("dialog_body_type");

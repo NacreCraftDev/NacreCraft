@@ -1,6 +1,7 @@
 using NacreCraft.Network.Protocol.Common;
 using NacreCraft.Game.Network.Protocol.Game;
 using NacreCraft.Network.Protocol.Login;
+using NacreCraft.Game.Util.Debug;
 using NacreCraft.Game.World.Effect;
 using NacreCraft.Game.World.Entity;
 using NacreCraft.Game.World.Inventory;
@@ -189,6 +190,23 @@ public sealed class ServerPlayer : Player
 
     //OwnerList the owning player list; sounds broadcast to the whole server, injected by PlayerList.PlaceNewPlayer
     public PlayerList? OwnerList { get; set; }
+
+    //_requestedDebugSubscriptions the debug subscriptions the client asked for, replaced wholesale by each request
+    private HashSet<DebugSubscription> _requestedDebugSubscriptions = new();
+
+    //RequestDebugSubscriptions stores the latest request, maps to vanilla ServerPlayer.requestDebugSubscriptions
+    public void RequestDebugSubscriptions(HashSet<DebugSubscription> subscriptions)
+        => _requestedDebugSubscriptions = new HashSet<DebugSubscription>(subscriptions);
+
+    //DebugSubscriptions the subscriptions actually in effect
+    //Vanilla returns an empty set when the player lacks the required permissions, which is also what gates the synchronizers
+    public IReadOnlyCollection<DebugSubscription> DebugSubscriptions()
+    {
+        var server = OwnerList?.Server;
+        if (server is null || !server.DebugSubscribers.HasRequiredPermissions(this))
+            return Array.Empty<DebugSubscription>();
+        return _requestedDebugSubscriptions;
+    }
 
     //AddItem core give entry, maps to vanilla Player.addItem
     //All paths handing items to the player converge here; returns whether at least one was placed

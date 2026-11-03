@@ -51,6 +51,9 @@ NacreCraft.Loader/server.properties
 etl.txt
 
 debug/
+# The Game layer carries a Debug source package (counterpart of net.minecraft.util.debug), keep it tracked
+!NacreCraft.Game/Util/Debug/
+!NacreCraft.Game/Util/Debug/**
 log/
 artifacts/
 publish/

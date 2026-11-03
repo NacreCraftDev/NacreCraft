@@ -69,6 +69,15 @@ public sealed class ChunkSender
     //PendingCount number of chunks waiting to be sent, for diagnostics
     public int PendingCount => _pending.Count;
 
+    //IsPending whether the chunk is queued but not handed to the client yet, maps to vanilla PlayerChunkSender.isPending
+    public bool IsPending(long packedPos) => _pendingSet.Contains(packedPos);
+
+    //IsTracked whether the chunk is inside the player's view, maps to the vanilla chunk tracking view
+    public bool IsTracked(long packedPos) => _tracked.Contains(packedPos);
+
+    //TrackedChunks packed positions of every chunk inside the view
+    public IEnumerable<long> TrackedChunks => _tracked;
+
     //FailedCount number of load-failed chunks dropped, for diagnostics
     public int FailedCount => _failedCount;
 

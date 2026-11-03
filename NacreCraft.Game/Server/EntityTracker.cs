@@ -497,6 +497,34 @@ public sealed class EntityTracker
         return seen;
     }
 
+    //ForEachEntityTrackedBy enumerates the entities this player currently observes, maps to vanilla ChunkMap.forEachEntityTrackedBy
+    public void ForEachEntityTrackedBy(PersistentServerLevel level, ServerPlayer player, Action<ITrackedEntity> consumer)
+    {
+        if (!_seenByPlayer.TryGetValue(player.EntityId, out var seen)) return;
+        foreach (var entityId in seen)
+        {
+            var entity = level.EntityManager.GetByEntityId(entityId);
+            if (entity is not null) consumer(entity);
+        }
+    }
+
+    //SendToTrackingPlayersFiltered sends a packet to the observers of an entity that pass the filter, maps to vanilla ChunkMap.sendToTrackingPlayersFiltered
+    public void SendToTrackingPlayersFiltered(ITrackedEntity entity, IReadOnlyList<ServerPlayer> players,
+        Packet<ClientGamePacketListener> packet, Func<ServerPlayer, bool> filter)
+    {
+        if (!_tracked.TryGetValue(entity.EntityId, out var tracked)) return;
+        foreach (var player in players)
+        {
+            if (!tracked.Observers.ContainsKey(player.EntityId)) continue;
+            if (!filter(player)) continue;
+            player.Connection.Send(packet);
+        }
+    }
+
+    //IsTrackedByAnyPlayer whether at least one player observes this entity, maps to vanilla ChunkMap.isTrackedByAnyPlayer
+    public bool IsTrackedByAnyPlayer(ITrackedEntity entity)
+        => _tracked.TryGetValue(entity.EntityId, out var tracked) && tracked.Observers.Count > 0;
+
     //ForgetPlayer cleans up a player's visibility records and others' tracking of its entity when it leaves
     //After the player leaves nobody advances its PruneStale; without active cleanup it would stay in the table
     public void ForgetPlayer(ServerPlayer player)

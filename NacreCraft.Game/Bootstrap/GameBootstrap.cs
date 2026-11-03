@@ -166,6 +166,9 @@ public static class GameBootstrap
             Mark("timelines");
             DensityFunctionBootstrap.RegisterAll();
             Mark("density-function-types");
+            //Debug subscriptions are registered before the registry freezes; debug value packets encode them by registry id
+            NacreCraft.Game.Util.Debug.DebugSubscriptions.Bootstrap();
+            Mark("debug-subscriptions");
             //Permission and predicate types are registered into their own MapCodec registries, used to dispatch encoding/decoding
             PermissionTypes.Bootstrap(BuiltInRegistries.PERMISSION_TYPE);
             PermissionCheckTypes.Bootstrap(BuiltInRegistries.PERMISSION_CHECK_TYPE);

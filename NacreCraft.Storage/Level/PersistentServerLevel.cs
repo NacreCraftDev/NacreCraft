@@ -45,6 +45,15 @@ public sealed class PersistentServerLevel : SimpleServerLevel, BlockGetter
     //ChunkSource, the ServerChunkCache chunk source, for external diagnostics and player position updates
     public ServerChunkCache ChunkSource => _chunkSource;
 
+    //_poiManager, the point of interest store, maps to vanilla ServerLevel.poiManager
+    private readonly SimplePoiManager _poiManager = new();
+
+    //PoiManager, point of interest lookup, maps to vanilla ServerLevel.getPoiManager
+    public SimplePoiManager PoiManager => _poiManager;
+
+    //IsVillage whether the position belongs to a village, maps to vanilla ServerLevel.isVillage
+    public bool IsVillage(BlockPos pos) => _poiManager.SectionsToVillage(pos) <= 1;
+
     //SetChunkForced toggles force load, maps to vanilla ServerLevel.setChunkForced
     public bool SetChunkForced(int x, int z, bool add)
         => _chunkSource.UpdateChunkForced(new ChunkPos(x, z), add);

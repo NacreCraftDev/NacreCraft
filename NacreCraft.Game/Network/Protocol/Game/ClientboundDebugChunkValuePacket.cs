@@ -1,34 +1,28 @@
-using NacreCraft.Logging;
+using NacreCraft.Game.Util.Debug;
+using NacreCraft.Network;
 using NacreCraft.Primitives;
 
 namespace NacreCraft.Game.Network.Protocol.Game;
 
 //ClientboundDebugChunkValuePacket debug chunk value packet, maps to vanilla ClientboundDebugChunkValuePacket
-//Fields: ChunkPos(ChunkPos), Update(the raw subscription payload, see below)
-public sealed record ClientboundDebugChunkValuePacket(object ChunkPos, object Update) : Packet<ClientGamePacketListener>
+//Fields: ChunkPos(the tracked chunk), Update(the subscription update payload)
+public sealed record ClientboundDebugChunkValuePacket(ChunkPos ChunkPos, Update Update) : Packet<ClientGamePacketListener>
 {
-    public static StreamCodec<FriendlyByteBuf, ClientboundDebugChunkValuePacket> StreamCodec { get; } = new DebugChunkValueCodec();
+    public static StreamCodec<RegistryFriendlyByteBuf, ClientboundDebugChunkValuePacket> StreamCodec { get; } = new DebugChunkValueCodec();
 
     public PacketType<ClientGamePacketListener> Type => GamePacketTypes.ClientboundDebugChunkValue;
 
     public void Handle(ClientGamePacketListener handler) => handler.HandleDebugChunkValue(this);
 
-    private sealed class DebugChunkValueCodec : StreamCodec<FriendlyByteBuf, ClientboundDebugChunkValuePacket>
+    private sealed class DebugChunkValueCodec : StreamCodec<RegistryFriendlyByteBuf, ClientboundDebugChunkValuePacket>
     {
-        //The update is a DEBUG_SUBSCRIPTION registry id followed by that subscription's value codec
-        //This client's subscription registry is empty and the client never subscribes, so the payload is kept verbatim
-        public ClientboundDebugChunkValuePacket Decode(FriendlyByteBuf buf)
-        {
-            var chunkPos = NacreCraft.Primitives.ChunkPos.Unpack(buf.ReadLong());
-            var payload = buf.ReadBytes(buf.ReadableBytes);
-            Log.Debug($"DebugChunkValue raw payload {payload.Length} bytes, debug subscriptions are not implemented");
-            return new ClientboundDebugChunkValuePacket(chunkPos, payload);
-        }
+        public ClientboundDebugChunkValuePacket Decode(RegistryFriendlyByteBuf buf)
+            => new(ChunkPos.Unpack(buf.ReadLong()), Update.StreamCodec.Decode(buf));
 
-        public void Encode(FriendlyByteBuf buf, ClientboundDebugChunkValuePacket value)
+        public void Encode(RegistryFriendlyByteBuf buf, ClientboundDebugChunkValuePacket value)
         {
-            buf.WriteLong(value.ChunkPos is ChunkPos pos ? pos.Pack() : 0L);
-            if (value.Update is byte[] payload) buf.WriteBytes(payload);
+            buf.WriteLong(value.ChunkPos.Pack());
+            Update.StreamCodec.Encode(buf, value.Update);
         }
     }
 }

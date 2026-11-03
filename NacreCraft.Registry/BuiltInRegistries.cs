@@ -17,7 +17,7 @@ public static class BuiltInRegistries
     public static readonly Registry<MobEffect> MOB_EFFECT = RegisterSimple<MobEffect>(Registries.MOB_EFFECT);
     public static readonly DefaultedRegistry<Block> BLOCK = RegisterDefaulted<Block>(Registries.BLOCK, "air");
     public static readonly DefaultedRegistry<Biome> BIOME = RegisterDefaulted<Biome>(Registries.BIOME, "plains");
-    public static readonly Registry<DebugSubscription<object>> DEBUG_SUBSCRIPTION = RegisterSimple<DebugSubscription<object>>(Registries.DEBUG_SUBSCRIPTION);
+    public static readonly Registry<object> DEBUG_SUBSCRIPTION = RegisterSimple<object>(Registries.DEBUG_SUBSCRIPTION);
     public static readonly DefaultedRegistry<EntityType<object>> ENTITY_TYPE = RegisterDefaulted<EntityType<object>>(Registries.ENTITY_TYPE, "pig");
     public static readonly DefaultedRegistry<Item> ITEM = RegisterDefaulted<Item>(Registries.ITEM, "air");
     public static readonly Registry<Potion> POTION = RegisterSimple<Potion>(Registries.POTION);

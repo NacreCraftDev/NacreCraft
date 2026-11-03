@@ -48,7 +48,6 @@ public interface CowVariant { }
 public interface CreativeModeTab { }
 public interface CriterionTrigger<T1> { }
 public interface DataComponentPredicateType<T1> { }
-public interface DebugSubscription<T1> { }
 public interface Dialog { }
 public interface DialogBody { }
 public interface DimensionType { }

@@ -72,6 +72,9 @@ public abstract class MinecraftServer
     private int _tickTimeCursor;
     private int _tickTimeFilled;
 
+    //_lastTickNanos timeline position of the last tick start, the full tick time baseline of the debug chart
+    private long _lastTickNanos = (long)(Stopwatch.GetTimestamp() * NanosecondsPerTimestampTick);
+
     //TickRate tick rate management, maps to vanilla tickRateManager, operated by /debug tick
     public ServerTickRateManager TickRate { get; } = new();
 
@@ -100,6 +103,12 @@ public abstract class MinecraftServer
     public abstract IReadOnlyList<ResourceKey<Level>> DimensionKeys { get; }
     //PlayerList online player list
     public abstract PlayerList PlayerList { get; }
+    //DebugSubscribers debug subscription bookkeeping, maps to vanilla MinecraftServer.debugSubscribers
+    public abstract NacreCraft.Game.Util.Debug.ServerDebugSubscribers DebugSubscribers { get; }
+    //GetTickTimeLogger debug chart tick time sampler, maps to vanilla MinecraftServer.getTickTimeLogger
+    protected abstract NacreCraft.Game.Util.DebugChart.SampleLogger? GetTickTimeLogger();
+    //IsTickTimeLoggingEnabled whether anyone subscribed to tick time samples
+    public abstract bool IsTickTimeLoggingEnabled();
     //Connections connected connections
     public abstract IReadOnlyList<Connection> Connections { get; }
     //ClockManager world clock manager
@@ -297,6 +306,11 @@ public abstract class MinecraftServer
                     _nextTickTimeMillis += tickMillis;
                 }
                 var tickStartTimestamp = Stopwatch.GetTimestamp();
+                //Debug chart: close the previous frame and start a new one, maps to vanilla logFullTickTime
+                var tickStartNanos = (long)(tickStartTimestamp * NanosecondsPerTimestampTick);
+                if (IsTickTimeLoggingEnabled())
+                    GetTickTimeLogger()?.LogSample(tickStartNanos - _lastTickNanos);
+                _lastTickNanos = tickStartNanos;
                 try
                 {
                     //Hold the gate for the whole tick: a shutdown flush either waits for this tick to finish or this tick does not run at all
@@ -326,6 +340,9 @@ public abstract class MinecraftServer
                 //This tick's measured time goes into the sample ring and the sprint stats, for /debug tick query
                 var elapsedNanos = (long)((Stopwatch.GetTimestamp() - tickStartTimestamp) * NanosecondsPerTimestampTick);
                 RecordTickTime(elapsedNanos);
+                //The tick body duration is one partial dimension of the debug chart, maps to vanilla tickServer writing TICK_SERVER_METHOD
+                if (IsTickTimeLoggingEnabled())
+                    GetTickTimeLogger()?.LogPartialSample(elapsedNanos, (int)NacreCraft.Game.Util.DebugChart.TpsDebugDimensions.TickServerMethod);
                 TickStageProfiler.EndTick();
                 TickRate.EndTickWork(elapsedNanos);
                 _tickCount++;
@@ -333,7 +350,16 @@ public abstract class MinecraftServer
                 {
                     //waitUntilNextTick sleeps until the target time; when lagging the value is negative and it goes straight to the next tick
                     var remaining = _nextTickTimeMillis - _tickClock.ElapsedMilliseconds;
-                    if (remaining > 0) Thread.Sleep((int)remaining);
+                    if (remaining > 0)
+                    {
+                        var idleStart = Stopwatch.GetTimestamp();
+                        Thread.Sleep((int)remaining);
+                        //Time spent waiting for the next tick is the idle dimension, maps to vanilla idleTimeNanos
+                        if (IsTickTimeLoggingEnabled())
+                            GetTickTimeLogger()?.LogPartialSample(
+                                (long)((Stopwatch.GetTimestamp() - idleStart) * NanosecondsPerTimestampTick),
+                                (int)NacreCraft.Game.Util.DebugChart.TpsDebugDimensions.Idle);
+                    }
                 }
             }
         }

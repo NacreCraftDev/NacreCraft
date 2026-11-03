@@ -54,6 +54,14 @@ public sealed class SimplePoiManager : PoiManager
     public bool Has(BlockPos pos)
         => GetType(pos) is not null;
 
+    //GetInChunk every POI record inside a chunk, maps to vanilla PoiManager.getInChunk
+    public IReadOnlyList<PoiRecord> GetInChunk(ChunkPos pos)
+        => GetSection(pos)?.GetAll().ToList() ?? (IReadOnlyList<PoiRecord>)Array.Empty<PoiRecord>();
+
+    //SectionsToVillage distance in sections to the nearest village, maps to vanilla PoiManager.sectionsToVillage
+    //NC does not model village place types yet, so no position is ever part of a village
+    public int SectionsToVillage(BlockPos pos) => int.MaxValue;
+
     //GetChunk, the PoiManager abstract method implementation returning the PoiSection placeholder
     public override object? GetChunk(ChunkPos pos)
         => GetSection(pos);
