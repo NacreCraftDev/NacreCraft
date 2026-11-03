@@ -1,23 +1,51 @@
+using System.Text;
 using NacreCraft.Registry;
 
 namespace NacreCraft.Resources;
 
-//Resource, a single resource, maps to vanilla net.minecraft.server.packs.resources.Resource
-//Wraps a resource identifier and a streaming accessor
-//Carries sourcePackId to mark the originating resource pack
+//Resource a single resource, maps to vanilla net.minecraft.server.packs.resources.Resource
+//Wraps the source pack, the resource identifier, a deferred stream and the deferred sidecar metadata
 public sealed class Resource
 {
-    public Identifier Location { get; }
-    public string SourcePackId { get; }
-    private readonly Func<Stream> _streamFactory;
+    //Source the pack this resource came from, maps to vanilla Resource.source
+    public PackResources Source { get; }
 
-    public Resource(Identifier location, string sourcePackId, Func<Stream> streamFactory)
+    //Location the resource identifier inside its namespace
+    public Identifier Location { get; }
+
+    //SourcePackId the originating pack id, maps to vanilla Resource.sourcePackId
+    public string SourcePackId => Source.PackId;
+
+    private readonly IoSupplier<Stream> _streamSupplier;
+    private readonly IoSupplier<ResourceMetadata> _metadataSupplier;
+    private ResourceMetadata? _cachedMetadata;
+
+    public Resource(PackResources source, Identifier location, IoSupplier<Stream> streamSupplier,
+        IoSupplier<ResourceMetadata> metadataSupplier)
     {
+        Source = source;
         Location = location;
-        SourcePackId = sourcePackId;
-        _streamFactory = streamFactory;
+        _streamSupplier = streamSupplier;
+        _metadataSupplier = metadataSupplier;
+    }
+
+    //Without a metadata supplier the resource has no sidecar and shares the empty metadata
+    public Resource(PackResources source, Identifier location, IoSupplier<Stream> streamSupplier)
+        : this(source, location, streamSupplier, ResourceMetadata.EmptySupplier)
+    {
+        _cachedMetadata = ResourceMetadata.Empty;
     }
 
     //Open opens the resource stream, each call returns a fresh stream
-    public Stream Open() => _streamFactory();
+    public Stream Open() => _streamSupplier.Get() ?? new MemoryStream();
+
+    //OpenAsReader opens the resource as UTF-8 text, maps to vanilla Resource.openAsReader
+    public StreamReader OpenAsReader() => new(Open(), Encoding.UTF8);
+
+    //Metadata reads the sidecar metadata once and caches it, maps to vanilla Resource.metadata
+    public ResourceMetadata Metadata()
+    {
+        _cachedMetadata ??= _metadataSupplier.Get();
+        return _cachedMetadata;
+    }
 }

@@ -32,9 +32,16 @@ public sealed class SpatialLongSet
         private static readonly int XOffset = YBits + ZBits;
         private static readonly long OuterMask = 3L << XOffset | 3L | 3L << ZOffset;
 
-        private readonly Dictionary<long, long> _masks = new();
+        private readonly Dictionary<long, long> _masks;
         private readonly LinkedList<long> _order = new();
-        private readonly Dictionary<long, LinkedListNode<long>> _nodes = new();
+        private readonly Dictionary<long, LinkedListNode<long>> _nodes;
+
+        public InternalMap(int expected)
+        {
+            var capacity = Math.Max(1, expected);
+            _masks = new Dictionary<long, long>(capacity);
+            _nodes = new Dictionary<long, LinkedListNode<long>>(capacity);
+        }
 
         public bool IsEmpty => _masks.Count == 0;
 

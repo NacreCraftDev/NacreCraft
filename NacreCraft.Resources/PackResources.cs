@@ -20,8 +20,18 @@ public abstract class PackResources : IDisposable
     //GetResource gets a namespace resource stream (such as minecraft:textures/block/stone.png)
     public abstract Stream? GetResource(PackType type, Identifier location);
 
-    //ListResources lists all resources matching a path prefix
+    //ListResources lists all resource identifiers matching a path prefix
     public abstract void ListResources(PackType type, string namespaceName, string pathPrefix, ISet<Identifier> output);
+
+    //ListResources lists resources together with a supplier that reopens each stream, maps to vanilla PackResources.listResources
+    //The default reopens through GetResource, so subclasses only need the identifier form
+    public virtual void ListResources(PackType type, string namespaceName, string pathPrefix,
+        Action<Identifier, IoSupplier<Stream>> output)
+    {
+        var ids = new HashSet<Identifier>();
+        ListResources(type, namespaceName, pathPrefix, ids);
+        foreach (var id in ids) output(id, new IoSupplier<Stream>(() => GetResource(type, id)!));
+    }
 
     //GetNamespaces gets all namespaces contained in the resource pack
     public abstract ISet<string> GetNamespaces(PackType type);
@@ -29,7 +39,12 @@ public abstract class PackResources : IDisposable
     //GetMetadataSection reads a section out of the pack root pack.mcmeta, maps to vanilla PackResources.getMetadataSection
     //A pack overrides this to supply built-in metadata when pack.mcmeta cannot, which is what the vanilla pack does
     public virtual T? GetMetadataSection<T>(MetadataSectionType<T> type) where T : class
-        => ResourceMetadataReader.Read(this, type);
+    {
+        using var stream = GetRootResource("pack.mcmeta");
+        if (stream is null) return null;
+        var section = ResourceMetadata.FromJsonStream(stream).GetSection(type);
+        return section.IsPresent ? section.Get() : null;
+    }
 
     public virtual void Dispose() { }
 }

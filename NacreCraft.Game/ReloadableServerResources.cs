@@ -68,7 +68,12 @@ public sealed class ReloadableServerResources
     public void Reload()
     {
         Log.Debug($"ReloadableServerResources.Reload entry listenerCount={_listeners.Count}");
-        SimpleReloadInstance.Run(ResourceManager, _listeners);
+        //Debug builds report per-listener wall time, a release build only keeps the summary line of SimpleReloadInstance
+        var reload = Log.DebugEnabled
+            ? ProfiledReloadInstance.Create(ResourceManager, _listeners)
+            : SimpleReloadInstance.Create(ResourceManager, _listeners);
+        while (!reload.IsDone) reload.Pump();
+        reload.CheckExceptions();
         FinishReload();
     }
 
