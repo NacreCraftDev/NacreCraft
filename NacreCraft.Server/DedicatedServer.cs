@@ -337,7 +337,7 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
     public override bool IsWhiteListEnabled { get; set; }
 
     //GameRules the game rule save, read and written by the /gamerule command
-    public override GameRuleMapData GameRules { get; }
+    public override GameRuleMap GameRules { get; }
 
     //SpawnPos the world spawn, restored from level.dat and defaulting to (0,64,0) for a new world
     //The configuration-phase spawn preload and SetDefaultSpawnPosition both use it
@@ -446,7 +446,7 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
         ClockManager.Init(this);
         //World generation settings and game rules are restored from the save, the seed is fixed for a new world
         _worldGenSettings = _dataStorage.ComputeIfAbsent(WorldGenSettingsData.Type);
-        GameRules = _dataStorage.ComputeIfAbsent(GameRuleMapData.Type);
+        GameRules = _dataStorage.ComputeIfAbsent(GameRuleMap.Type);
         //The scheduled event queue save maps to computeIfAbsent(TimerQueue.TYPE) in the vanilla MinecraftServer constructor
         ScheduledEvents = _dataStorage.ComputeIfAbsent(TimerQueueTypes.Instance);
         //The world border save is attached to the overworld data directory, maps to computeIfAbsent in vanilla ServerLevel.getWorldBorder

@@ -3,16 +3,16 @@ using NacreCraft.Registry;
 
 namespace NacreCraft.Storage;
 
-//GameRuleMapData, game rule save data, maps to vanilla GameRuleMap SavedData
+//GameRuleMap the saved game rule values, maps to vanilla net.minecraft.world.level.gamerules.GameRuleMap
 //Stored in data/minecraft/game_rules.dat, mapping rule names to values; bool is stored as a byte and int as an integer, matching the vanilla dispatchedMap encoding
-//Runtime rule semantics are consumed by the Game layer when the /gamerule command is wired in; this class only handles persistence
-public sealed class GameRuleMapData : SavedData
+//Vanilla keys the map by GameRule instance; NC keys it by name so the save loads even when a rule is added or removed
+public sealed class GameRuleMap : SavedData
 {
     //TypeId, the save identifier, maps to the minecraft:game_rules of the vanilla SavedDataType
     private const string TypeId = "minecraft:game_rules";
 
     //Type, the SavedData factory; an empty tag creates an empty rule set
-    public static readonly SavedDataType<GameRuleMapData> Type = new GameRuleMapType();
+    public static readonly SavedDataType<GameRuleMap> Type = new GameRuleMapType();
 
     private readonly Dictionary<string, object> _rules = new();
 
@@ -34,7 +34,7 @@ public sealed class GameRuleMapData : SavedData
             ? number
             : (int)rule.DefaultValue;
 
-    //SetRule writes a value by rule definition; the value type must match the rule type
+    //SetRule writes a value by rule definition; the value type must match the rule type, maps to vanilla GameRuleMap.set
     public void SetRule(GameRule<object> rule, object value) => Set(rule.Id.ToShortString(), value);
 
     //Set writes a rule value and marks dirty
@@ -47,13 +47,13 @@ public sealed class GameRuleMapData : SavedData
     //Contains, whether the given rule is stored
     public bool Contains(string name) => _rules.ContainsKey(name);
 
-    private sealed class GameRuleMapType : SavedDataType<GameRuleMapData>
+    private sealed class GameRuleMapType : SavedDataType<GameRuleMap>
     {
         public string Id => TypeId;
 
-        public GameRuleMapData Create(CompoundTag tag, RegistryAccess registryAccess)
+        public GameRuleMap Create(CompoundTag tag, RegistryAccess registryAccess)
         {
-            var data = new GameRuleMapData();
+            var data = new GameRuleMap();
             foreach (var (name, value) in tag)
             {
                 if (value is IntTag i) data._rules[name] = i.Value;

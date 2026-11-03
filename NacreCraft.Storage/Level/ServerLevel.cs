@@ -54,10 +54,10 @@ public abstract class ServerLevel : ILevelReader, NacreCraft.Registry.IEntityIns
 
     //GameRulesProvider supplies the game rule data of a level, maps to vanilla Level.getGameRules
     //The rules live on the server and the level does not reference it, so the server installs the provider at startup
-    public static Func<GameRuleMapData>? GameRulesProvider { get; set; }
+    public static Func<GameRuleMap>? GameRulesProvider { get; set; }
 
     //GameRules the game rule data of this level, null until the server installed the provider
-    public GameRuleMapData? GameRules => GameRulesProvider?.Invoke();
+    public GameRuleMap? GameRules => GameRulesProvider?.Invoke();
 
     //ParticlesHook broadcasts one particle to the clients that should see it
     //The server installs it because delivery needs the player list, which the level does not reference

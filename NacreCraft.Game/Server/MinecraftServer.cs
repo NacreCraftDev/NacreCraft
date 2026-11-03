@@ -132,7 +132,7 @@ public abstract class MinecraftServer
     //PlayerData player data storage
     public abstract PlayerDataStorage PlayerData { get; }
     //GameRules game rules
-    public abstract GameRuleMapData GameRules { get; }
+    public abstract GameRuleMap GameRules { get; }
     //OpList operator list
     public abstract OpList OpList { get; }
     //BanList player ban list
