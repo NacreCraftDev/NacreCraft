@@ -433,11 +433,13 @@ public sealed unsafe class VulkanDevice : GpuDeviceBackend
     //CreateCheckpointExtension builds the marker backend matching the enabled extension
     private CheckpointExtension CreateCheckpointExtension()
     {
+        CheckpointExtension extension = NoopCheckpointExtension.Instance;
         if (HasDeviceExtension("VK_AMD_buffer_marker"))
-            return new AmdCheckpointExtension(_vk, _backend.Instance, _device);
-        if (HasDeviceExtension("VK_NV_device_diagnostic_checkpoints"))
-            return new NvidiaCheckpointExtension(_vk, _backend.Instance, _device);
-        return NoopCheckpointExtension.Instance;
+            extension = new AmdCheckpointExtension(_vk, _backend.Instance, _device);
+        else if (HasDeviceExtension("VK_NV_device_diagnostic_checkpoints"))
+            extension = new NvidiaCheckpointExtension(_vk, _backend.Instance, _device);
+        Log.Info($"GPU checkpoints backend={extension.GetType().Name}");
+        return extension;
     }
 
     private void CreateCommandPool(QueueFamilyIndices indices)

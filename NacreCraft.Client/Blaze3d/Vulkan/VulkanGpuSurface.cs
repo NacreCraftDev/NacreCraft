@@ -7,6 +7,7 @@ using Semaphore = Silk.NET.Vulkan.Semaphore;
 using NacreCraft.Client.Blaze3d.Systems;
 using NacreCraft.Client.Blaze3d.Textures;
 using NacreCraft.Client.Blaze3d.Buffers;
+using NacreCraft.Client.Blaze3d.Vulkan.Checkpoints;
 using NacreCraft.Logging;
 
 namespace NacreCraft.Client.Blaze3d.Vulkan;
@@ -107,7 +108,7 @@ public sealed unsafe class VulkanGpuSurface : GpuSurfaceBackend
             throw new SurfaceException("Swapchain is out of date");
         }
         if (result != Result.Success && result != Result.SuboptimalKhr)
-            throw new SurfaceException($"AcquireNextImage failed with {result}");
+            throw new SurfaceException($"AcquireNextImage failed with {result}: {DescribeCheckpoints(result == Result.ErrorDeviceLost)}");
         _suboptimal = result == Result.SuboptimalKhr;
         //Waits on a fence instead of a semaphore so the acquired image is usable right away
         var pFence = stackalloc Fence[1];
@@ -194,8 +195,12 @@ public sealed unsafe class VulkanGpuSurface : GpuSurfaceBackend
             return;
         }
         if (result != Result.Success)
-            throw new SurfaceException($"QueuePresent failed with {result}");
+            throw new SurfaceException($"QueuePresent failed with {result}: {DescribeCheckpoints(result == Result.ErrorDeviceLost)}");
     }
+
+    //DescribeCheckpoints formats the markers recorded in this pass, so a hang names the render pass that stopped
+    private string DescribeCheckpoints(bool isDeviceLost)
+        => CheckpointFormatter.Format(_device.CheckpointExtension.RetrieveCheckpoints(isDeviceLost));
 
     private void CreateSwapchain(int width, int height, PresentModeKHR presentMode)
     {
