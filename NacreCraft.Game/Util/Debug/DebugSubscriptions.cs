@@ -13,8 +13,7 @@ public static class DebugSubscriptions
     public static readonly DebugSubscription<DebugBrainDump> Brains = RegisterWithValue("brains", DebugBrainDump.StreamCodec);
     public static readonly DebugSubscription<DebugBreezeInfo> Breezes = RegisterWithValue("breezes", DebugBreezeInfo.StreamCodec);
     public static readonly DebugSubscription<DebugGoalInfo> GoalSelectors = RegisterWithValue("goal_selectors", DebugGoalInfo.StreamCodec);
-    //Entity paths need the pathfinder Path payload, which NC does not have yet, so this stays a value-less subscription
-    public static readonly DebugSubscription EntityPaths = RegisterSimple("entity_paths");
+    public static readonly DebugSubscription<DebugPathInfo> EntityPaths = RegisterWithValue("entity_paths", DebugPathInfo.StreamCodec);
     public static readonly DebugSubscription<DebugEntityBlockIntersection> EntityBlockIntersections =
         RegisterTemporaryValue("entity_block_intersections", DebugEntityBlockIntersectionCodec.Instance, 100);
     public static readonly DebugSubscription<DebugHiveInfo> BeeHives = RegisterWithValue("bee_hives", DebugHiveInfo.StreamCodec);
