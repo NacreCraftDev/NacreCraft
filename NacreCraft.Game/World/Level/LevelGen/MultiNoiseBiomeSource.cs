@@ -5,7 +5,7 @@ namespace NacreCraft.Game.World.Level.LevelGen;
 //MultiNoiseBiomeSource multi-noise biome source, maps to vanilla net.minecraft.world.level.biome.MultiNoiseBiomeSource
 //Phase E wires in Climate.Sampler + MultiNoiseBiomeSourceParameterList for real derivation
 //GetBiome samples 6-dimensional parameters by coordinate and finds the biome closest in parameter space
-public sealed class MultiNoiseBiomeSource : BiomeSource
+public sealed class MultiNoiseBiomeSource : BiomeSource, BiomeResolver
 {
     //ParameterList registry reference; the parameter list registry is object keyed on the Registry side
     public Holder<object>? ParameterList { get; }
@@ -58,19 +58,25 @@ public sealed class MultiNoiseBiomeSource : BiomeSource
     //MultiNoiseBiomeSource.getNoiseBiome
     //The biome fill writes one holder per quart; going through GetBiome and wrapping the value back cost a reverse
     //registry lookup for every one of those
-    public Holder<Biome> GetBiomeHolder(int x, int y, int z)
+    public Holder<Biome> GetBiomeHolder(int x, int y, int z) => SampleBiome(x, y, z, Sampler);
+
+    //GetNoiseBiome the resolver form taking the caller's sampler, maps to vanilla BiomeResolver.getNoiseBiome
+    public Holder<Biome> GetNoiseBiome(int quartX, int quartY, int quartZ, Climate.Sampler sampler)
+        => SampleBiome(quartX, quartY, quartZ, sampler);
+
+    private Holder<Biome> SampleBiome(int x, int y, int z, Climate.Sampler? sampler)
     {
         var data = Data;
-        if (data is null || Sampler is null)
+        if (data is null || sampler is null)
             return BuiltInRegistries.BIOME.WrapAsHolder(Biome.Plains);
 
         var target = new Climate.ParameterPoint(
-            Sampler.Temperature(x, y, z),
-            Sampler.Humidity(x, y, z),
-            Sampler.Continentalness(x, y, z),
-            Sampler.Erosion(x, y, z),
-            Sampler.Depth(x, y, z),
-            Sampler.Weirdness(x, y, z),
+            sampler.Temperature(x, y, z),
+            sampler.Humidity(x, y, z),
+            sampler.Continentalness(x, y, z),
+            sampler.Erosion(x, y, z),
+            sampler.Depth(x, y, z),
+            sampler.Weirdness(x, y, z),
             0L);
         return data.FindClosest(target);
     }

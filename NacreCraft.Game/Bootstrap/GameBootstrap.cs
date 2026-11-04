@@ -85,7 +85,7 @@ public static class GameBootstrap
             Mark("carvers");
             //World generation type registries must be filled before the noise settings and level stems decode, otherwise
             //their type dispatch finds no codec and every dimension fails to load
-            NacreCraft.Game.World.Level.LevelGen.Dimension.BiomeSourceTypes.RegisterAll();
+            NacreCraft.Game.World.Level.LevelGen.Dimension.BiomeSources.Bootstrap();
             NacreCraft.Game.World.Level.LevelGen.Dimension.ChunkGeneratorTypes.RegisterAll();
             NacreCraft.Game.World.Level.LevelGen.SurfaceRulesCodecs.RegisterAll();
             Mark("worldgen-types");
