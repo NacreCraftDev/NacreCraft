@@ -19,7 +19,7 @@ public sealed class ServerClockManager : SavedData, ClockManager
     public static readonly SavedDataType<ServerClockManager> Type = new ClockManagerType();
 
     private readonly Dictionary<Holder<WorldClock>, ClockInstance> _clocks = new();
-    private readonly Dictionary<Holder<WorldClock>, ClockState> _packedStates = new();
+    private PackedClockStates _packedStates = PackedClockStates.Empty;
     private MinecraftServer _server = null!;
 
     public override string Id => TypeId;
@@ -32,14 +32,16 @@ public sealed class ServerClockManager : SavedData, ClockManager
         public ServerClockManager Create(CompoundTag tag, RegistryAccess registryAccess)
         {
             var manager = new ServerClockManager();
+            var states = new Dictionary<Holder<WorldClock>, ClockState>();
             foreach (var (name, value) in tag)
             {
                 if (value is not CompoundTag state)
                     continue;
                 var holder = BuiltInRegistries.WORLD_CLOCK.Get(Identifier.Parse(name));
                 if (holder is not null)
-                    manager._packedStates[holder] = ClockState.Load(state);
+                    states[holder] = ClockState.Load(state);
             }
+            manager._packedStates = new PackedClockStates(states);
             return manager;
         }
     }
@@ -52,12 +54,12 @@ public sealed class ServerClockManager : SavedData, ClockManager
             _clocks[holder] = new ClockInstance();
         foreach (var holder in BuiltInRegistries.TIMELINE.ListElements())
             holder.Value.RegisterTimeMarkers(RegisterTimeMarker);
-        foreach (var (holder, state) in _packedStates)
+        foreach (var (holder, state) in _packedStates.Clocks)
         {
             if (_clocks.TryGetValue(holder, out var instance))
                 instance.LoadFrom(state);
         }
-        _packedStates.Clear();
+        _packedStates = PackedClockStates.Empty;
     }
 
     private void RegisterTimeMarker(ResourceKey<ClockTimeMarker> timeMarkerId, ClockTimeMarker timeMarker)
@@ -183,6 +185,6 @@ public sealed class ServerClockManager : SavedData, ClockManager
 
         //PackNetworkState when paused the network rate is zeroed so the client stops advancing
         public ClientboundSetTimePacket.ClockUpdate PackNetworkState(int clockId)
-            => new(clockId, TotalTicks, PartialTick, Paused ? 0f : Rate);
+            => new(clockId, new ClockNetworkState(TotalTicks, PartialTick, Paused ? 0f : Rate));
     }
 }
