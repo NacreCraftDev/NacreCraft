@@ -123,6 +123,9 @@ public static class GameBootstrap
             //Particle types are registered in vanilla declaration order; commands and particle packets both encode by registry id
             NacreCraft.Game.World.Particle.ParticleTypes.Bootstrap();
             Mark("particles");
+            //Attribute types register in vanilla declaration order; environment attribute maps resolve modifiers through them
+            NacreCraft.Game.World.Attribute.AttributeTypes.RegisterAll();
+            Mark("attribute-types");
             //Mob effects are registered in vanilla declaration order; commands and effect packets both encode by registry id
             NacreCraft.Game.World.Effect.MobEffects.Bootstrap();
             Mark("mob-effects");

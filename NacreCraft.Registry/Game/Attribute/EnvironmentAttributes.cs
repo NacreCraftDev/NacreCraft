@@ -17,6 +17,9 @@ public static class EnvironmentAttributes
     private static readonly AttributeType<int> RgbColorType =
         AttributeType<int>.OfInterpolated(HexColorCodec.StringRgb, AttributeModifier.RgbColorLibrary, LerpFunction<int>.OfColor());
 
+    private static readonly AttributeType<int> ArgbColorType =
+        AttributeType<int>.OfInterpolated(HexColorCodec.StringArgb, AttributeModifier.ArgbColorLibrary, LerpFunction<int>.OfColor());
+
     private static readonly AttributeType<IReadOnlyList<AmbientParticle>> AmbientParticlesType =
         AttributeType<IReadOnlyList<AmbientParticle>>.OfNotInterpolated(AmbientParticle.Codec.ListOf());
 
@@ -37,6 +40,21 @@ public static class EnvironmentAttributes
 
     public static readonly EnvironmentAttribute<int> SkyColor = EnvironmentAttribute<int>.CreateBuilder(RgbColorType)
         .DefaultValue(0).SpatiallyInterpolated().Syncable().Build();
+
+    public static readonly EnvironmentAttribute<int> SunriseSunsetColor = EnvironmentAttribute<int>.CreateBuilder(ArgbColorType)
+        .DefaultValue(0).SpatiallyInterpolated().Syncable().Build();
+
+    public static readonly EnvironmentAttribute<int> CloudColor = EnvironmentAttribute<int>.CreateBuilder(ArgbColorType)
+        .DefaultValue(0).SpatiallyInterpolated().Syncable().Build();
+
+    public static readonly EnvironmentAttribute<float> StarBrightness = EnvironmentAttribute<float>.CreateBuilder(FloatType)
+        .DefaultValue(0.0f).ValueRange(AttributeRange<float>.UnitFloat).SpatiallyInterpolated().Syncable().Build();
+
+    public static readonly EnvironmentAttribute<int> SkyLightColor = EnvironmentAttribute<int>.CreateBuilder(RgbColorType)
+        .DefaultValue(-1).SpatiallyInterpolated().Syncable().Build();
+
+    public static readonly EnvironmentAttribute<float> SkyLightFactor = EnvironmentAttribute<float>.CreateBuilder(FloatType)
+        .DefaultValue(1.0f).ValueRange(AttributeRange<float>.UnitFloat).SpatiallyInterpolated().Syncable().Build();
 
     public static readonly EnvironmentAttribute<IReadOnlyList<AmbientParticle>> AmbientParticles =
         EnvironmentAttribute<IReadOnlyList<AmbientParticle>>.CreateBuilder(AmbientParticlesType)
@@ -62,6 +80,9 @@ public static class EnvironmentAttributes
     public static readonly EnvironmentAttribute<bool> CanPillagerPatrolSpawn = EnvironmentAttribute<bool>.CreateBuilder(BooleanType)
         .DefaultValue(true).Build();
 
+    public static readonly EnvironmentAttribute<bool> BeesStayInHive = EnvironmentAttribute<bool>.CreateBuilder(BooleanType)
+        .DefaultValue(false).Build();
+
     //SkyLightLevel does not participate in positional sampling, only dimension-level sync
     public static readonly EnvironmentAttribute<float> SkyLightLevel = EnvironmentAttribute<float>.CreateBuilder(FloatType)
         .DefaultValue(15.0f).ValueRange(AttributeRange<float>.OfFloat(0.0f, 15.0f)).NotPositional().Syncable().Build();
@@ -82,12 +103,18 @@ public static class EnvironmentAttributes
         Register(WaterFogColor, "visual/water_fog_color");
         Register(WaterFogEndDistance, "visual/water_fog_end_distance");
         Register(SkyColor, "visual/sky_color");
+        Register(SunriseSunsetColor, "visual/sunrise_sunset_color");
+        Register(CloudColor, "visual/cloud_color");
+        Register(StarBrightness, "visual/star_brightness");
+        Register(SkyLightColor, "visual/sky_light_color");
+        Register(SkyLightFactor, "visual/sky_light_factor");
         Register(AmbientParticles, "visual/ambient_particles");
         Register(BackgroundMusic, "audio/background_music");
         Register(MusicVolume, "audio/music_volume");
         Register(AmbientSounds, "audio/ambient_sounds");
         Register(IncreasedFireBurnout, "gameplay/increased_fire_burnout");
         Register(SnowGolemMelts, "gameplay/snow_golem_melts");
+        Register(BeesStayInHive, "gameplay/bees_stay_in_hive");
         Register(CanPillagerPatrolSpawn, "gameplay/can_pillager_patrol_spawn");
         Register(SkyLightLevel, "gameplay/sky_light_level");
     }

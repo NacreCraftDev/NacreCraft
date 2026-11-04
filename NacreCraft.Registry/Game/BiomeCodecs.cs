@@ -64,7 +64,7 @@ internal sealed class FloatRangeCodec : ScalarCodec<float>
 }
 
 //StringEnumCodec encodes/decodes an enum by serialized name, maps to vanilla StringRepresentable.fromEnum
-internal sealed class StringEnumCodec<T> : ScalarCodec<T> where T : struct, Enum
+public sealed class StringEnumCodec<T> : ScalarCodec<T> where T : struct, Enum
 {
     private readonly Dictionary<string, T> _byName;
     private readonly Dictionary<T, string> _names;

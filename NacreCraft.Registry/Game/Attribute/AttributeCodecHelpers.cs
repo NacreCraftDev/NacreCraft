@@ -58,7 +58,7 @@ internal sealed class CompactListCodec<T> : ScalarCodec<IReadOnlyList<T>>
 
 //HexColorCodec hex color string, maps to vanilla ExtraCodecs.hexColor
 //6 digits output the rgb form and 8 digits the argb form
-internal sealed class HexColorCodec : ScalarCodec<int>
+public sealed class HexColorCodec : ScalarCodec<int>
 {
     //StringRgb maps to vanilla ExtraCodecs.STRING_RGB_COLOR
     public static readonly Codec<int> StringRgb = Codecs.WithAlternative(new HexColorCodec(6), Codecs.Int);

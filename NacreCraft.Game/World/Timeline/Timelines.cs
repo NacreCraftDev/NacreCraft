@@ -1,5 +1,6 @@
 using NacreCraft.Game.World.Clock;
 using NacreCraft.Registry;
+using NacreCraft.Registry.Environment;
 
 namespace NacreCraft.Game.World.Timeline;
 
@@ -16,6 +17,9 @@ public static class Timelines
 
     //MoonPhaseCount moon phase period, 8 moon phases, maps to vanilla MoonPhase.COUNT
     private const int MoonPhaseCount = 8;
+
+    //NightSkyLightColor sky light color at night, maps to vanilla Timelines.NIGHT_SKY_LIGHT_COLOR
+    public static readonly int NightSkyLightColor = Argb.ColorFromFloat(1.0f, 0.48f, 0.48f, 1.0f);
 
     public static void Bootstrap()
     {

@@ -43,7 +43,7 @@ public static class Registries
     public static readonly ResourceKey<Registry<Codec<EntitySubPredicate>>> ENTITY_SUB_PREDICATE_TYPE = CreateRegistryKey<Codec<EntitySubPredicate>>("entity_sub_predicate_type");
     public static readonly ResourceKey<Registry<EntityType<object>>> ENTITY_TYPE = CreateRegistryKey<EntityType<object>>("entity_type");
     public static readonly ResourceKey<Registry<IEnvironmentAttribute>> ENVIRONMENT_ATTRIBUTE = CreateRegistryKey<IEnvironmentAttribute>("environment_attribute");
-    public static readonly ResourceKey<Registry<AttributeType<object>>> ATTRIBUTE_TYPE = CreateRegistryKey<AttributeType<object>>("attribute_type");
+    public static readonly ResourceKey<Registry<IAttributeType>> ATTRIBUTE_TYPE = CreateRegistryKey<IAttributeType>("attribute_type");
     public static readonly ResourceKey<Registry<FeatureSizeType<object>>> FEATURE_SIZE_TYPE = CreateRegistryKey<FeatureSizeType<object>>("worldgen/feature_size_type");
     public static readonly ResourceKey<Registry<Feature>> FEATURE = CreateRegistryKey<Feature>("worldgen/feature");
     public static readonly ResourceKey<Registry<MapCodec<FloatProvider>>> FLOAT_PROVIDER_TYPE = CreateRegistryKey<MapCodec<FloatProvider>>("float_provider_type");

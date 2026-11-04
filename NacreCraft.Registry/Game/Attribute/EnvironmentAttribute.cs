@@ -11,6 +11,24 @@ public interface IEnvironmentAttribute
 
     bool IsSpatiallyInterpolated { get; }
 
+    //SpatialLerpBoxed the type's spatial lerp in erased object form, for callers that only know the weak-typed attribute
+    LerpFunction<object> SpatialLerpBoxed { get; }
+
+    //StateChangeLerpBoxed the type's state-change lerp in erased object form
+    LerpFunction<object> StateChangeLerpBoxed { get; }
+
+    //PartialTickLerpBoxed the type's partial-tick lerp in erased object form
+    LerpFunction<object> PartialTickLerpBoxed { get; }
+
+    //DefaultValueObject the default value in erased object form
+    object DefaultValueObject { get; }
+
+    //SanitizeValueObject clamps an erased value through the attribute's value range
+    object SanitizeValueObject(object value);
+
+    //CreateTimelineLayer bakes this attribute's timeline track, null when the timeline carries no track for it
+    object? CreateTimelineLayer(Timeline timeline, ClockManager clockManager);
+
     //DecodeEntry parses this attribute's entry in JSON
     DataResult<EnvironmentAttributeMap.Entry> DecodeEntry<U>(DynamicOps<U> ops, U input);
 
@@ -35,6 +53,19 @@ public sealed class EnvironmentAttribute<Value> : IEnvironmentAttribute
     public bool IsPositional { get; }
 
     public bool IsSpatiallyInterpolated { get; }
+
+    public LerpFunction<object> SpatialLerpBoxed => Type.SpatialLerpBoxed;
+
+    public LerpFunction<object> StateChangeLerpBoxed => Type.StateChangeLerpBoxed;
+
+    public LerpFunction<object> PartialTickLerpBoxed => Type.PartialTickLerpBoxed;
+
+    public object DefaultValueObject => DefaultValue!;
+
+    public object SanitizeValueObject(object value) => SanitizeValue((Value)value)!;
+
+    public object? CreateTimelineLayer(Timeline timeline, ClockManager clockManager)
+        => timeline.HasTrack(this) ? timeline.CreateTrackSampler(this, clockManager) : null;
 
     private EnvironmentAttribute(AttributeType<Value> type, Value defaultValue, AttributeRange<Value> valueRange,
         bool isSyncable, bool isPositional, bool isSpatiallyInterpolated)

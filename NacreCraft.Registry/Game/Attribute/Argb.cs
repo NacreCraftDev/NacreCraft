@@ -3,7 +3,7 @@ using NacreCraft.Util;
 namespace NacreCraft.Registry.Environment;
 
 //Argb color channel bit operations, porting the parts of vanilla ARGB used by environment attributes
-internal static class Argb
+public static class Argb
 {
     public static int Alpha(int color) => (int)((uint)color >> 24);
 
@@ -15,6 +15,18 @@ internal static class Argb
 
     public static int Color(int alpha, int red, int green, int blue)
         => ((alpha & 255) << 24) | ((red & 255) << 16) | ((green & 255) << 8) | (blue & 255);
+
+    //Color with an explicit alpha channel over an rgb value, maps to vanilla ARGB.color(int, int)
+    public static int Color(int alpha, int rgb) => (alpha << 24) | (rgb & 0xFFFFFF);
+
+    //Color with a normalized alpha, maps to vanilla ARGB.color(float, int)
+    public static int Color(float alpha, int rgb) => (As8BitChannel(alpha) << 24) | (rgb & 0xFFFFFF);
+
+    //ColorFromFloat builds a color from four normalized channels, maps to vanilla ARGB.colorFromFloat
+    public static int ColorFromFloat(float alpha, float red, float green, float blue)
+        => Color(As8BitChannel(alpha), As8BitChannel(red), As8BitChannel(green), As8BitChannel(blue));
+
+    private static int As8BitChannel(float value) => Mth.Floor(value * 255.0f);
 
     //Opaque fills the alpha channel to full
     public static int Opaque(int color) => color | unchecked((int)0xFF000000);

@@ -64,6 +64,9 @@ public sealed class Timeline
     //Attributes the attributes this timeline has a track for, maps to vanilla Timeline.attributes
     public IReadOnlyCollection<object> Attributes => _tracks.Keys;
 
+    //HasTrack whether the timeline carries a track for the attribute
+    public bool HasTrack(IEnvironmentAttribute attribute) => _tracks.ContainsKey(attribute);
+
     //CreateTrackSampler bakes the track bound to one attribute, maps to vanilla Timeline.createTrackSampler
     public AttributeTrackSampler<Value> CreateTrackSampler<Value>(EnvironmentAttribute<Value> attribute, ClockManager clockManager)
     {

@@ -142,7 +142,7 @@ public static class BuiltInRegistries
     public static readonly Registry<MapCodec<Permission>> PERMISSION_TYPE = RegisterSimple<MapCodec<Permission>>(Registries.PERMISSION_TYPE);
     public static readonly Registry<MapCodec<PermissionCheck>> PERMISSION_CHECK_TYPE = RegisterSimple<MapCodec<PermissionCheck>>(Registries.PERMISSION_CHECK_TYPE);
     public static readonly Registry<IEnvironmentAttribute> ENVIRONMENT_ATTRIBUTE = RegisterSimple<IEnvironmentAttribute>(Registries.ENVIRONMENT_ATTRIBUTE);
-    public static readonly Registry<AttributeType<object>> ATTRIBUTE_TYPE = RegisterSimple<AttributeType<object>>(Registries.ATTRIBUTE_TYPE);
+    public static readonly Registry<IAttributeType> ATTRIBUTE_TYPE = RegisterSimple<IAttributeType>(Registries.ATTRIBUTE_TYPE);
     public static readonly Registry<MapCodec<SlotSource>> SLOT_SOURCE_TYPE = RegisterSimple<MapCodec<SlotSource>>(Registries.SLOT_SOURCE_TYPE);
     public static readonly Registry<Consumer<GameTestHelper>> TEST_FUNCTION = RegisterSimple<Consumer<GameTestHelper>>(Registries.TEST_FUNCTION);
     //WORLD_CLOCK/TIMELINE registration order must match the lexicographic order of the SynchronizedRegistryData sync list

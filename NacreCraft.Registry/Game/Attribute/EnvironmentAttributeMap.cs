@@ -30,12 +30,20 @@ public sealed class EnvironmentAttributeMap
     public Entry<Value>? Get<Value>(EnvironmentAttribute<Value> attribute)
         => _entries.TryGetValue(attribute, out var entry) ? entry as Entry<Value> : null;
 
+    //GetEntry the weak-typed entry, null when the attribute is absent
+    public Entry? GetEntry(IEnvironmentAttribute attribute)
+        => _entries.TryGetValue(attribute, out var entry) ? entry : null;
+
     //ApplyModifier returns the base value when the attribute is absent
     public Value ApplyModifier<Value>(EnvironmentAttribute<Value> attribute, Value baseValue)
     {
         var entry = Get(attribute);
         return entry is null ? baseValue : entry.ApplyModifier(baseValue);
     }
+
+    //ApplyModifierObject untyped variant, used when only the weak-typed attribute is known
+    internal object ApplyModifierObject(IEnvironmentAttribute attribute, object baseValue)
+        => _entries.TryGetValue(attribute, out var entry) ? entry.ApplyModifierObject(baseValue) : baseValue;
 
     public bool Contains(IEnvironmentAttribute attribute) => _entries.ContainsKey(attribute);
 
@@ -61,7 +69,7 @@ public sealed class EnvironmentAttributeMap
     {
         public abstract object Argument { get; }
 
-        internal abstract object ApplyModifierObject(object subject);
+        public abstract object ApplyModifierObject(object subject);
     }
 
     //Entry<Value> a single attribute value; the argument type is erased to object
@@ -79,7 +87,7 @@ public sealed class EnvironmentAttributeMap
 
         public Value ApplyModifier(Value subject) => Modifier.Apply(subject, Argument);
 
-        internal override object ApplyModifierObject(object subject) => ApplyModifier((Value)subject)!;
+        public override object ApplyModifierObject(object subject) => ApplyModifier((Value)subject)!;
     }
 
     //Builder attribute map builder
