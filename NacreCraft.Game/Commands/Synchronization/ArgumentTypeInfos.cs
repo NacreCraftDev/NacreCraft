@@ -415,7 +415,7 @@ public static class ArgumentTypeInfos
         Register("item_slot", new SingletonArgumentInfo(typeof(SlotArgument), SlotArgument.Slot));    //34
         Register("item_slots", new PlaceholderArgumentInfo());                              //35
         Register("resource_location", new SingletonArgumentInfo(typeof(IdentifierArgument), IdentifierArgument.Id)); //36
-        Register("function", new PlaceholderArgumentInfo());                                //37
+        Register("function", new SingletonArgumentInfo(typeof(FunctionArgument), FunctionArgument.Functions)); //37
         Register("entity_anchor", new SingletonArgumentInfo(typeof(EntityAnchorArgument), EntityAnchorArgument.EntityAnchor)); //38
         Register("int_range", new PlaceholderArgumentInfo());                               //39
         Register("float_range", new PlaceholderArgumentInfo());                             //40
