@@ -46,7 +46,7 @@ public sealed class TranslatableContents : ComponentContents
         {
             _decomposedParts = DecomposeTemplate(format);
         }
-        catch (FormatException)
+        catch (TranslatableFormatException)
         {
             _decomposedParts = new List<FormattedText> { FormattedText.Of(format) };
         }
@@ -66,7 +66,7 @@ public sealed class TranslatableContents : ComponentContents
             if (start > current)
             {
                 var prefix = template[current..start];
-                if (prefix.Contains('%')) throw new FormatException();
+                if (prefix.Contains('%')) throw new TranslatableFormatException(this, "Unsupported format");
                 parts.Add(FormattedText.Of(prefix));
             }
             var formatType = match.Groups[2].Value;
@@ -83,14 +83,14 @@ public sealed class TranslatableContents : ComponentContents
             }
             else
             {
-                throw new FormatException();
+                throw new TranslatableFormatException(this, "Unsupported format: '" + match.Value + "'");
             }
             current = end;
         }
         if (current < template.Length)
         {
             var tail = template[current..];
-            if (tail.Contains('%')) throw new FormatException();
+            if (tail.Contains('%')) throw new TranslatableFormatException(this, "Unsupported format");
             parts.Add(FormattedText.Of(tail));
         }
         return parts;
@@ -100,7 +100,7 @@ public sealed class TranslatableContents : ComponentContents
     //Component arguments keep their component identity so style and nested translations carry through; the rest are converted to strings
     private FormattedText GetArgument(int index)
     {
-        if (index < 0 || index >= Args.Length) throw new FormatException();
+        if (index < 0 || index >= Args.Length) throw new TranslatableFormatException(this, index);
         var arg = Args[index];
         if (arg is FormattedText text) return text;
         return FormattedText.Of(arg?.ToString() ?? "null");

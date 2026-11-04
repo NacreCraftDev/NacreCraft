@@ -29,6 +29,8 @@ public abstract class LavaFluid : FlowingFluid
 
     public override float ExplosionResistance => 100f;
 
+    public override FogType GetFogType() => FogType.Lava;
+
     public override bool IsRandomlyTicking => true;
 
     //RandomTick vanilla ignites nearby flammables here, relying on the fire block and flammability checks; both subsystems are missing so it is left empty

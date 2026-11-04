@@ -59,4 +59,7 @@ public abstract class Fluid
 
     //ExplosionResistance the fluid's own explosion resistance, maps to vanilla getExplosionResistance
     public abstract float ExplosionResistance { get; }
+
+    //GetFogType the fog rendered while inside this fluid, maps to vanilla getFogType
+    public virtual FogType GetFogType() => FogType.Atmospheric;
 }

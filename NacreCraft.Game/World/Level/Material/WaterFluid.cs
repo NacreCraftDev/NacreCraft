@@ -26,6 +26,8 @@ public abstract class WaterFluid : FlowingFluid
 
     public override float ExplosionResistance => 100f;
 
+    public override FogType GetFogType() => FogType.Water;
+
     //GetHeight counts as full when same-family fluid presses from above, maps to vanilla getHeight
     public override float GetHeight(FluidState state, ServerLevel level, BlockPos pos)
         => HasSameAbove(state, level, pos) ? 1f : state.OwnHeight;
