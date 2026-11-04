@@ -40,6 +40,13 @@ public static partial class Blocks
         //RailShapeProperty shape property instance used by this block, six straight and ten curved
         protected abstract EnumProperty<RailShape> RailShapeProperty { get; }
 
+        //IsRail whether the state belongs to a rail block, maps to vanilla BaseRailBlock.isRail
+        public static bool IsRail(BlockState state) => state.Owner is BaseRail;
+
+        //GetRailShape the shape carried by the state, maps to reading the shape property of vanilla BaseRailBlock
+        public static RailShape GetRailShape(BlockState state)
+            => state.Owner is BaseRail rail ? state.GetValue(rail.RailShapeProperty) : RailShape.north_south;
+
         public override VoxelShape GetShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context)
             => state.GetValue(RailShapeProperty).IsSlope() ? SlopeShape : FlatShape;
 

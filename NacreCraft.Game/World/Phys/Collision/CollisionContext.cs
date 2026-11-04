@@ -38,7 +38,8 @@ public abstract class CollisionContext
     //EmptyWithFluidCollisions empty context without an entity that also collides with fluids
     public static CollisionContext EmptyWithFluidCollisions => EntityCollisionContext.EmptyWithFluidCollisions;
 
-    //Of builds a context from an entity; vanilla switches to MinecartCollisionContext for experimental minecarts, but the minecart system is not wired up so the normal context is always used
+    //Of builds a context from an entity; vanilla switches to MinecartCollisionContext for minecarts
+    //The minecart entity type is not ported yet, so the normal context is always used and MinecartCollisionContext stays unused until it lands
     public static CollisionContext Of(NacreCraft.Registry.Entity entity)
         => new EntityCollisionContext(entity, false, false);
 
