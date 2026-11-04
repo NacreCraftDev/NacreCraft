@@ -475,7 +475,7 @@ public sealed class CommandManager
 
     //RegisterData registers the vanilla data command tree, reading/writing NBT of block entities/entities/command storage
     private void RegisterData()
-        => DataCommand.Register(_dispatcher);
+        => DataCommands.Register(_dispatcher);
 
     //Give uses the core give entry, maps to the vanilla give command's inventory.add plus drop combination
     //What fits goes into the inventory; what does not is dropped at the player's feet by the core; the actual placed count is returned by the core

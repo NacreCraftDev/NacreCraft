@@ -12,10 +12,10 @@ using NacreCraft.Storage;
 
 namespace NacreCraft.Game.Commands;
 
-//DataCommand /data command, maps to vanilla net.minecraft.server.commands.data.DataCommands
+//DataCommands /data command, maps to vanilla net.minecraft.server.commands.data.DataCommands
 //Four action groups get/merge/remove/modify times three target kinds block/entity/storage gives 12 subtrees
 //modify has three value sources: from (another target), string (take as string and slice), value (give a tag directly)
-public static class DataCommand
+public static class DataCommands
 {
     //ErrorMergeUnchanged writing leaves it the same, maps to vanilla ERROR_MERGE_UNCHANGED
     private static readonly SimpleCommandExceptionType ErrorMergeUnchanged =
