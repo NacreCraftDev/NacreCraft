@@ -3,8 +3,7 @@ using NacreCraft.Logging;
 namespace NacreCraft.Resources;
 
 //FolderRepositorySource discovers packs in a directory, maps to vanilla net.minecraft.server.packs.repository.FolderRepositorySource
-//Only the first level is scanned and a directory needs a pack.mcmeta to count as a pack
-//Vanilla also accepts a .zip entry here; NC takes directories only until zip packs are wired up
+//Only the first level is scanned and a directory needs a pack.mcmeta to count as a pack; the actual classification is PackDetector's job
 public sealed class FolderRepositorySource : IRepositorySource
 {
     //Discovered packs are optional and insert at the top, maps to vanilla DISCOVERED_PACK_SELECTION_CONFIG
@@ -13,6 +12,7 @@ public sealed class FolderRepositorySource : IRepositorySource
     private readonly string _folder;
     private readonly PackType _packType;
     private readonly PackSource _packSource;
+    private readonly FolderPackDetector _detector = new();
 
     public FolderRepositorySource(string folder, PackType packType, PackSource packSource)
     {
@@ -26,14 +26,15 @@ public sealed class FolderRepositorySource : IRepositorySource
         try
         {
             Directory.CreateDirectory(_folder);
-            foreach (var content in Directory.EnumerateDirectories(_folder))
+            foreach (var content in Directory.EnumerateFileSystemEntries(_folder))
             {
-                if (!File.Exists(Path.Combine(content, "pack.mcmeta")))
+                var resources = _detector.DetectPackResources(content);
+                if (resources is null)
                 {
                     Log.Info($"Found non-pack entry '{content}', ignoring");
                     continue;
                 }
-                Accept(content, consumer);
+                Accept(content, resources, consumer);
             }
         }
         catch (Exception ex)
@@ -42,12 +43,11 @@ public sealed class FolderRepositorySource : IRepositorySource
         }
     }
 
-    //Accept builds the entry for one pack directory, skipped when its metadata cannot be read
-    private void Accept(string content, Action<Pack> consumer)
+    //Accept builds the entry for one detected pack, skipped when its metadata cannot be read
+    private void Accept(string content, PackResources resources, Action<Pack> consumer)
     {
         var name = Path.GetFileName(content);
         //The file/ prefix keeps a user pack from ever colliding with a built-in id, matching vanilla
-        var resources = new FolderPackResources("file/" + name, content);
         var pack = Pack.ReadMetaAndCreate("file/" + name, name, false, resources, _packSource, _packType, DiscoveredSelectionConfig);
         if (pack is null)
         {
@@ -55,5 +55,15 @@ public sealed class FolderRepositorySource : IRepositorySource
             return;
         }
         consumer(pack);
+    }
+
+    //FolderPackDetector maps a folder entry onto pack resources, maps to vanilla FolderPackDetector
+    //Zip packs are not wired up yet, so an archive is reported as a non-pack entry
+    private sealed class FolderPackDetector : PackDetector<PackResources>
+    {
+        protected override PackResources? CreateDirectoryPack(string content)
+            => new FolderPackResources("file/" + Path.GetFileName(content), content);
+
+        protected override PackResources? CreateZipPack(string content) => null;
     }
 }
