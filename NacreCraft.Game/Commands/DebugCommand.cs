@@ -318,14 +318,14 @@ public static class DebugCommand
 
         //The nbt belongs to the block entity at that position; block entity type registration is not wired up here, so no entity can be created for a new block position
         //When an existing entity is hit it is sent as a vanilla block entity data packet; otherwise only a log is written
-        if (input.Nbt is null) return 1;
+        if (input.Tag is null) return 1;
         var entity = source.Server.BlockEntities.Get(pos);
         if (entity is null)
         {
             Log.Warning($"[debug] place block pos={FormatPos(pos)} has no block entity, nbt not written");
             return 1;
         }
-        entity.LoadAdditional(input.Nbt);
+        entity.LoadAdditional(input.Tag);
         source.Server.PlayerList.BroadcastAll(entity.GetUpdatePacket());
         return 1;
     }

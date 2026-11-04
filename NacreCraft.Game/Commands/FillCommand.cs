@@ -120,9 +120,9 @@ public static class FillCommand
                 continue;
             }
             //Block entity data is written only when not strict; strict means no side effects at all
-            if (!strict && input.Nbt is not null && blockEntities.Get(pos) is { } blockEntity)
+            if (!strict && input.Tag is not null && blockEntities.Get(pos) is { } blockEntity)
             {
-                blockEntity.LoadAdditional(input.Nbt);
+                blockEntity.LoadAdditional(input.Tag);
                 players.BroadcastAll(blockEntity.GetUpdatePacket());
             }
             count++;
