@@ -43,6 +43,16 @@ public sealed class PotionContents : IEquatable<PotionContents>
     public IReadOnlyList<MobEffectInstance> CustomEffects { get; }
     public Optional<string> CustomName { get; }
 
+    //CreateItemStack builds a stack of the given item carrying the potion, maps to vanilla createItemStack
+    public static ItemStack CreateItemStack(Item item, Holder<NacreCraft.Registry.Potion> potion)
+    {
+        var stack = new ItemStack(item.BuiltInRegistryHolder, 1, DataComponentPatch.Empty);
+        stack.Set(DataComponents.POTION_CONTENTS, new PotionContents(
+            Optional<Holder<NacreCraft.Registry.Potion>>.Of(potion), Optional<int>.Empty(),
+            Array.Empty<MobEffectInstance>(), Optional<string>.Empty()));
+        return stack;
+    }
+
     public bool Equals(PotionContents? other)
         => other is not null
            && Potion.IsPresent == other.Potion.IsPresent

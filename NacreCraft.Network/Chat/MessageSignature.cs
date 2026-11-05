@@ -30,6 +30,36 @@ public sealed class MessageSignature
     public static string Describe(MessageSignature? signature)
         => signature is null ? "<no signature>" : Convert.ToBase64String(signature.Bytes);
 
+    //Codec base64 string form, maps to vanilla MessageSignature.CODEC
+    public static readonly NacreCraft.Codec.Codec<MessageSignature> CODEC =
+        NacreCraft.Codec.Codecs.String.ComapFlatMap(
+            text =>
+            {
+                try
+                {
+                    return NacreCraft.Codec.DataResult<MessageSignature>.Success(new MessageSignature(Convert.FromBase64String(text)));
+                }
+                catch (FormatException e)
+                {
+                    return NacreCraft.Codec.DataResult<MessageSignature>.Error(() => e.Message);
+                }
+            },
+            signature => Convert.ToBase64String(signature.Bytes));
+
+    //Checksum the signature's hash code, used by the last-seen checksum, maps to vanilla checksum
+    public int Checksum() => Bytes.Aggregate(0, (current, b) => (31 * current) + b);
+
+    //Verify checks the signature over the updater's bytes, maps to vanilla verify
+    public bool Verify(NacreCraft.Util.SignatureValidator validator, NacreCraft.Util.SignatureUpdater updater)
+        => validator.Validate(updater, Bytes);
+
+    //Pack packs the signature against a cache, maps to vanilla pack
+    public Packed Pack(MessageSignatureCache cache)
+    {
+        var id = cache.Pack(this);
+        return id == -1 ? new Packed(this) : new Packed(id);
+    }
+
     public override bool Equals(object? obj)
         => obj is MessageSignature that && Bytes.SequenceEqual(that.Bytes);
 
@@ -77,5 +107,9 @@ public sealed class MessageSignature
             if (packed.FullSignature is not null)
                 MessageSignature.Write(output, packed.FullSignature);
         }
+
+        //Unpack resolves the packed form through the cache, maps to vanilla unpack
+        public MessageSignature? Unpack(MessageSignatureCache cache)
+            => FullSignature ?? cache.Unpack(Id);
     }
 }
