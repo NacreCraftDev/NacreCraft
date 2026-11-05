@@ -22,7 +22,7 @@ public static class EntitySubPredicates
         Register("movement_affected_by", MovementAffectedByPredicate.Codec);
         Register("equipment", EntityEquipmentPredicate.Codec);
         Register("effects", EntityEffectsPredicate.Codec);
-        Register("vehicle", EntityVehiclePredicate.Codec);
+        Register("vehicle", VehiclePredicate.Codec);
         Register("type_specific/player", PlayerPredicate.Codec);
     }
 

@@ -4,7 +4,7 @@ namespace NacreCraft.Storage.Paletted;
 
 //PalettedContainer, maps to vanilla net.minecraft.world.level.chunk.PalettedContainer
 //Uses a palette and bit storage to pack repetitive data such as block states and biomes
-public sealed class PalettedContainer<T> : PaletteResize<T>
+public sealed class PalettedContainer<T> : PaletteResize<T>, PalettedContainerRO<T>
 {
     private volatile Data _data;
     private readonly Strategy<T> _strategy;

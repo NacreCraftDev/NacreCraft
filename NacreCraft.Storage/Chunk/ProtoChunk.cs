@@ -97,7 +97,7 @@ public class ProtoChunk : ChunkAccess
 //LevelChunk, full chunk, maps to vanilla net.minecraft.world.level.chunk.LevelChunk
 //Extends ProtoChunk to add a Level reference and the ability to upgrade ChunkStatus
 //networking serialization is implemented by a partial LevelChunk.Serializer in LevelChunk.Serializer.cs
-public sealed partial class LevelChunk : ProtoChunk
+public partial class LevelChunk : ProtoChunk
 {
     public object? Level { get; }
     //BlockEntityTags, block entity NBT brought back by decoding the network chunk packet, so the client can populate local block entities
