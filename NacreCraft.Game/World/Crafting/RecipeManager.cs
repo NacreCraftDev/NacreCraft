@@ -90,6 +90,17 @@ public sealed class RecipeManager
         return matches;
     }
 
+    //FindCraftingRecipe returns the first crafting recipe matching the grid, maps to vanilla RecipeManager.getRecipeFor
+    //The last-hit cache in RecipeCache wraps this lookup
+    public RecipeHolder? FindCraftingRecipe(CraftingInput input)
+    {
+        if (input.IsEmpty) return null;
+        foreach (var holder in _byId.Values)
+            if (holder.Value is CraftingRecipe recipe && recipe.Matches(input))
+                return holder;
+        return null;
+    }
+
     //GetRecipe returns a recipe by id
     public RecipeHolder? GetRecipe(Identifier id)
         => _byId.TryGetValue(id, out var holder) ? holder : null;

@@ -167,6 +167,11 @@ public static class GameBootstrap
             Mark("block-entity-types");
             MenuTypes.Bootstrap();
             Mark("menus");
+            //Recipe book categories and serializer ids are registry entries read by the recipe book and the loader dispatch
+            NacreCraft.Game.World.Crafting.RecipeBookCategories.Bootstrap();
+            Mark("recipe-book-categories");
+            NacreCraft.Game.World.Crafting.RecipeSerializers.Bootstrap();
+            Mark("recipe-serializers");
             WorldClocks.Bootstrap();
             Mark("world-clocks");
             Timelines.Bootstrap();
