@@ -69,6 +69,14 @@ public sealed class ChunkSender
     //PendingCount number of chunks waiting to be sent, for diagnostics
     public int PendingCount => _pending.Count;
 
+    //IsInViewDistance whether the chunk is inside the current view square, maps to vanilla ChunkTrackingView.isInViewDistance
+    //The waypoint subsystem asks this before sending a chunk-position waypoint; the view lags the player's chunk like vanilla
+    public bool IsInViewDistance(int chunkX, int chunkZ)
+    {
+        if (_centerX == int.MinValue) return false;
+        return Math.Abs(chunkX - _centerX) <= _viewDistance && Math.Abs(chunkZ - _centerZ) <= _viewDistance;
+    }
+
     //IsPending whether the chunk is queued but not handed to the client yet, maps to vanilla PlayerChunkSender.isPending
     public bool IsPending(long packedPos) => _pendingSet.Contains(packedPos);
 

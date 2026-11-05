@@ -80,8 +80,14 @@ All events live under `NacreCraft.ModApi.Wrapper`; after `using NacreCraft.ModAp
 | `ServerEvents.BlockChanged`     | `BlockChangedArgs`     | block state changed, about to sync to clients             | server | `IBlockUpdateSink::BlockChanged` (CallSite)              |
 | `ServerEvents.BlockBroken`      | `BlockBrokenArgs`      | block broken; player mining and redstone self-destruction both count | server | `ServerBlockUpdates::BreakBlock` (CallSite) |
 | `ServerEvents.ItemDropped`      | `ItemDroppedArgs`      | dropped item entity spawned, including block-break drops and cooking products | server | `ServerBlockUpdates::SpawnDrop` (CallSite) |
+| `ServerEvents.PlayerBlockBreak` | `PlayerBlockBreakBeforeArgs` | a player is about to break a block; **cancellable** | server | `ServerBlockUpdates::BreakBlock` (CallSite) |
+| `ServerEvents.PlayerUseBlock`   | `PlayerUseBlockArgs`   | the use-item-on-block packet has been handled          | server | `ServerGamePacketListener::HandleUseItemOn` (CallSite) |
+| `ServerEvents.PlayerUseItem`    | `PlayerUseItemArgs`    | the use-item packet has been handled                  | server | `ServerGamePacketListener::HandleUseItem` (CallSite) |
+| `ServerEvents.PlayerInteractEntity` | `PlayerInteractEntityArgs` | the interact packet has been handled        | server | `ServerGamePacketListener::HandleInteract` (CallSite) |
 | `NetworkEvents.PacketReceived`  | `PacketReceivedArgs`   | every inbound packet queued to a handler, including handshake and status phases | both   | `PacketProcessor::ScheduleIfPossible` and `HandleNow` (CallSite) |
-| `ClientEvents.Tick`             | `ClientTickArgs`       | every tick of the client main loop                        | client | `MinecraftClient::Tick` (Mark)                           |
+| `ClientEvents.Tick`             | `ClientTickArgs`       | every tick of the client main loop                        | client | `MinecraftClient::GameTick` (Mark)                       |
+| `ClientEvents.Join`             | `ClientJoinArgs`       | the login packet has been applied and the client entered the world | client | `ClientGamePacketListener::HandleLogin` (CallSite) |
+| `ClientEvents.Disconnect`       | `ClientDisconnectArgs` | the server closed the connection in the login, configuration or play phase | client | `ClientLoginPacketListener::HandleDisconnect` and `ClientCommonPacketListener::HandleDisconnect` (CallSite) |
 
 Ordering of player events: death is nested inside the hurt flow, so `PlayerDeath` precedes the corresponding `PlayerHurt`; `PlayerLeave` and `PlayerDisconnect` are two different things — the former means removal from the online list (even after `/kick` it only fires once the connection drops), the latter means the connection drop itself, and the two are not guaranteed to appear in pairs.
 
@@ -101,7 +107,9 @@ IDisposable Subscribe(Action<T> handler)
 
 ### 2.3 Cancellation
 
-Cancellation exists as a mechanism and ships Bukkit-style: an args type implements `INcCancellable` (a single `bool Cancelled { get; set; }`), any handler sets `Cancelled = true`, and the injection probe reads the verdict back after dispatch and skips the kernel's original call. The first cancellable events (block break/place/use, chat, damage, login denial) land with the interaction batch; today's events are all post-hoc observations.
+Cancellation exists as a mechanism and ships Bukkit-style: an args type implements `INcCancellable` (a single `bool Cancelled { get; set; }`), any handler sets `Cancelled = true`, and the injection probe reads the verdict back after dispatch and skips the kernel's original call.
+
+`ServerEvents.PlayerBlockBreak` is the only cancellable event today: cancelling skips the kernel break entirely, so no state change, effects or drops happen. Every other event is a post-hoc observation; changing the args there has no effect on the kernel.
 
 ### 2.4 Args types
 
@@ -250,6 +258,73 @@ Fires only when the block is actually replaced; empty positions and rejected bre
 | `Stack`  | `ItemStack` | the dropped item stack   |
 
 Block-break drops and campfire cooking products both go through here. An empty item stack spawns no entity, so there is no event.
+
+**`PlayerBlockBreakBeforeArgs`**
+
+| Property    | Type        | Notes                          |
+| ----------- | ----------- | ------------------------------ |
+| `Player`    | `NcPlayer`  | the player breaking the block  |
+| `Pos`       | `BlockPos`  | position of the target block   |
+| `Cancelled` | `bool`      | set to `true` to skip the break |
+
+Fires before the kernel writes anything, so the world still shows the old block inside the callback. It only covers player-initiated breaks; redstone and other causes still go through `BlockBroken`.
+
+**`PlayerUseBlockArgs`**
+
+| Property  | Type        | Notes                                      |
+| --------- | ----------- | ------------------------------------------ |
+| `Player`  | `NcPlayer`  | the player using the block                 |
+| `Pos`     | `BlockPos`  | the clicked block                          |
+| `Face`    | `Direction` | the clicked face                           |
+| `OffHand` | `bool`      | whether the off hand was used              |
+
+Fires after the kernel handled the packet, so the interaction has already happened.
+
+**`PlayerUseItemArgs`**
+
+| Property  | Type     | Notes                                                       |
+| --------- | -------- | ----------------------------------------------------------- |
+| `Player`  | `NcPlayer` | the player using the item                                 |
+| `ItemId`  | `string` | item id read before use, so a consumed stack is still named |
+| `OffHand` | `bool`   | whether the off hand was used                               |
+
+Does not fire when the hand is empty; the kernel returns without doing anything in that case.
+
+**`PlayerInteractEntityArgs`**
+
+| Property    | Type     | Notes                                     |
+| ----------- | -------- | ----------------------------------------- |
+| `Player`    | `NcPlayer` | the player interacting                  |
+| `EntityId`  | `int`    | network id of the target entity           |
+| `OffHand`   | `bool`   | whether the off hand was used             |
+| `Secondary` | `bool`   | whether it was the secondary action       |
+
+The kernel currently only plays the swing animation here, so the event reflects the client's intent rather than a completed interaction.
+
+**`ClientJoinArgs`**
+
+| Property             | Type     | Notes                                          |
+| -------------------- | -------- | ---------------------------------------------- |
+| `EntityId`           | `int`    | network id the server assigned to the local player |
+| `Dimension`          | `string` | dimension key such as `minecraft:overworld`    |
+| `GameType`           | `string` | game mode name of the joined world             |
+| `Hardcore`           | `bool`   | whether the world is hardcore                  |
+| `MaxPlayers`         | `int`    | player limit advertised by the server          |
+| `ChunkRadius`        | `int`    | view distance granted to this client           |
+| `SimulationDistance` | `int`    | simulation distance granted to this client     |
+| `IsFlat`             | `bool`   | whether the world uses a flat generator        |
+| `Seed`               | `long`   | world seed sent to the client                  |
+
+Fires after the login packet has been applied and the client has switched to the world screen, so client state read inside the callback is complete.
+
+**`ClientDisconnectArgs`**
+
+| Property | Type     | Notes                                                     |
+| -------- | -------- | --------------------------------------------------------- |
+| `Phase`  | `string` | connection phase at disconnect: `login`, `configuration` or `play` |
+| `Reason` | `string` | disconnect reason; literal text or a translation key      |
+
+A rejected login comes through this event too, with `Phase` set to `login`. `Reason` is not resolved against the language files: a translatable reason arrives as its key, a kick for example is `multiplayer.disconnect.kicked`, so a mod that shows the reason should translate it or fall back to the key.
 
 **`PacketReceivedArgs`**
 
@@ -428,6 +503,41 @@ Boundaries:
 - **`ref` / `out` parameters and generic method definitions** cannot be compiled into a delegate and are rejected when called, and so is an argument count that does not match.
 - **Private members of a base class** are not reachable through the derived type; resolve them on the type that declares them.
 
+### 4.4 Capability lookups
+
+Capability lookups are the extension half of ModApi, modelled on Fabric's `*ApiLookup`: a mod publishes a service for some blocks, items or entity types, and another mod queries it without knowing who provided it. They live under `NacreCraft.ModApi.Capability`.
+
+| Lookup | Register | Find |
+| --- | --- | --- |
+| `NcBlockApiLookup<TApi, TContext>` | `RegisterForBlocks(provider, params Block[])`, `RegisterForBlockEntities(provider, params BlockEntityType[])`, `RegisterFallback(provider)` | `Find(BlockState, BlockEntity?, context)`, `Find(NcLevel, BlockPos, context)` |
+| `NcItemApiLookup<TApi, TContext>` | `RegisterForItems(provider, params Item[])`, `RegisterFallback(provider)` | `Find(ItemStack, context)` |
+| `NcEntityApiLookup<TApi, TContext>` | `RegisterForTypes(provider, params EntityType[])`, `RegisterFallback(provider)` | `Find(Entity, context)` |
+
+```csharp
+using NacreCraft.ModApi.Capability;
+
+public interface IEnergyStorage { int Energy { get; } }
+
+//provider side, from Init
+var lookup = NcBlockApiLookup<IEnergyStorage, object?>.Get("mymod:energy");
+lookup.RegisterForBlocks(
+    (state, entity, _) => entity is null ? null : new BatteryStorage(entity),
+    MyBlocks.Battery);
+
+//consumer side, from a tick or event callback
+var storage = NcBlockApiLookup<IEnergyStorage, object?>.Get("mymod:energy")
+    .Find(NcWorld.Overworld, new BlockPos(x, y, z), null);
+```
+
+Rules worth knowing before choosing this over a plain event:
+
+- `Get(id)` returns the same instance for the same `(TApi, TContext)` pair; another mod reaches the same table by using the same id and the same two types. Different types under one id are separate tables, so publish the service interface and context type together.
+- Registration is an init-time action. Registering the same block, block entity type, item or entity type twice throws `InvalidOperationException` — a silent last-wins would hide two mods fighting over one block. `RegisterFallback` replaces the previous fallback instead.
+- Lookup order is block entity provider → block provider → fallback; item provider → fallback; entity type provider → fallback.
+- A provider returning `null` means "this one does not expose the service", not an error. `Find` on an unloaded chunk, on a non-block state, or on an empty item stack returns `null` without calling any provider.
+- The tables are concurrent, but the provider itself runs on the caller's thread; a provider that reads mutable world state must cope with being called from wherever the query came.
+- Queries do not touch kernel code, so a lookup works on both client and server, in `Init` and in callbacks alike — unlike the chapter 4 facades, which throw outside the server main loop.
+
 ***
 
 ## 5. Internals
@@ -442,7 +552,9 @@ You do not need this section to write mods, but it may help when debugging.
 | `Internal.CommandProbe.OnCommandsReady(object)`          | CallSite    | replaces the call to `EffectCommand::Register`; after restoring the original call it fires `CommandRegister` |
 | `Internal.PlayerProbe.OnXxx(object, ...)`                | CallSite ×6 | player events, one method per hook point; after restoring the original call it publishes the event |
 | `Internal.LevelProbe.OnChunkXxxAssigned(object, object)` | CallSite ×3 | chunk events, hooked at the assignment sites of `ServerChunkCache`'s three callback properties; a wrapper delegate is layered on before handing control back to the kernel |
-| `Internal.BlockProbe.OnXxx(...)`                         | CallSite ×3 | block events; breaking and drops hook `ServerBlockUpdates`, state changes hook the interface method on `IBlockUpdateSink` |
+| `Internal.BlockProbe.OnXxx(...)`                         | CallSite ×3 | block events; breaking and drops hook `ServerBlockUpdates`, state changes hook the interface method on `IBlockUpdateSink`; the break probe reads back the cancellation verdict |
+| `Internal.InteractionProbe.OnXxx(object, object)`        | CallSite ×3 | interaction events; each probe replays the original packet handler first, then publishes |
+| `Internal.ClientProbe.OnXxx(object, object)`             | CallSite ×3 | client connection events; the login probe replays the original handler, the two disconnect probes cover the login phase and the configuration/play phases |
 
 `SignalProbe`'s signature takes only `string`, and the parameters of `CommandProbe`, `PlayerProbe`, and `LevelProbe` are declared as `object` — this is deliberate: during assembly `NacreCraft.Hook` resolves the replacement method's signature, and once a kernel type appears in it, resolving it pulls up the kernel assembly early and injection misses its window. Kernel types appear only inside method bodies, by which time the code is already running.
 
@@ -452,7 +564,7 @@ The only things that cannot be `object` in a signature are value-type parameters
 
 ### 5.2 Hook point list
 
-ModApi's `ncmod.json` contains twenty-five rules, matching the table in 2.1 one-to-one. To change a hook point or add a rule, edit this file; after editing, rebuild (it is an embedded resource) and put the resulting dll back into `mods/` — the latter is already done automatically by `ncm build`'s deploy step, and missing it manifests as the rules not taking effect at all.
+ModApi's `ncmod.json` contains thirty rules, matching the table in 2.1 one-to-one. To change a hook point or add a rule, edit this file; after editing, rebuild (it is an embedded resource) and put the resulting dll back into `mods/` — the latter is already done automatically by `ncm build`'s deploy step, and missing it manifests as the rules not taking effect at all.
 
 The four lifecycle phases come from three hook shapes: `Starting` is a Mark on `DedicatedServer::InitServer` (the first statement of boot), `Started` and `Stopping` are Marks on `MinecraftServer::Run` and `DedicatedServer::Stop` entries, and `Stopped` needs no rule of its own — `ServerProbe.OnServerRun` wraps the single call to `Run`, publishes `Stopped` when it returns, and only then lets the captured server instance go.
 
@@ -482,9 +594,9 @@ The following are hook points whose locations are confirmed but that have not ye
 | Command execution | `CommandSourceStack::SendSuccess` / `SendFailure` (the response half, with many call sites) |
 | Network           | per-packet-type `ServerGamePacketListenerImpl::HandleXxx` (currently only a unified entry point) |
 
-Directions already done: level ticks became `ServerEvents.LevelTick`, saved data persistence became `ServerEvents.SavedDataSaving`, command execution became `ServerEvents.CommandExecuted`, blocks became `ServerEvents.BlockChanged` / `BlockBroken` / `ItemDropped`, and the lifecycle is now four phases (`Starting` / `Started` / `Stopping` / `Stopped`).
+Directions already done: level ticks became `ServerEvents.LevelTick`, saved data persistence became `ServerEvents.SavedDataSaving`, command execution became `ServerEvents.CommandExecuted`, blocks became `ServerEvents.BlockChanged` / `BlockBroken` / `ItemDropped`, the three player packet handlers became `PlayerUseBlock` / `PlayerUseItem` / `PlayerInteractEntity`, client connection phases became `ClientEvents.Join` / `Disconnect`, and the lifecycle is now four phases (`Starting` / `Started` / `Stopping` / `Stopped`).
 
-Two infrastructure pieces landed with the wrapper purity policy: handler exceptions are isolated inside `NcEvent.Publish` (logged, never propagated into the kernel), and cancellable events exist as a mechanism (`INcCancellable` + probe-side verdict readback) awaiting the interaction batch's first cancellable events.
+Two infrastructure pieces landed with the wrapper purity policy: handler exceptions are isolated inside `NcEvent.Publish` (logged, never propagated into the kernel), and cancellable events exist as a mechanism (`INcCancellable` + probe-side verdict readback), first used by `ServerEvents.PlayerBlockBreak`.
 
 Hooking the block cell on `SetBlock` does not work: it has two default parameters, `notifyNeighbors` and `strict`, so compiled call sites take anywhere from 4 to 6 parameters, and since CallSite matches by "type + method name" without looking at the parameter list, one replacement method cannot handle all three stack shapes. Instead it hooks two places: state sync hooks `IBlockUpdateSink::BlockChanged` (the only interface call in `ServerLevel.SetBlock`, covering every change with client sync), and breaking and drops hook `ServerBlockUpdates`' own methods.
 

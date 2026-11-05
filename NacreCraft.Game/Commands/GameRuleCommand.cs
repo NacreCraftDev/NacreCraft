@@ -3,6 +3,7 @@ using NacreCraft.Commands.Arguments;
 using NacreCraft.Commands.Builder;
 using NacreCraft.Commands.Context;
 using NacreCraft.Game.Server;
+using NacreCraft.Game.Server.Waypoints;
 using NacreCraft.Game.World.Level;
 using NacreCraft.Registry;
 
@@ -64,8 +65,27 @@ public static class GameRuleCommand
             ? BoolArgumentType.GetBool(context, "value")
             : IntegerArgumentType.GetInteger(context, "value");
         source.Server.GameRules.SetRule(rule, value);
+        //The locator bar rule re-creates or tears down waypoint connections, maps to the vanilla onGameRuleChanged branch
+        if (ReferenceEquals(rule, GameRules.LocatorBar)) OnLocatorBarChanged(source, (bool)value);
         source.SendSuccess($"set {rule.Id.ToShortString()} to {FormatValue(value)}");
         return CommandResult(rule, value);
+    }
+
+    //OnLocatorBarChanged refreshes every level's waypoint connections when the locator bar rule flips
+    private static void OnLocatorBarChanged(ServerCommandSource source, bool enabled)
+    {
+        foreach (var key in source.Server.DimensionKeys)
+        {
+            if (source.Server.GetLevel(key) is not { } level) continue;
+            var manager = WaypointManagers.Get(level);
+            if (!enabled)
+            {
+                manager.BreakAllConnections();
+                continue;
+            }
+            foreach (var player in source.Server.PlayerList.Players)
+                if (ReferenceEquals(player.Level, level)) manager.UpdatePlayer(player);
+        }
     }
 
     //CurrentValue gets the rule's current value; when never set it falls back to the rule default from the save

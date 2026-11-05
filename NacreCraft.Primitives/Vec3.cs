@@ -24,6 +24,14 @@ public readonly struct Vec3 : IEquatable<Vec3>
 
     public Vec3 Multiply(double scale) => new(X * scale, Y * scale, Z * scale);
 
+    //rotateClockwise90 rotates a horizontal vector a quarter turn around Y, maps to vanilla rotateClockwise90
+    public Vec3 RotateClockwise90() => new(-Z, Y, X);
+
+    //atCenterOf the center of a block-position cell, maps to vanilla atCenterOf
+    public static Vec3 AtCenterOf(Vec3i pos) => new(pos.X + 0.5, pos.Y + 0.5, pos.Z + 0.5);
+
+    public static Vec3 AtCenterOf(BlockPos pos) => new(pos.X + 0.5, pos.Y + 0.5, pos.Z + 0.5);
+
     //WithAxis replaces the component of one axis with a new value, the other two stay, maps to vanilla Vec3.with(Axis)
     //Used to write back the solved axis when clipping movement axis by axis
     public Vec3 WithAxis(Direction.Axis axis, double value) => axis switch

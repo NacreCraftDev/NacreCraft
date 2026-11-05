@@ -2,6 +2,7 @@ using NacreCraft.Network.Protocol.Common;
 using NacreCraft.Game.Network.Protocol.Game;
 using NacreCraft.Network.Protocol.Login;
 using NacreCraft.Game.Util.Debug;
+using NacreCraft.Game.Server.Waypoints;
 using NacreCraft.Game.World.Effect;
 using NacreCraft.Game.World.Entity;
 using NacreCraft.Game.World.Inventory;
@@ -305,6 +306,9 @@ public sealed class ServerPlayer : Player
     //Weapon bonus/cooldown/crit are not implemented, added in phase 2
     public float AttackDamage => (float)GetAttributeValue(EntityAttributes.AttackDamage);
 
+    //IsReceivingWaypoints whether the receive range attribute is positive, maps to vanilla isReceivingWaypoints
+    public bool IsReceivingWaypoints() => GetAttributeValue(EntityAttributes.WaypointReceiveRange) > 0.0;
+
     //XpProgress view onto the base's XpP, kept because the command and save layers predate the rename
     public float XpProgress { get => XpP; set => XpP = value; }
 
@@ -486,6 +490,9 @@ public sealed class ServerPlayer : Player
         if (GameType != GameType.Creative && GameType != GameType.Spectator) TickWorldBorderDamage();
         UpdateChunkTracking();
         ChunkSender?.Tick();
+        //Waypoint connections refresh after the chunk view moved; the visibility test reads that same view
+        if (IsReceivingWaypoints() && Level is PersistentServerLevel waypointLevel)
+            WaypointManagers.Get(waypointLevel).UpdatePlayer(this);
         TickItemPickup();
         ContainerMenu?.BroadcastChanges();
             //A container menu is closed automatically when it becomes invalid, a block broken or the player more than 8 blocks away, maps to the stillValid check in vanilla ServerPlayer.tick

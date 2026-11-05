@@ -45,6 +45,13 @@ public readonly struct ChunkPos : IEquatable<ChunkPos>
 
     public int GetRegionX() => X >> RegionBits;
 
+    //GetMiddleBlockPosition the chunk's center block at the given y, maps to vanilla getMiddleBlockPosition
+    public BlockPos GetMiddleBlockPosition(int y) => new(MinBlockX + 8, y, MinBlockZ + 8);
+
+    //GetChessboardDistance the larger of the two axis distances to another chunk, maps to vanilla getChessboardDistance
+    public int GetChessboardDistance(ChunkPos other)
+        => Math.Max(Math.Abs(other.X - X), Math.Abs(other.Z - Z));
+
     public int GetRegionZ() => Z >> RegionBits;
 
     public static int GetRegionX(long pos) => GetX(pos) >> RegionBits;

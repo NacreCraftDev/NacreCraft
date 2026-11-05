@@ -33,6 +33,13 @@ public sealed class EntityManager
     //Count, total managed entities (including standby)
     public int Count => _knownUuids.Count;
 
+    //EntityTrackingStarted fires when an entity enters the visible set, the storage-side counterpart of vanilla onTrackingStart
+    //Game-side subsystems such as waypoints subscribe here instead of Storage referencing the game layer
+    public event Action<NacreCraftEntity>? EntityTrackingStarted;
+
+    //EntityTrackingStopped fires when an entity leaves the visible set, the storage-side counterpart of vanilla onTrackingEnd
+    public event Action<NacreCraftEntity>? EntityTrackingStopped;
+
     //Visible, the set of visible entities, for network tracking traversal
     public IEnumerable<NacreCraftEntity> Visible => _visible.GetAll();
 
@@ -165,12 +172,13 @@ public sealed class EntityManager
         _ticking.Add(entity);
         _visible.Add(entity);
         _entitySection[entity] = SectionKeyOf(entity.Pos);
+        EntityTrackingStarted?.Invoke(entity);
     }
 
     //StopTicking removes an entity from the visible, tickable set
     private void StopTicking(NacreCraftEntity entity)
     {
-        _ticking.Remove(entity);
+        if (_ticking.Remove(entity)) EntityTrackingStopped?.Invoke(entity);
         _visible.Remove(entity);
         _entitySection.Remove(entity);
         _pendingAdd.Remove(entity);

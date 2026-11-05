@@ -55,11 +55,14 @@ public interface IEntityInsideHost
 //Entity abstract base class, maps to vanilla net.minecraft.world.entity.Entity
 //Holds core fields EntityId/Pos/Uuid/Velocity/YRot/XRot; Level uses object as a placeholder until the Level subsystem is ready
 //Vanilla holds a CompoundTag persistence field, simplified here so subclasses extend as needed
-public abstract class Entity : ITrackedEntity, SyncedDataHolder
+public abstract class Entity : ITrackedEntity, SyncedDataHolder, EntityAccess
 {
     //_entityCounter global entity id counter, maps to vanilla ServerLevel.ENTITY_COUNTER
     //Placed here rather than on the level so entities and players share one id space; two counters would collide
     private static int _entityCounter;
+
+    //_levelCallback the section manager's move/remove hook, maps to vanilla levelCallback
+    private EntityInLevelCallback? _levelCallback;
 
     //SharedFlagsIndex shared flags index, maps to vanilla Entity.DATA_SHARED_FLAGS_ID
     public const byte SharedFlagsIndex = 0;
@@ -415,6 +418,9 @@ public abstract class Entity : ITrackedEntity, SyncedDataHolder
     //IsRemoved whether the entity has been marked removed, maps to vanilla Entity.isRemoved
     public bool IsRemoved { get; private set; }
 
+    //RemovalReason why the entity was removed, null while it is alive, maps to vanilla removalReason
+    public RemovalReason? RemovalReason { get; private set; }
+
     //BlocksBuilding whether the entity blocks block placement, maps to vanilla Entity.blocksBuilding
     //Off by default in vanilla, turned on by living entities in the constructor; dropped items and the like do not block placement
     public virtual bool BlocksBuilding => false;
@@ -429,6 +435,8 @@ public abstract class Entity : ITrackedEntity, SyncedDataHolder
         Pos = pos;
         YRot = yRot;
         XRot = xRot;
+        //The section index has to re-bucket the entity, maps to the levelCallback.onMove call in vanilla setPos
+        _levelCallback?.OnMove();
     }
 
     //Tick called every frame; base physics is gravity and advancing position by velocity
@@ -576,4 +584,37 @@ public abstract class Entity : ITrackedEntity, SyncedDataHolder
         }
         return resolved;
     }
+
+    //EntityAccess implementation, the narrow view the entity section index works with
+
+    int EntityAccess.Id => EntityId;
+
+    BlockPos EntityAccess.BlockPosition() => new(Mth.Floor(Pos.X), Mth.Floor(Pos.Y), Mth.Floor(Pos.Z));
+
+    AABB EntityAccess.GetBoundingBox() => BoundingBox;
+
+    void EntityAccess.SetLevelCallback(EntityInLevelCallback? callback) => _levelCallback = callback;
+
+    //Riding is not ported, so an entity is its own only passenger
+    IEnumerable<EntityAccess> EntityAccess.GetSelfAndPassengers()
+    {
+        yield return this;
+    }
+
+    IEnumerable<EntityAccess> EntityAccess.GetPassengersAndSelf()
+    {
+        yield return this;
+    }
+
+    //SetRemoved records the reason and tells the section index, maps to vanilla setRemoved
+    void EntityAccess.SetRemoved(RemovalReason reason)
+    {
+        RemovalReason ??= reason;
+        IsRemoved = true;
+        _levelCallback?.OnRemove(reason);
+    }
+
+    bool EntityAccess.ShouldBeSaved => !IsRemoved;
+
+    bool EntityAccess.IsAlwaysTicking => !TicksByEntityManager;
 }

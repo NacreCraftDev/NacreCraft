@@ -1,6 +1,9 @@
+using NacreCraft.Codec;
+using NacreCraft.Game.Server;
 using NacreCraft.Game.World.Damage;
 using NacreCraft.Game.World.Effect;
 using NacreCraft.Game.World.Items;
+using NacreCraft.Game.World.Waypoints;
 using NacreCraft.Nbt;
 using NacreCraft.Primitives;
 using NacreCraft.Registry;
@@ -18,10 +21,13 @@ namespace NacreCraft.Game.World.Entity;
 //Sits between Entity and Player/Mob and owns everything vanilla puts here rather than on Entity:
 //health, attributes, damage and death, knockback, fall damage, the living-only flags, equipment and effects
 //The Entity base no longer carries these; entities that are not alive (dropped items, projectiles) stay on Entity
-public abstract class LivingEntity : NacreCraft.Registry.Entity, IEquipmentHolder, IEffectHolder
+public abstract class LivingEntity : NacreCraft.Registry.Entity, IEquipmentHolder, IEffectHolder, WaypointTransmitter
 {
     //_random the entity's own random source, used for knockback direction randomization
     private readonly RandomSource _random = RandomSource.Create();
+
+    //_locatorBarIcon the icon this entity transmits on the locator bar, maps to vanilla locatorBarIcon
+    private Waypoint.Icon _locatorBarIcon = new();
 
     //_attributes the entity's attribute map, swapped in by subclasses from their type's default supplier
     private AttributeMap _attributes = new(AttributeSupplier.Empty);
@@ -365,6 +371,7 @@ public abstract class LivingEntity : NacreCraft.Registry.Entity, IEquipmentHolde
         TickEffects();
         UpdateSwingTime();
         CalculateEntityAnimation(false);
+        UpdateWaypointForMovement();
     }
 
     //CauseFallDamage settles fall damage from the attributes, maps to vanilla LivingEntity.causeFallDamage
@@ -431,19 +438,52 @@ public abstract class LivingEntity : NacreCraft.Registry.Entity, IEquipmentHolde
     //IndicateDamage feeds the hurt direction back to the entity; the base does nothing, maps to vanilla indicateDamage
     public virtual void IndicateDamage(double xd, double zd) { }
 
-    //AddAdditionalSaveData writes health and attributes, maps to the living part of vanilla LivingEntity.addAdditionalSaveData
+    //IsTransmittingWaypoint whether the transmit range attribute is positive, maps to vanilla isTransmittingWaypoint
+    public bool IsTransmittingWaypoint() => GetAttributeValue(EntityAttributes.WaypointTransmitRange) > 0.0;
+
+    //MakeWaypointConnectionWith picks the packet shape for one receiver, maps to vanilla makeWaypointConnectionWith
+    public Optional<WaypointTransmitter.Connection> MakeWaypointConnectionWith(ServerPlayer player)
+    {
+        if (TickCount == 0 || ReferenceEquals(player, this)) return Optional<WaypointTransmitter.Connection>.Empty();
+        if (WaypointTransmitter.DoesSourceIgnoreReceiver(this, player)) return Optional<WaypointTransmitter.Connection>.Empty();
+        var icon = _locatorBarIcon.CloneAndAssignStyle(this);
+        if (WaypointTransmitter.IsReallyFar(this, player))
+            return Optional<WaypointTransmitter.Connection>.Of(new WaypointTransmitter.EntityAzimuthConnection(this, icon, player));
+        if (!WaypointTransmitter.IsChunkVisible(WaypointTransmitter.ChunkOf(this), player))
+            return Optional<WaypointTransmitter.Connection>.Of(new WaypointTransmitter.EntityChunkConnection(this, icon, player));
+        return Optional<WaypointTransmitter.Connection>.Of(new WaypointTransmitter.EntityBlockConnection(this, icon, player));
+    }
+
+    //WaypointIcon the icon other players see, maps to vanilla waypointIcon
+    public Waypoint.Icon WaypointIcon() => _locatorBarIcon;
+
+    //UpdateWaypointForMovement refreshes this source's connections after it moves, maps to the setPos updateWaypoint call
+    //The entity layer has no level callback, so the tick loop drives it; an unchanged position sends nothing
+    public void UpdateWaypointForMovement()
+    {
+        if (!IsTransmittingWaypoint()) return;
+        if (Level is not NacreCraft.Storage.PersistentServerLevel level) return;
+        NacreCraft.Game.Server.Waypoints.WaypointManagers.Get(level).UpdateWaypoint(this);
+    }
+
+    //AddAdditionalSaveData writes health, attributes and the locator bar icon, maps to the living part of vanilla LivingEntity.addAdditionalSaveData
     protected override void AddAdditionalSaveData(CompoundTag tag)
     {
         tag.PutFloat("Health", Health);
         _attributes.WriteTo(tag);
+        var icon = Waypoint.Icon.CODEC.EncodeStart(NbtOps.Instance, _locatorBarIcon);
+        if (icon.Result().IsPresent) tag.Put("locator_bar_icon", icon.Result().Get());
         base.AddAdditionalSaveData(tag);
     }
 
-    //ReadAdditionalSaveData reads health and attributes back; a missing field keeps the current value
+    //ReadAdditionalSaveData reads health, attributes and the icon back; a missing field keeps the current value
     protected override void ReadAdditionalSaveData(CompoundTag tag)
     {
         if (tag.GetFloat("Health") is { } health) SetHealth(health.Value);
         _attributes.ReadFrom(tag);
+        _locatorBarIcon = tag.GetCompound("locator_bar_icon") is { } iconTag
+            ? Waypoint.Icon.CODEC.Parse(NbtOps.Instance, iconTag).Result().OrElse(new Waypoint.Icon())
+            : new Waypoint.Icon();
         base.ReadAdditionalSaveData(tag);
     }
 }

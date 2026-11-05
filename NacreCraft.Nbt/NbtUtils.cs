@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using NacreCraft.Codec;
 using NacreCraft.Config;
 
 namespace NacreCraft.Nbt;
@@ -431,6 +432,17 @@ public static class NbtUtils
             return @default;
         return tag.GetIntValue(SharedConstants.DataVersionTag);
     }
+
+    //Read the data version from a Dynamic tag, defaulting to -1. Mirrors vanilla getDataVersion(Dynamic).
+    public static int GetDataVersion(Dynamic<Tag> tag) => GetDataVersion(tag, -1);
+
+    //Read the data version from a Dynamic tag, returning the default when absent. Mirrors vanilla getDataVersion(Dynamic, int).
+    public static int GetDataVersion(Dynamic<Tag> tag, int @default)
+        => tag.Get(SharedConstants.DataVersionTag).AsInt(@default);
+
+    //Write the given data version into a Dynamic tag. Mirrors vanilla addDataVersion(Dynamic, int).
+    public static Dynamic<T> AddDataVersion<T>(Dynamic<T> tag, int version)
+        => tag.Set(SharedConstants.DataVersionTag, tag.CreateInt(version));
 
     // ============ BlockState string packing/unpacking (pure string handling, no Block system)============
 

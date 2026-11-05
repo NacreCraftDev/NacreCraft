@@ -1,4 +1,5 @@
 using NacreCraft.Game.Network.Protocol.Game;
+using NacreCraft.Game.Server.Waypoints;
 using NacreCraft.Network.Protocol.Login;
 using NacreCraft.Game.World.Inventory;
 using NacreCraft.Game.World.Level;
@@ -73,7 +74,12 @@ public sealed class PlayerList
         }
         //The player is an entity now, so it enters the level's entity manager; the level's lookups, collision and range
         //queries then see it directly instead of the game layer merging player boxes in by hand
-        if (player.Level is PersistentServerLevel joinLevel) joinLevel.EntityManager.AddEntity(player);
+        if (player.Level is PersistentServerLevel joinLevel)
+        {
+            joinLevel.EntityManager.AddEntity(player);
+            //A player with a positive receive range joins the waypoint receiver set, maps to the vanilla onTrackingStart branch
+            if (player.IsReceivingWaypoints()) WaypointManagers.Get(joinLevel).AddPlayer(player);
+        }
         Log.Info(restored
             ? $"Player joined (save restored) {profile.Name} entityId={player.EntityId} online {PlayerCount}/{MaxPlayers}"
             : $"Player joined {profile.Name} entityId={player.EntityId} online {PlayerCount}/{MaxPlayers}");
@@ -111,7 +117,10 @@ public sealed class PlayerList
             false, false, false, null, null, 0);
         //KeepAllData carries inventory and attributes across the switch, the same mask vanilla portal travel uses
         player.Connection.Send(new ClientboundRespawnPacket(spawnInfo, ClientboundRespawnPacket.KeepAllData));
+        //Waypoints are level-scoped, so the old level's connections are dropped before the move, maps to the vanilla untrack on dimension change
+        if (player.Level is PersistentServerLevel previousLevel) WaypointManagers.Get(previousLevel).RemovePlayer(player);
         player.ChangeLevel(target);
+        if (player.IsReceivingWaypoints()) WaypointManagers.Get(target).AddPlayer(player);
         //The position is unchanged, so it has to be resent explicitly; the respawn packet alone leaves the client at its
         //old local coordinates until something moves it
         player.Connection.Send(new ClientboundPlayerPositionPacket(
@@ -403,7 +412,11 @@ public sealed class PlayerList
         if (removed)
         {
             //Leave the level's entity manager with the player list, so nothing keeps tracking an entity whose connection is gone
-            if (player.Level is PersistentServerLevel leftLevel) leftLevel.EntityManager.RemoveEntity(player);
+            if (player.Level is PersistentServerLevel leftLevel)
+            {
+                WaypointManagers.Get(leftLevel).RemovePlayer(player);
+                leftLevel.EntityManager.RemoveEntity(player);
+            }
             //Broadcast the entity removal first; other clients' models are removed by this packet
             //Must happen before ForgetPlayer; ForgetPlayer clears the observation records and PruneStale can no longer send this packet
             BroadcastAll(new ClientboundRemoveEntitiesPacket(new[] { player.EntityId }));
