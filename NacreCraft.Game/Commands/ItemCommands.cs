@@ -12,13 +12,13 @@ using NacreCraft.Storage;
 
 namespace NacreCraft.Game.Commands;
 
-//ItemCommand /item command, maps to vanilla net.minecraft.server.commands.ItemCommands
+//ItemCommands /item command, maps to vanilla net.minecraft.server.commands.ItemCommands
 //replace block <pos> <slot> with <item> [count] writes an item into a block entity container
 //replace ... from block <source pos> <source slot> moves a whole stack from another container
 //replace ... from entity <source entity> <source slot> moves a whole stack from a slot on an entity
 //replace entity <target> <slot> has the same three branches, writing to slots on the entity
 //The modify branch depends on the item_modifier data-driven registry, not wired up here, so it is not registered
-public static class ItemCommand
+public static class ItemCommands
 {
     //Vanilla count argument range 1..99, maps to ItemInstance.FIELD_COUNT
     private const int MaxCount = 99;

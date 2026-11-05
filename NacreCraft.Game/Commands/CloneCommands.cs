@@ -15,12 +15,12 @@ using NacreCraft.Storage.Updates;
 
 namespace NacreCraft.Game.Commands;
 
-//CloneCommand /clone command, maps to vanilla net.minecraft.server.commands.CloneCommands
+//CloneCommands /clone command, maps to vanilla net.minecraft.server.commands.CloneCommands
 //Syntax: clone [from <source dimension>] <begin> <end> [to <target dimension>] <destination> [strict] [replace|masked|filtered <predicate>] [force|move|normal]
 //replace copies everything; masked skips air; filtered selects by block predicate
 //normal errors when the destination overlaps the source region; force allows overlap; move clears the source after copying
 //strict means this batch of changes produces no side effects (no light, no neighbor updates)
-public static class CloneCommand
+public static class CloneCommands
 {
     //FilterAir the masked mode filter copies only non-air, maps to vanilla FILTER_AIR
     private static readonly Predicate<BlockInWorld> FilterAir = world =>

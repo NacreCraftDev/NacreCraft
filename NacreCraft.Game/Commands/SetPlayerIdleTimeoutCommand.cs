@@ -5,9 +5,9 @@ using NacreCraft.Commands.Context;
 
 namespace NacreCraft.Game.Commands;
 
-//SetIdleTimeoutCommand setidletimeout command, maps to vanilla net.minecraft.server.commands.SetIdleTimeoutCommand
+//SetPlayerIdleTimeoutCommand setidletimeout command, maps to vanilla net.minecraft.server.commands.SetPlayerIdleTimeoutCommand
 //Idle kick minutes; 0 means never kick; written back to server.properties
-public static class SetIdleTimeoutCommand
+public static class SetPlayerIdleTimeoutCommand
 {
     public static void Register(CommandDispatcher<CommandSourceStack> dispatcher)
     {

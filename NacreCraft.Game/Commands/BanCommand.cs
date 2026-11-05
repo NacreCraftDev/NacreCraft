@@ -14,7 +14,17 @@ namespace NacreCraft.Game.Commands;
 //Targets only resolve online player names; this project has no offline player profile lookup (same limitation as /op), so offline players can only be unbanned by editing json or by name
 public static class BanCommand
 {
+    //Register registers the whole ban family; BanPlayerCommands/BanIpCommands/BanListCommands/PardonCommand/PardonIpCommand own the individual trees
     public static void Register(CommandDispatcher<CommandSourceStack> dispatcher)
+    {
+        RegisterPlayer(dispatcher);
+        RegisterIp(dispatcher);
+        RegisterList(dispatcher);
+        RegisterPardon(dispatcher);
+        RegisterPardonIp(dispatcher);
+    }
+
+    public static void RegisterPlayer(CommandDispatcher<CommandSourceStack> dispatcher)
     {
         dispatcher.Register(LiteralArgumentBuilder<CommandSourceStack>.Literal("ban")
             .Requires(s => s.HasPermission(3))
@@ -23,7 +33,10 @@ public static class BanCommand
                 .Then(RequiredArgumentBuilder<CommandSourceStack, string>
                     .Argument("reason", StringArgumentType.GreedyString())
                     .Executes(context => Ban(context, StringArgumentType.GetString(context, "reason"))))));
+    }
 
+    public static void RegisterIp(CommandDispatcher<CommandSourceStack> dispatcher)
+    {
         dispatcher.Register(LiteralArgumentBuilder<CommandSourceStack>.Literal("ban-ip")
             .Requires(s => s.HasPermission(3))
             .Then(RequiredArgumentBuilder<CommandSourceStack, string>.Argument("target", StringArgumentType.Word())
@@ -31,17 +44,26 @@ public static class BanCommand
                 .Then(RequiredArgumentBuilder<CommandSourceStack, string>
                     .Argument("reason", StringArgumentType.GreedyString())
                     .Executes(context => BanIp(context, StringArgumentType.GetString(context, "reason"))))));
+    }
 
+    public static void RegisterPardon(CommandDispatcher<CommandSourceStack> dispatcher)
+    {
         dispatcher.Register(LiteralArgumentBuilder<CommandSourceStack>.Literal("pardon")
             .Requires(s => s.HasPermission(3))
             .Then(RequiredArgumentBuilder<CommandSourceStack, string>.Argument("targets", StringArgumentType.Word())
                 .Executes(Pardon)));
+    }
 
+    public static void RegisterPardonIp(CommandDispatcher<CommandSourceStack> dispatcher)
+    {
         dispatcher.Register(LiteralArgumentBuilder<CommandSourceStack>.Literal("pardon-ip")
             .Requires(s => s.HasPermission(3))
             .Then(RequiredArgumentBuilder<CommandSourceStack, string>.Argument("target", StringArgumentType.Word())
                 .Executes(PardonIp)));
+    }
 
+    public static void RegisterList(CommandDispatcher<CommandSourceStack> dispatcher)
+    {
         dispatcher.Register(LiteralArgumentBuilder<CommandSourceStack>.Literal("banlist")
             .Requires(s => s.HasPermission(3))
             .Executes(context => ListBans(context, false))

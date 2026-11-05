@@ -10,11 +10,11 @@ using NacreCraft.Game.World.Items;
 
 namespace NacreCraft.Game.Commands;
 
-//ClearCommand clear command, maps to vanilla net.minecraft.server.commands.ClearInventoryCommands
+//ClearInventoryCommands clear command, maps to vanilla net.minecraft.server.commands.ClearInventoryCommands
 //clear clears your own items; clear <targets> clears the targets' items, both unrestricted by item
 //clear <targets> <item> clears only matching items; clear <targets> <item> <maxCount> clears at most maxCount
 //maxCount of 0 only counts without removing, maps to the vanilla test mode
-public static class ClearCommand
+public static class ClearInventoryCommands
 {
     private static readonly DynamicCommandExceptionType ErrorSingle =
         new(name => new LiteralMessage($"found no items to clear for {name}"));

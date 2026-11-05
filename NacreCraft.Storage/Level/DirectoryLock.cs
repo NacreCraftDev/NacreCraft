@@ -7,7 +7,7 @@ namespace NacreCraft.Storage;
 //Exclusivity comes from the share mode alone, no platform-specific calls
 public sealed class DirectoryLock : IDisposable
 {
-    private const string LockFileName = "session.lock";
+    public const string LockFileName = "session.lock";
     private readonly FileStream _stream;
 
     private DirectoryLock(FileStream stream)

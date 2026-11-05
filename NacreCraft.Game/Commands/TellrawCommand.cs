@@ -6,9 +6,9 @@ using NacreCraft.Game.Server;
 
 namespace NacreCraft.Game.Commands;
 
-//TellrawCommand tellraw command, maps to vanilla net.minecraft.server.commands.TellRawCommand
+//TellRawCommand tellraw command, maps to vanilla net.minecraft.server.commands.TellRawCommand
 //Sends the component to target players as system chat; like title it does no in-component selector resolution
-public static class TellrawCommand
+public static class TellRawCommand
 {
     public static void Register(CommandDispatcher<CommandSourceStack> dispatcher)
     {

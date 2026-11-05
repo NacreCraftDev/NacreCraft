@@ -5,9 +5,9 @@ using NacreCraft.Commands.Context;
 
 namespace NacreCraft.Game.Commands;
 
-//WhiteListCommand whitelist command, maps to vanilla net.minecraft.server.commands.WhitelistCommand
+//WhitelistCommand whitelist command, maps to vanilla net.minecraft.server.commands.WhitelistCommand
 //Toggles the whitelist and adds/removes members; like vanilla the target only resolves online player names
-public static class WhiteListCommand
+public static class WhitelistCommand
 {
     public static void Register(CommandDispatcher<CommandSourceStack> dispatcher)
     {

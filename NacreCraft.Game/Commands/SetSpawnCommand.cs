@@ -8,9 +8,9 @@ using NacreCraft.Primitives;
 
 namespace NacreCraft.Game.Commands;
 
-//SpawnPointCommand spawnpoint command, maps to the spawnpoint literal of vanilla net.minecraft.server.commands.SetSpawnCommand
+//SetSpawnCommand spawnpoint command, maps to vanilla net.minecraft.server.commands.SetSpawnCommand
 //Sets a player's personal respawn point; without a target the executor is used; without coordinates the executor's current position is floored
-public static class SpawnPointCommand
+public static class SetSpawnCommand
 {
     public static void Register(CommandDispatcher<CommandSourceStack> dispatcher)
     {

@@ -86,6 +86,32 @@ public sealed class CommandManager
         RegisterRecipe();
         RegisterSpectate();
         RegisterEffect();
+        RegisterEnchant();
+        RegisterRandom();
+        RegisterRide();
+        RegisterSummon();
+        RegisterTrigger();
+        RegisterWardenSpawnTracker();
+        RegisterSpawnArmorTrims();
+        RegisterServerPack();
+        RegisterFetchProfile();
+        RegisterAdvancement();
+        RegisterBossBar();
+        RegisterChase();
+        RegisterDialog();
+        RegisterWaypoint();
+        RegisterDebugConfig();
+        RegisterDebugMobSpawning();
+        RegisterDebugPath();
+        RegisterSchedule();
+        RegisterDataPack();
+        RegisterFunction();
+        RegisterLocate();
+        RegisterLoot();
+        RegisterPlace();
+        RegisterRaid();
+        RegisterScoreboard();
+        RegisterTeam();
     }
 
     public CommandDispatcher<CommandSourceStack> Dispatcher => _dispatcher;
@@ -198,49 +224,9 @@ public sealed class CommandManager
     private static ServerCommandSource? RequirePlayer(CommandContext<CommandSourceStack> context)
         => context.GetSource() as ServerCommandSource;
 
-    //RegisterGameMode registers /gamemode <gamemode> [targets], maps to the vanilla gamemode command tree
+    //RegisterGameMode registers /gamemode via the vanilla-named command class
     private void RegisterGameMode()
-    {
-        _dispatcher.Register(LiteralArgumentBuilder<CommandSourceStack>.Literal("gamemode")
-            .Requires(s => s.HasPermission(2))
-            .Then(RequiredArgumentBuilder<CommandSourceStack, GameType>.Argument("gamemode", GameModeArgument.GameMode())
-                .Executes(context => SetGameMode(context, new[] { ((ServerCommandSource)context.GetSource()).Player }))
-                .Then(RequiredArgumentBuilder<CommandSourceStack, EntitySelector>.Argument("targets", EntityArgument.Players())
-                    .Executes(context => SetGameMode(context, EntityArgument.GetPlayers(context, "targets"))))));
-    }
-
-    //SetGameMode switches the target player's game mode and reports, maps to vanilla setGameMode
-    //The executor gets only its own report; other targets also receive a private notice
-    private static int SetGameMode(CommandContext<CommandSourceStack> context, IReadOnlyList<ServerPlayer> targets)
-    {
-        var source = RequirePlayer(context);
-        if (source is null) return 0;
-        var gameType = GameModeArgument.GetGameMode(context, "gamemode");
-        var changed = 0;
-        foreach (var target in targets)
-        {
-            //No packet or report when the mode is unchanged, consistent with vanilla setGameMode returning false
-            if (target.GameType == gameType) continue;
-            source.Server.PlayerList.ChangeGameMode(target, gameType);
-            changed++;
-            if (ReferenceEquals(target, source.Player))
-            {
-                source.SendSuccess($"set your game mode to {gameType.Name}");
-            }
-            else
-            {
-                source.SendSuccess($"set {target.Profile.Name}'s game mode to {gameType.Name}");
-                target.Connection.Send(new ClientboundSystemChatPacket(
-                    Component.Literal($"your game mode has been set to {gameType.Name}"), false));
-            }
-        }
-        if (changed == 0)
-        {
-            source.SendFailure("the target is already in that game mode");
-            return 0;
-        }
-        return changed;
-    }
+        => GameModeCommand.Register(_dispatcher);
 
     //RegisterHelp registers the vanilla help command tree
     private void RegisterHelp()
@@ -261,23 +247,30 @@ public sealed class CommandManager
         DebugCommand.Register(_dispatcher);
     }
 
-    //RegisterStop registers /stop to stop the server; it flushes everything before the main loop exits
+    //RegisterStop registers /stop via the vanilla-named command class
     private void RegisterStop()
-        => _dispatcher.Register(LiteralArgumentBuilder<CommandSourceStack>.Literal("stop")
-            .Requires(s => s.HasPermission(4))
-            .Executes(StopServer));
+        => StopCommand.Register(_dispatcher);
 
     //RegisterOp registers /op /deop for reading and writing the operator list
     private void RegisterOp()
-        => OpCommand.Register(_dispatcher);
+    {
+        OpCommand.Register(_dispatcher);
+        DeOpCommands.Register(_dispatcher);
+    }
 
     //RegisterKick registers the /kick command
     private void RegisterKick()
         => KickCommand.Register(_dispatcher);
 
-    //RegisterBan registers /ban /ban-ip /pardon /pardon-ip /banlist
+    //RegisterBan registers /ban /ban-ip /pardon /pardon-ip /banlist through their vanilla-named classes
     private void RegisterBan()
-        => BanCommand.Register(_dispatcher);
+    {
+        BanPlayerCommands.Register(_dispatcher);
+        BanIpCommands.Register(_dispatcher);
+        BanListCommands.Register(_dispatcher);
+        PardonCommand.Register(_dispatcher);
+        PardonIpCommand.Register(_dispatcher);
+    }
 
     //RegisterListPlayers registers /list for the online player list
     private void RegisterListPlayers()
@@ -285,7 +278,7 @@ public sealed class CommandManager
 
     //RegisterEmote registers /me action broadcast
     private void RegisterEmote()
-        => EmoteCommand.Register(_dispatcher);
+        => EmoteCommands.Register(_dispatcher);
 
     //RegisterMsg registers /msg /tell /w private message
     private void RegisterMsg()
@@ -317,11 +310,15 @@ public sealed class CommandManager
 
     //RegisterDefaultGameMode registers /defaultgamemode
     private void RegisterDefaultGameMode()
-        => DefaultGameModeCommand.Register(_dispatcher);
+        => DefaultGameModeCommands.Register(_dispatcher);
 
     //RegisterSave registers /save-all /save-off /save-on flush control
     private void RegisterSave()
-        => SaveCommand.Register(_dispatcher);
+    {
+        SaveAllCommand.Register(_dispatcher);
+        SaveOffCommand.Register(_dispatcher);
+        SaveOnCommand.Register(_dispatcher);
+    }
 
     //RegisterDamage registers /damage to deal damage
     private void RegisterDamage()
@@ -357,19 +354,19 @@ public sealed class CommandManager
 
     //RegisterWhiteList registers /whitelist
     private void RegisterWhiteList()
-        => WhiteListCommand.Register(_dispatcher);
+        => WhitelistCommand.Register(_dispatcher);
 
     //RegisterClone registers /clone region copy
     private void RegisterClone()
-        => CloneCommand.Register(_dispatcher);
+        => CloneCommands.Register(_dispatcher);
 
     //RegisterSpawnPoint registers /spawnpoint personal respawn point
     private void RegisterSpawnPoint()
-        => SpawnPointCommand.Register(_dispatcher);
+        => SetSpawnCommand.Register(_dispatcher);
 
     //RegisterSetIdleTimeout registers /setidletimeout idle kick timeout
     private void RegisterSetIdleTimeout()
-        => SetIdleTimeoutCommand.Register(_dispatcher);
+        => SetPlayerIdleTimeoutCommand.Register(_dispatcher);
 
     //RegisterFillBiome registers /fillbiome region biome replacement
     private void RegisterFillBiome()
@@ -399,19 +396,113 @@ public sealed class CommandManager
     private void RegisterEffect()
         => EffectCommand.Register(_dispatcher);
 
-    //StopServer triggers server shutdown; the report is sent before Stop because Stop disconnects players
-    private static int StopServer(CommandContext<CommandSourceStack> context)
-    {
-        var source = RequirePlayer(context);
-        if (source is null) return 0;
-        source.SendSuccess("stopping the server");
-        source.Server.Stop();
-        return 1;
-    }
+    //RegisterEnchant registers the vanilla enchant command tree
+    private void RegisterEnchant()
+        => EnchantCommand.Register(_dispatcher);
+
+    //RegisterRandom registers the vanilla random command tree
+    private void RegisterRandom()
+        => RandomCommand.Register(_dispatcher);
+
+    //RegisterRide registers the vanilla ride command tree
+    private void RegisterRide()
+        => RideCommand.Register(_dispatcher);
+
+    //RegisterSummon registers the vanilla summon command tree
+    private void RegisterSummon()
+        => SummonCommand.Register(_dispatcher);
+
+    //RegisterTrigger registers the vanilla trigger command tree
+    private void RegisterTrigger()
+        => TriggerCommand.Register(_dispatcher);
+
+    //RegisterWardenSpawnTracker registers the vanilla warden_spawn_tracker command tree
+    private void RegisterWardenSpawnTracker()
+        => WardenSpawnTrackerCommand.Register(_dispatcher);
+
+    //RegisterSpawnArmorTrims registers the vanilla spawn_armor_trims command tree
+    private void RegisterSpawnArmorTrims()
+        => SpawnArmorTrimsCommand.Register(_dispatcher);
+
+    //RegisterServerPack registers the vanilla serverpack command tree
+    private void RegisterServerPack()
+        => ServerPackCommand.Register(_dispatcher);
+
+    //RegisterFetchProfile registers the vanilla fetchprofile command tree
+    private void RegisterFetchProfile()
+        => FetchProfileCommand.Register(_dispatcher);
+
+    //RegisterAdvancement registers the vanilla advancement command tree
+    private void RegisterAdvancement()
+        => AdvancementCommands.Register(_dispatcher);
+
+    //RegisterBossBar registers the vanilla bossbar command tree
+    private void RegisterBossBar()
+        => BossBarCommands.Register(_dispatcher);
+
+    //RegisterChase registers the vanilla chase command tree
+    private void RegisterChase()
+        => ChaseCommand.Register(_dispatcher);
+
+    //RegisterDialog registers the vanilla dialog command tree
+    private void RegisterDialog()
+        => DialogCommand.Register(_dispatcher);
+
+    //RegisterWaypoint registers the vanilla waypoint command tree
+    private void RegisterWaypoint()
+        => WaypointCommand.Register(_dispatcher);
+
+    //RegisterDebugConfig registers the vanilla debugconfig command tree
+    private void RegisterDebugConfig()
+        => DebugConfigCommand.Register(_dispatcher);
+
+    //RegisterDebugMobSpawning registers the vanilla debugmobspawning command tree
+    private void RegisterDebugMobSpawning()
+        => DebugMobSpawningCommand.Register(_dispatcher);
+
+    //RegisterDebugPath registers the vanilla debugpath command tree
+    private void RegisterDebugPath()
+        => DebugPathCommand.Register(_dispatcher);
+
+    //RegisterSchedule registers the vanilla schedule command tree
+    private void RegisterSchedule()
+        => ScheduleCommand.Register(_dispatcher);
+
+    //RegisterDataPack registers the vanilla datapack command tree
+    private void RegisterDataPack()
+        => DataPackCommand.Register(_dispatcher);
+
+    //RegisterFunction registers the vanilla function command tree
+    private void RegisterFunction()
+        => FunctionCommand.Register(_dispatcher);
+
+    //RegisterLocate registers the vanilla locate command tree
+    private void RegisterLocate()
+        => LocateCommand.Register(_dispatcher);
+
+    //RegisterLoot registers the vanilla loot command tree
+    private void RegisterLoot()
+        => LootCommand.Register(_dispatcher);
+
+    //RegisterPlace registers the vanilla place command tree
+    private void RegisterPlace()
+        => PlaceCommand.Register(_dispatcher);
+
+    //RegisterRaid registers the vanilla raid command tree
+    private void RegisterRaid()
+        => RaidCommand.Register(_dispatcher);
+
+    //RegisterScoreboard registers the vanilla scoreboard command tree
+    private void RegisterScoreboard()
+        => ScoreboardCommand.Register(_dispatcher);
+
+    //RegisterTeam registers the vanilla team command tree
+    private void RegisterTeam()
+        => TeamCommand.Register(_dispatcher);
 
     //RegisterClear registers the vanilla clear command tree
     private void RegisterClear()
-        => ClearCommand.Register(_dispatcher);
+        => ClearInventoryCommands.Register(_dispatcher);
 
     //RegisterKill registers the vanilla kill command tree
     private void RegisterKill()
@@ -451,63 +542,21 @@ public sealed class CommandManager
 
     //RegisterTellraw registers the vanilla tellraw command tree
     private void RegisterTellraw()
-        => TellrawCommand.Register(_dispatcher);
+        => TellRawCommand.Register(_dispatcher);
 
     //RegisterTitle registers the vanilla title command tree
     private void RegisterTitle()
         => TitleCommand.Register(_dispatcher);
 
-    //RegisterGive registers /give <targets> <item> [count], maps to the vanilla give command tree
+    //RegisterGive registers /give via the vanilla-named command class
     private void RegisterGive()
-    {
-        _dispatcher.Register(LiteralArgumentBuilder<CommandSourceStack>.Literal("give")
-            .Requires(s => s.HasPermission(2))
-            .Then(RequiredArgumentBuilder<CommandSourceStack, EntitySelector>.Argument("targets", EntityArgument.Players())
-                .Then(RequiredArgumentBuilder<CommandSourceStack, ItemInput>.Argument("item", ItemArgument.Item())
-                    .Executes(context => Give(context, 1))
-                    .Then(RequiredArgumentBuilder<CommandSourceStack, int>.Argument("count", IntegerArgumentType.Integer(1))
-                        .Executes(context => Give(context, IntegerArgumentType.GetInteger(context, "count")))))));
-    }
+        => GiveCommand.Register(_dispatcher);
 
     //RegisterItem registers the vanilla item command tree, reading/writing items by slot name
     private void RegisterItem()
-        => ItemCommand.Register(_dispatcher);
+        => ItemCommands.Register(_dispatcher);
 
     //RegisterData registers the vanilla data command tree, reading/writing NBT of block entities/entities/command storage
     private void RegisterData()
         => DataCommands.Register(_dispatcher);
-
-    //Give uses the core give entry, maps to the vanilla give command's inventory.add plus drop combination
-    //What fits goes into the inventory; what does not is dropped at the player's feet by the core; the actual placed count is returned by the core
-    private static int Give(CommandContext<CommandSourceStack> context, int count)
-    {
-        var source = RequirePlayer(context);
-        if (source is null) return 0;
-        var input = ItemArgument.GetItemInput(context, "item");
-        var players = EntityArgument.GetPlayers(context, "targets");
-        var name = input.Id.ToShortString();
-        var given = 0;
-        foreach (var player in players)
-        {
-            var stack = new ItemStack(input.Item.BuiltInRegistryHolder, count, input.Components);
-            var placed = player.GiveItem(stack);
-            if (placed == 0)
-            {
-                source.SendFailure($"player {player.Profile.Name}'s inventory is full");
-                continue;
-            }
-            if (ReferenceEquals(player, source.Player))
-            {
-                source.SendSuccess($"gave {placed} x {name}");
-            }
-            else
-            {
-                source.SendSuccess($"gave {player.Profile.Name} {placed} x {name}");
-                player.Connection.Send(new ClientboundSystemChatPacket(
-                    Component.Literal($"received {placed} x {name}"), false));
-            }
-            given++;
-        }
-        return given;
-    }
 }

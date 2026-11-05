@@ -10,12 +10,18 @@ namespace NacreCraft.Game.Commands;
 //Vanilla's target argument is a game profile that may include offline players; this only resolves online player names
 public static class OpCommand
 {
+    //Register registers /op only; the /deop tree lives in DeOpCommands
     public static void Register(CommandDispatcher<CommandSourceStack> dispatcher)
     {
         dispatcher.Register(LiteralArgumentBuilder<CommandSourceStack>.Literal("op")
             .Requires(s => s.HasPermission(3))
             .Then(RequiredArgumentBuilder<CommandSourceStack, string>.Argument("target", StringArgumentType.Word())
                 .Executes(context => Apply(context, true))));
+    }
+
+    //RegisterDeOp registers /deop, maps to vanilla DeOpCommands
+    public static void RegisterDeOp(CommandDispatcher<CommandSourceStack> dispatcher)
+    {
         dispatcher.Register(LiteralArgumentBuilder<CommandSourceStack>.Literal("deop")
             .Requires(s => s.HasPermission(3))
             .Then(RequiredArgumentBuilder<CommandSourceStack, string>.Argument("target", StringArgumentType.Word())
@@ -23,7 +29,7 @@ public static class OpCommand
     }
 
     //Apply adds/removes from the list by the flag; online targets refresh their permission level and sync to the client immediately
-    private static int Apply(CommandContext<CommandSourceStack> context, bool op)
+    internal static int Apply(CommandContext<CommandSourceStack> context, bool op)
     {
         if (context.GetSource() is not ServerCommandSource source) return 0;
         var name = StringArgumentType.GetString(context, "target");

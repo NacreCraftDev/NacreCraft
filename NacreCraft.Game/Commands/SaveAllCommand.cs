@@ -4,9 +4,9 @@ using NacreCraft.Commands.Context;
 
 namespace NacreCraft.Game.Commands;
 
-//SaveCommand save-all/save-off/save-on commands, maps to vanilla net.minecraft.server.commands.SaveAllCommand etc.
-//save-all flushes everything immediately; save-off/save-on toggle periodic auto-flush
-public static class SaveCommand
+//SaveAllCommand save-all command, maps to vanilla net.minecraft.server.commands.SaveAllCommand
+//save-all flushes everything immediately; the flush subcommand is accepted for parity and does the same
+public static class SaveAllCommand
 {
     public static void Register(CommandDispatcher<CommandSourceStack> dispatcher)
     {
@@ -15,14 +15,6 @@ public static class SaveCommand
             .Executes(All)
             .Then(LiteralArgumentBuilder<CommandSourceStack>.Literal("flush")
                 .Executes(All)));
-
-        dispatcher.Register(LiteralArgumentBuilder<CommandSourceStack>.Literal("save-off")
-            .Requires(s => s.HasPermission(4))
-            .Executes(context => SetAuto(context, false)));
-
-        dispatcher.Register(LiteralArgumentBuilder<CommandSourceStack>.Literal("save-on")
-            .Requires(s => s.HasPermission(4))
-            .Executes(context => SetAuto(context, true)));
     }
 
     //All flushes immediately; a full write blocks the main thread so the reply is sent first
@@ -35,8 +27,8 @@ public static class SaveCommand
         return 1;
     }
 
-    //SetAuto toggles auto-flush; it reports no duplicate setting when already in the target state
-    private static int SetAuto(CommandContext<CommandSourceStack> context, bool enabled)
+    //SetAuto toggles auto-flush for save-off/save-on; it reports no duplicate setting when already in the target state
+    internal static int SetAuto(CommandContext<CommandSourceStack> context, bool enabled)
     {
         if (context.GetSource() is not ServerCommandSource source) return 0;
         if (source.Server.IsSavingEnabled == enabled)

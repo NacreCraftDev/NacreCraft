@@ -6,9 +6,9 @@ using NacreCraft.Game.World.Level;
 
 namespace NacreCraft.Game.Commands;
 
-//DefaultGameModeCommand defaultgamemode command, maps to vanilla net.minecraft.server.commands.DefaultGameModeCommands
+//DefaultGameModeCommands defaultgamemode command, maps to vanilla net.minecraft.server.commands.DefaultGameModeCommands
 //Changing the default game mode only affects players joining later; online ones must switch with gamemode themselves
-public static class DefaultGameModeCommand
+public static class DefaultGameModeCommands
 {
     public static void Register(CommandDispatcher<CommandSourceStack> dispatcher)
     {
