@@ -1,5 +1,6 @@
 using NacreCraft.DataFixer;
 using NacreCraft.Logging;
+using NacreCraft.Nbt;
 using NacreCraft.Registry;
 
 namespace NacreCraft.Storage;
@@ -28,11 +29,14 @@ public sealed class LevelStorageAccess : IDisposable
     //One SimpleRegionStorage per dimension, cached to avoid recreating
     private readonly Dictionary<ResourceKey<Level>, SimpleRegionStorage> _dimensionStorages = new();
     //DirectoryLock exclusively holds session.lock, preventing multiple processes operating the same world
-    private readonly DirectoryLock? _directoryLock;
+    private DirectoryLock? _directoryLock;
     private bool _disposed;
 
     public string WorldName => _worldName;
     public string WorldDir => _worldDir;
+
+    //LevelId the world folder name, maps to vanilla LevelStorageAccess.getLevelId
+    public string LevelId => _worldName;
 
     //LevelDataPath, the world metadata file path, matches vanilla level.dat
     public string LevelDataPath => Path.Combine(_worldDir, "level.dat");
@@ -93,6 +97,30 @@ public sealed class LevelStorageAccess : IDisposable
     //GetExistingRegionStorage gets an already-created dimension storage, or null when absent
     public SimpleRegionStorage? GetExistingRegionStorage(ResourceKey<Level> levelKey)
         => _dimensionStorages.TryGetValue(levelKey, out var storage) ? storage : null;
+
+    //GetUnfixedDataTag reads the Data compound of level.dat, maps to vanilla getUnfixedDataTag
+    //Vanilla returns a Dynamic; the NBT layer here works on CompoundTag directly
+    public CompoundTag GetUnfixedDataTag()
+    {
+        var tag = NbtIo.ReadCompressed(LevelDataPath, NbtAccounter.UnlimitedHeap());
+        return tag.GetCompound("Data") ?? new CompoundTag();
+    }
+
+    //ReleaseTemporarilyAndRun drops the session lock around an action, maps to vanilla releaseTemporarilyAndRun
+    //The upgrade renames the world folder, which Windows refuses while session.lock is still open
+    public void ReleaseTemporarilyAndRun(System.Action action)
+    {
+        _directoryLock?.Dispose();
+        _directoryLock = null;
+        try
+        {
+            action();
+        }
+        finally
+        {
+            if (!_disposed) _directoryLock = DirectoryLock.Acquire(_worldDir);
+        }
+    }
 
     public void Dispose()
     {

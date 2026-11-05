@@ -92,7 +92,7 @@ public static class NacreCraftKernel
         Log.Info($"World data version: {SharedConstants.WorldDataVersion}");
         Log.Info($"Target TPS: {SharedConstants.TicksPerSecond}");
 
-        var embedded = EmbeddedAssemblyLoader.ListEmbeddedAssemblies();
+        var embedded = EmbeddedAssemblyLoader.ListKernelAssemblies();
         if (embedded.Count > 0)
         {
             //Emitted as one entry rather than one per name: the format puts a separator in front of every entry, so a

@@ -3,21 +3,15 @@ using System.Runtime.Loader;
 
 namespace NacreCraft;
 
-//Embedded assembly loader (.NET-only technique).
+//Kernel assembly loader.
 //Through the AssemblyLoadContext.Resolving event, when a sub-library is not found by the runtime,
-//load its byte stream from the main library's embedded resources (NacreCraft.Embedded.*.dll).
-//Maps to section 4 "Load sub-libraries via embedded resources" of the C# kernel rewrite plan.
+//load its byte stream from the kernel directory next to the program.
+//The embedded resources this used to read were a leftover of the early design; every one of them also ships as a file
+//in the kernel directory, so the copy inside the main library was dead weight.
 public static class EmbeddedAssemblyLoader
 {
-    //Main library assembly (contains embedded resources).
-    private static readonly Assembly MainAssembly = typeof(EmbeddedAssemblyLoader).Assembly;
-
-    //Naming prefix for embedded resources, matching the csproj's LogicalName.
-    private const string ResourcePrefix = "NacreCraft.Embedded.";
-
     //KernelDirectoryName kernel assembly subdirectory name.
-    //The kernel upper-layer assemblies Game/Server/Client/Gpu reference the main library in turn and cannot be embedded into it,
-    //so by convention each executable project moves them after build into this subdirectory under the output directory, resolved on demand at runtime.
+    //Every sub-library is moved there after build, so they stay out of the output root and are resolved on demand.
     public const string KernelDirectoryName = "kernel";
 
     //Whether already initialized.
@@ -72,16 +66,10 @@ public static class EmbeddedAssemblyLoader
         return context.LoadFromStream(rewritten);
     }
 
-    //ReadAssemblyBytes fetches original bytes by assembly name: embedded resources first, the kernel directory next, the run directory as fallback.
+    //ReadAssemblyBytes fetches original bytes by assembly name: the kernel directory first, the run directory as fallback.
     //Returns null when not found. Both the preload-rewrite path and the resolution callback go through here, ensuring both paths get the same source.
     public static byte[]? ReadAssemblyBytes(string assemblyName)
     {
-        var embedded = ReadEmbeddedAssembly(assemblyName);
-        if (embedded is not null)
-        {
-            return embedded;
-        }
-
         var kernelPath = Path.Combine(AppPaths.BaseDirectory, KernelDirectoryName, assemblyName + ".dll");
         if (File.Exists(kernelPath))
         {
@@ -93,33 +81,16 @@ public static class EmbeddedAssemblyLoader
         return File.Exists(directPath) ? File.ReadAllBytes(directPath) : null;
     }
 
-    //Read only the bytes from embedded resources; returns null when absent.
-    //To fetch kernel assembly bytes (embedded or kernel directory), use ReadAssemblyBytes.
-    public static byte[]? ReadEmbeddedAssembly(string assemblyName)
+    //ListKernelAssemblies names every assembly sitting in the kernel directory, for diagnostics and mod target collection.
+    public static IReadOnlyList<string> ListKernelAssemblies()
     {
-        using var stream = MainAssembly.GetManifestResourceStream(ResourcePrefix + assemblyName + ".dll");
-        if (stream is null)
-        {
-            return null;
-        }
+        var directory = Path.Combine(AppPaths.BaseDirectory, KernelDirectoryName);
+        if (!Directory.Exists(directory))
+            return Array.Empty<string>();
 
-        using var memory = new MemoryStream();
-        stream.CopyTo(memory);
-        return memory.ToArray();
-    }
-
-    //List all loadable embedded sub-libraries (diagnostics/debug only).
-    public static IReadOnlyList<string> ListEmbeddedAssemblies()
-    {
         var result = new List<string>();
-        foreach (var name in MainAssembly.GetManifestResourceNames())
-        {
-            if (name.StartsWith(ResourcePrefix, StringComparison.Ordinal) && name.EndsWith(".dll", StringComparison.Ordinal))
-            {
-                var assemblyName = name.Substring(ResourcePrefix.Length, name.Length - ResourcePrefix.Length - ".dll".Length);
-                result.Add(assemblyName);
-            }
-        }
+        foreach (var path in Directory.EnumerateFiles(directory, "*.dll"))
+            result.Add(Path.GetFileNameWithoutExtension(path));
         return result;
     }
 }

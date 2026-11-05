@@ -115,6 +115,22 @@ public readonly struct Direction : IEquatable<Direction>
     //opposite reverses the direction
     public Direction Opposite => ById(OppositeId);
 
+    //UnitVec3i the unit vector of this direction, maps to vanilla getUnitVec3i
+    public Vec3i UnitVec3i => new(StepX, StepY, StepZ);
+
+    //GetNearest the direction closest to a vector, maps to vanilla Direction.getNearest
+    //The dominant axis wins, ties fall back to the given direction or NORTH
+    public static Direction GetNearest(Vec3i vec, Direction? fallback = null)
+    {
+        var absX = Math.Abs(vec.X);
+        var absY = Math.Abs(vec.Y);
+        var absZ = Math.Abs(vec.Z);
+        if (absX > absY && absX > absZ) return vec.X > 0 ? East : West;
+        if (absZ > absX && absZ > absY) return vec.Z > 0 ? South : North;
+        if (absY > absX && absY > absZ) return vec.Y > 0 ? Up : Down;
+        return fallback ?? North;
+    }
+
     //counterClockWise rotates counter-clockwise once, maps to vanilla getCounterClockWise
     //Only defined for horizontal directions, vanilla throws for vertical ones, here it falls back to itself
     public Direction CounterClockWise => Id3D switch

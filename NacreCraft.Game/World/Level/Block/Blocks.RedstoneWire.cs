@@ -1,4 +1,5 @@
 using NacreCraft.Game.Server;
+using NacreCraft.Game.World.Level.Redstone;
 using NacreCraft.Game.World.Phys.Collision;
 using NacreCraft.Primitives;
 using NacreCraft.Primitives.Phys;
@@ -74,6 +75,14 @@ public static partial class Blocks
                 state.GetValue(BlockStateProperties.EastRedstone),
                 state.GetValue(BlockStateProperties.SouthRedstone),
                 state.GetValue(BlockStateProperties.WestRedstone))];
+
+        //_evaluator the wire power rule, maps to the vanilla RedstoneWireEvaluator field
+        private readonly DefaultRedstoneWireEvaluator _evaluator;
+
+        public RedstoneWireBlock()
+        {
+            _evaluator = new DefaultRedstoneWireEvaluator(this);
+        }
 
         public override Identifier Id => Identifier.WithDefaultNamespace("redstone_wire");
 
@@ -293,60 +302,9 @@ public static partial class Blocks
             return signal;
         }
 
-        //UpdatePowerStrength computes the target power and writes it back, maps to vanilla DefaultRedstoneWireEvaluator
-        //The write-back uses only the Clients flag; after a change this block and the neighbors of all six directions must recompute
+        //UpdatePowerStrength is delegated to the evaluator, maps to vanilla DefaultRedstoneWireEvaluator
         private void UpdatePowerStrength(ServerLevel level, BlockPos pos, BlockState state)
-        {
-            var targetStrength = CalculateTargetStrength(level, pos);
-            if (state.GetValue(BlockStateProperties.Power) == targetStrength) return;
-            if (level.GetBlockState(pos) is { } current && current == state)
-                level.SetBlock(pos, state.SetValue(BlockStateProperties.Power, targetStrength),
-                    BlockUpdateFlags.Clients);
-            level.UpdateNeighborsAt(pos, this);
-            foreach (var direction in Direction.Values)
-                level.UpdateNeighborsAt(pos.Offset(direction), this);
-        }
-
-        //CalculateTargetStrength takes the max of neighbor signals and signals from adjacent wire, maps to the vanilla method of the same name
-        private int CalculateTargetStrength(ServerLevel level, BlockPos pos)
-        {
-            var blockSignal = GetBlockSignal(level, pos);
-            if (blockSignal == 15) return blockSignal;
-            return Math.Max(blockSignal, GetIncomingWireSignal(level, pos));
-        }
-
-        //GetIncomingWireSignal takes the wire power of the four neighboring cells plus their upper and lower diagonals, subtracting one and taking the max, maps to the vanilla method of the same name
-        //Subtracting one is a single level of decay per block; the two diagonal cells bypass that decay and whether they apply is decided by whether the neighbor is a conductor
-        private static int GetIncomingWireSignal(ServerLevel level, BlockPos pos)
-        {
-            var abovePos = pos.Offset(Direction.Up);
-            var wireSignal = 0;
-            foreach (var direction in HorizontalDirections)
-            {
-                var neighbourPos = pos.Offset(direction);
-                if (level.GetBlockState(neighbourPos) is not { } neighbour) continue;
-                wireSignal = Math.Max(wireSignal, GetWireSignal(neighbour));
-                if (IsRedstoneConductor(level, neighbourPos) && !IsRedstoneConductor(level, abovePos))
-                {
-                    var aboveNeighbourPos = neighbourPos.Offset(Direction.Up);
-                    wireSignal = Math.Max(wireSignal,
-                        GetWireSignal(level.GetBlockState(aboveNeighbourPos)));
-                }
-                else if (!IsRedstoneConductor(level, neighbourPos))
-                {
-                    var belowNeighbourPos = neighbourPos.Offset(Direction.Down);
-                    wireSignal = Math.Max(wireSignal,
-                        GetWireSignal(level.GetBlockState(belowNeighbourPos)));
-                }
-            }
-            return Math.Max(0, wireSignal - 1);
-        }
-
-        //GetWireSignal takes the power of that cell when it is wire, maps to the vanilla method of the same name
-        private static int GetWireSignal(BlockState? state)
-            => state is { } wire && wire.Owner.Id == RedstoneIds.Wire
-                ? wire.GetValue(BlockStateProperties.Power)
-                : 0;
+            => _evaluator.UpdatePowerStrength(level, pos, state, null, false);
 
         //NeighborChanged recomputes the power on a neighbor change and drops when it cannot stand, maps to the vanilla method of the same name
         public override void NeighborChanged(ServerLevel level, BlockPos pos, BlockState state,
@@ -452,14 +410,14 @@ public static partial class Blocks
 
         //HorizontalDirections the four horizontal directions in the order of vanilla Direction.Plane.HORIZONTAL
         //Redstone is sensitive to update order, it cannot be reordered by axis
-        private static readonly Direction[] HorizontalDirections =
+        public static readonly Direction[] HorizontalDirections =
         {
             Direction.North, Direction.South, Direction.West, Direction.East,
         };
 
         //SideProperty gets the matching connection property for a horizontal direction, maps to vanilla PROPERTY_BY_DIRECTION
         //Only defined for horizontal directions and call sites must filter first, matching vanilla EnumMap falling to null
-        private static EnumProperty<RedstoneSide> SideProperty(Direction direction) => direction.Id3D switch
+        public static EnumProperty<RedstoneSide> SideProperty(Direction direction) => direction.Id3D switch
         {
             Direction.NorthId => BlockStateProperties.NorthRedstone,
             Direction.SouthId => BlockStateProperties.SouthRedstone,
@@ -467,8 +425,18 @@ public static partial class Blocks
             _ => BlockStateProperties.EastRedstone,
         };
 
+        //PropertyByDirection the connection property or null for vertical directions, maps to vanilla PROPERTY_BY_DIRECTION
+        public static EnumProperty<RedstoneSide>? PropertyByDirection(Direction direction) => direction.Id3D switch
+        {
+            Direction.NorthId => BlockStateProperties.NorthRedstone,
+            Direction.SouthId => BlockStateProperties.SouthRedstone,
+            Direction.WestId => BlockStateProperties.WestRedstone,
+            Direction.EastId => BlockStateProperties.EastRedstone,
+            _ => null,
+        };
+
         //IsRedstoneConductor whether that cell is a redstone conductor, maps to vanilla BlockState.isRedstoneConductor
-        private static bool IsRedstoneConductor(ServerLevel level, BlockPos pos)
+        public static bool IsRedstoneConductor(ServerLevel level, BlockPos pos)
             => level.GetBlockState(pos) is { } state
                 && state.Owner is IBlockSignalBehaviour behaviour
                 && behaviour.IsRedstoneConductor(level, pos, state);

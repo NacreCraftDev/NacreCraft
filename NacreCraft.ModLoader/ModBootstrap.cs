@@ -168,23 +168,18 @@ public static class ModBootstrap
     }
 
     //CollectKernelAssemblies: the injectable kernel assembly names
-    //Embedded sub-libraries come from the main library's embedded resources; the upper assemblies Game/Client/Server/Gpu are moved into the kernel subdirectory after build
-    //Both sources must be collected, otherwise rules targeting them are silently dropped
-    //The main library and the loader itself are excluded; regular mods may not rewrite the kernel body or the loading flow
+    //Every sub-library is moved into the kernel subdirectory after build, so the directory listing is the whole set
+    //The main library, the boot layer and the loading chain are excluded; regular mods may not rewrite the kernel body or the loading flow
     public static List<string> CollectKernelAssemblies()
     {
-        var names = new List<string>(EmbeddedAssemblyLoader.ListEmbeddedAssemblies());
-        var kernelDirectory = Path.Combine(AppPaths.BaseDirectory, EmbeddedAssemblyLoader.KernelDirectoryName);
-        if (!Directory.Exists(kernelDirectory))
-            return names;
-
-        foreach (var path in Directory.EnumerateFiles(kernelDirectory, "NacreCraft.*.dll"))
+        var names = new List<string>();
+        foreach (var name in EmbeddedAssemblyLoader.ListKernelAssemblies())
         {
-            var name = Path.GetFileNameWithoutExtension(path);
-            if (name is "NacreCraft" or "NacreCraft.Loader" or "NacreCraft.ModLoader")
+            //The boot layer and the loading chain itself are not kernel subject matter, so no rule may target them
+            if (name is "NacreCraft" or "NacreCraft.Loader" or "NacreCraft.ModLoader"
+                or "NacreCraft.Boot" or "NacreCraft.Logging" or "NacreCraft.Hook")
                 continue;
-            if (!names.Contains(name, StringComparer.OrdinalIgnoreCase))
-                names.Add(name);
+            names.Add(name);
         }
         return names;
     }

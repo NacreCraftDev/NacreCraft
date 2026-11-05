@@ -166,6 +166,11 @@ public abstract class ServerLevel : ILevelReader, NacreCraft.Registry.IEntityIns
     //Random, the level random source, used by scheduled and random ticks
     public RandomSource Random { get; set; } = RandomSource.Create();
 
+    //EnabledFeatures the feature flags of the world, maps to vanilla Level.enabledFeatures
+    //The experimental redstone evaluator checks whether the redstone experiments are on
+    public NacreCraft.Registry.Flag.FeatureFlagSet EnabledFeatures { get; set; } =
+        NacreCraft.Registry.Flag.FeatureFlagSet.Of();
+
     //IsHandlingTick, whether a level tick is being processed, maps to vanilla ServerLevel.handlingTick
     //Set true by the server main loop at the start of a level tick and false after block events run
     //Piston retraction checks use it: a retraction signal in the same tick means the push is not done yet and must downgrade to a drop
@@ -394,6 +399,16 @@ public abstract class ServerLevel : ILevelReader, NacreCraft.Registry.IEntityIns
     public void NeighborChanged(BlockPos pos, BlockState state, NacreCraft.Registry.Block changedBlock,
         bool movedByPiston)
         => NeighborUpdater.NeighborChanged(pos, state, changedBlock, movedByPiston);
+
+    //NeighborChanged orientation-aware overloads, maps to the vanilla redstone-experiment signatures
+    //The current block behaviors do not read the frame yet, so it is dropped at this boundary
+    public void NeighborChanged(BlockPos pos, NacreCraft.Registry.Block changedBlock,
+        NacreCraft.Storage.Redstone.Orientation? orientation)
+        => NeighborChanged(pos, changedBlock);
+
+    public void NeighborChanged(BlockState state, BlockPos pos, NacreCraft.Registry.Block changedBlock,
+        NacreCraft.Storage.Redstone.Orientation? orientation, bool movedByPiston)
+        => NeighborChanged(pos, state, changedBlock, movedByPiston);
 
     //NeighborShapeChanged enqueues a shape update, maps to vanilla neighborShapeChanged
     //pos is the block being updated; neighbourPos is the source block that triggered this update
