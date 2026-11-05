@@ -28,6 +28,10 @@ public static class HolderSetCodecs
     public static readonly Codec<Holder<Structure>> StructureRef =
         new HolderRefCodec<Structure>(BuiltInRegistries.STRUCTURE);
 
+    //StructureSet structure set codec used by the entity variant structure check; supports #tags and id lists
+    public static readonly Codec<HolderSet<Structure>> StructureSet =
+        new HolderSetCodec<Structure>(BuiltInRegistries.STRUCTURE);
+
     //StructureSetRef single structure set reference codec used by the other_set field of placement exclusion zones
     public static readonly Codec<Holder<StructureSet>> StructureSetRef =
         new HolderRefCodec<StructureSet>(BuiltInRegistries.STRUCTURE_SET);

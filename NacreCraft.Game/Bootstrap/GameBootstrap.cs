@@ -152,6 +152,9 @@ public static class GameBootstrap
             //Dialog action codecs are registered by name, for the dialog action dispatch codec to resolve them
             NacreCraft.Game.Server.Dialog.ActionTypes.Bootstrap(BuiltInRegistries.DIALOG_ACTION_TYPE);
             Mark("dialog-action-types");
+            //Spawn conditions are registered by name for the variant spawn-condition dispatch codec
+            NacreCraft.Game.World.Entity.Variant.SpawnConditions.Bootstrap(BuiltInRegistries.SPAWN_CONDITION_TYPE);
+            Mark("spawn-conditions");
             //Entity attributes are registered before entity types; entity construction builds its table from attributes, and this must also precede registry freeze
             NacreCraft.Registry.EntityAttribute.Attributes.Bootstrap();
             Mark("attributes");

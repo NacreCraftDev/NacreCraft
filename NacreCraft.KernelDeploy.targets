@@ -5,7 +5,8 @@
 
   <PropertyGroup>
     <KernelDirectoryName Condition="'$(KernelDirectoryName)' == ''">kernel</KernelDirectoryName>
-    <KernelKeepAssemblies Condition="'$(KernelKeepAssemblies)' == ''">NacreCraft;NacreCraft.ModLoader</KernelKeepAssemblies>
+    <!--The boot layer, the log sink and the hook engine sit beside the executable: the loader needs them before any kernel assembly is resolved-->
+    <KernelKeepAssemblies Condition="'$(KernelKeepAssemblies)' == ''">NacreCraft;NacreCraft.ModLoader;NacreCraft.Boot;NacreCraft.Logging;NacreCraft.Hook</KernelKeepAssemblies>
     <KernelKeepAssemblies>$(KernelKeepAssemblies);$(AssemblyName)</KernelKeepAssemblies>
   </PropertyGroup>
   <Target Name="DeployKernelAssemblies" AfterTargets="Build">

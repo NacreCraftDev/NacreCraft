@@ -1,7 +1,5 @@
 using System.Runtime.Loader;
 using NacreCraft.Logging;
-using NacreCraft.Network.Chat;
-using NacreCraft.Util;
 
 namespace NacreCraft.ModLoader;
 
@@ -123,17 +121,15 @@ public static class ModBootstrap
         //Registers with the host components; UI code that is not in the loading flow reads data from ModHost
         ModHost.Bind(manager, folder);
 
-        //The window comes up once loading is done, right before the kernel starts, and never blocks: startup carries on
-        //behind it. A failed load writes no report, so the lines are handed over directly
-        if (problems.Count > 0 && WindowAllowed())
+        //The problems are handed back instead of drawn here: the window needs the language table, which belongs to the
+        //kernel, and loading any kernel assembly at this point would close the injection window for the rest of the mods
+        return new ModBootstrapResult
         {
-            //Mod loading finishes before the kernel installs its language table, so the table the window needs is installed here
-            NcLanguageFiles.Extract();
-            NcLanguage.Load(Language.Default);
-            NativeErrorWindow.ShowModLoadFailure(string.Join(Environment.NewLine, problems), problems.Count);
-        }
-
-        return new ModBootstrapResult { Hooks = hooks, Manager = manager, Load = load };
+            Hooks = hooks,
+            Manager = manager,
+            Load = load,
+            Problems = problems,
+        };
     }
 
     //DebugModeRequested reports the --debug flag, the same spelling the launcher declares as a kernel flag
@@ -142,14 +138,6 @@ public static class ModBootstrap
     {
         var args = Environment.GetCommandLineArgs();
         return Array.IndexOf(args, "--debug") >= 0;
-    }
-
-    //WindowAllowed reports whether there is a desktop to draw on; the same two spellings the server accepts
-    //The flag is read off the command line because mod loading finishes long before ServerMain gets to decide it
-    private static bool WindowAllowed()
-    {
-        var args = Environment.GetCommandLineArgs();
-        return Array.IndexOf(args, "--nogui") < 0 && Array.IndexOf(args, "nogui") < 0;
     }
 
     //ApplyDependencyVersions: drops incompatible mods by the dependency versions declared in the manifest
@@ -230,4 +218,6 @@ public sealed class ModBootstrapResult
     public required ModHooks Hooks { get; init; }
     public required ModManager Manager { get; init; }
     public required LoadResult Load { get; init; }
+    //Problems the host turns into the failure window once the kernel has installed its language table
+    public required IReadOnlyList<string> Problems { get; init; }
 }

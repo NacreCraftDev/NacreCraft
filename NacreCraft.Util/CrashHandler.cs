@@ -57,6 +57,9 @@ public static class CrashHandler
             _installed = true;
         }
 
+        //The early guard only knew the BCL; from here this handler owns the same two events
+        EarlyCrashGuard.Disable();
+
         //The native layer only loads if the profiler variables are present while the process starts, so a run without
         //them restarts itself once here. This does not return in that case: the restarted process carries on from the
         //top and reaches this point again with the layer already in

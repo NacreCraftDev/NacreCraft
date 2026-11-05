@@ -48,19 +48,6 @@ internal sealed class SupplierValueGetter(Func<string> value) : Action.ValueGett
     public Tag AsTag() => StringTag.ValueOf(value());
 }
 
-//XmapMapCodec maps a concrete action codec to the registry marker type, the C# stand-in for MapCodec.xmap
-internal sealed class XmapMapCodec<TA, TB>(MapCodec<TA> inner, Func<TA, TB> to, Func<TB, TA> from) : MapCodec<TB>
-{
-    public DataResult<TB> Decode<U>(DynamicOps<U> ops, MapLike<U> input) => inner.Decode(ops, input).Map(to);
-
-    public DataResult<U> EncodeStart<U>(DynamicOps<U> ops, TB value) => inner.EncodeStart(ops, from(value));
-
-    public RecordBuilder<U> EncodeTo<U>(DynamicOps<U> ops, TB value, RecordBuilder<U> builder)
-        => inner.EncodeTo(ops, from(value), builder);
-
-    public RecordBuilder<U> Encoder<U>(DynamicOps<U> ops) => inner.Encoder(ops);
-}
-
 //ActionDispatchCodec dispatches on the type field through the dialog_action_type registry, maps to vanilla Action.CODEC
 internal sealed class ActionDispatchCodec : ScalarCodec<Action>
 {

@@ -101,6 +101,12 @@ public static class NativeRelaunch
         startInfo.Environment["CORECLR_PROFILER_PATH"] = library;
         startInfo.Environment[AttachedFlag] = "1";
 
+        //The stack check entry is named here rather than compiled into the native library, so moving it later only
+        //changes these three lines. The native side falls back to the same defaults when they are absent
+        startInfo.Environment["NCN_STACK_CHECK_ASSEMBLY"] = "NacreCraft.Util";
+        startInfo.Environment["NCN_STACK_CHECK_TYPE"] = "NacreCraft.Util.NativeStackGuard";
+        startInfo.Environment["NCN_STACK_CHECK_METHOD"] = "EnsureStack";
+
         //The rewrite list is left alone: the layer decides on its own when the variable is absent, and that default
         //covers every assembly except the framework ones, mods included
 

@@ -29,6 +29,9 @@ public static class EnvironmentAttributes
     private static readonly AttributeType<AmbientSoundSettings> AmbientSoundsType =
         AttributeType<AmbientSoundSettings>.OfNotInterpolated(AmbientSoundSettings.Codec);
 
+    private static readonly AttributeType<MoonPhase> MoonPhaseType =
+        AttributeType<MoonPhase>.OfNotInterpolated(MoonPhases.Codec);
+
     public static readonly EnvironmentAttribute<int> FogColor = EnvironmentAttribute<int>.CreateBuilder(RgbColorType)
         .DefaultValue(0).SpatiallyInterpolated().Syncable().Build();
 
@@ -71,6 +74,11 @@ public static class EnvironmentAttributes
         EnvironmentAttribute<AmbientSoundSettings>.CreateBuilder(AmbientSoundsType)
             .DefaultValue(AmbientSoundSettings.Empty).Syncable().Build();
 
+    //MOON_PHASE the moon phase shown by the sky, maps to vanilla EnvironmentAttributes.MOON_PHASE
+    public static readonly EnvironmentAttribute<MoonPhase> MOON_PHASE =
+        EnvironmentAttribute<MoonPhase>.CreateBuilder(MoonPhaseType)
+            .DefaultValue(MoonPhase.FullMoon).Syncable().Build();
+
     public static readonly EnvironmentAttribute<bool> IncreasedFireBurnout = EnvironmentAttribute<bool>.CreateBuilder(BooleanType)
         .DefaultValue(false).Build();
 
@@ -112,6 +120,7 @@ public static class EnvironmentAttributes
         Register(BackgroundMusic, "audio/background_music");
         Register(MusicVolume, "audio/music_volume");
         Register(AmbientSounds, "audio/ambient_sounds");
+        Register(MOON_PHASE, "visual/moon_phase");
         Register(IncreasedFireBurnout, "gameplay/increased_fire_burnout");
         Register(SnowGolemMelts, "gameplay/snow_golem_melts");
         Register(BeesStayInHive, "gameplay/bees_stay_in_hive");

@@ -400,6 +400,11 @@ public interface ServerLevelAccessor : LevelAccessor
 {
     ServerLevel GetLevel();
 
+    //GetEnvironmentAttributes the environment attribute reader of the level, maps to vanilla environmentAttributes
+    //Until a level exposes its attribute system the empty reader answers the registered defaults
+    NacreCraft.Registry.Environment.EnvironmentAttributeReader GetEnvironmentAttributes()
+        => NacreCraft.Registry.Environment.EnvironmentAttributeReader.Empty;
+
     //AddFreshEntityWithPassengers adds the entity; passengers are not modelled on the entity yet, so only the root is added
     //Maps to vanilla addFreshEntityWithPassengers, degraded until entity passengers land
     void AddFreshEntityWithPassengers(RegEntity entity) => AddFreshEntity(entity);

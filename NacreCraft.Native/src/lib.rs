@@ -61,7 +61,12 @@ const FRAMEWORK_PREFIXES: &[&str] = &[
 ];
 
 //The assembly holding the entry the injected call points at, which must never be rewritten itself
-const GUARD_ASSEMBLY: &str = "NacreCraft.Util";
+//Read from the environment so the managed side can move the entry without this library being rebuilt
+const GUARD_ASSEMBLY_VARIABLE: &str = "NCN_STACK_CHECK_ASSEMBLY";
+const GUARD_ASSEMBLY_DEFAULT: &str = "NacreCraft.Util";
+
+//The resolved name, read once on first use
+static GUARD_ASSEMBLY_ENV: OnceLock<String> = OnceLock::new();
 
 //The parsed list, read once on first use
 //None means no list was configured, which stands for "everything except the framework"
@@ -282,7 +287,13 @@ fn is_framework(name: &str) -> bool {
 /// is_guard_assembly reports whether a simple name holds the entry the injected call points at
 /// Rewriting that assembly would put the check at the head of the check itself
 fn is_guard_assembly(name: &str) -> bool {
-    name.eq_ignore_ascii_case(GUARD_ASSEMBLY)
+    let guard = GUARD_ASSEMBLY_ENV.get_or_init(|| {
+        std::env::var(GUARD_ASSEMBLY_VARIABLE)
+            .ok()
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| GUARD_ASSEMBLY_DEFAULT.to_string())
+    });
+    name.eq_ignore_ascii_case(guard)
 }
 
 /// ncn_register_stack_overflow_callback takes the managed handler and the directory its reports belong in

@@ -177,9 +177,33 @@ static const unsigned int IlCallSize = 5;
 //call, so once the stack is short it keeps firing while the exception is unwound and handled, and the process ends up
 //dying on its way to reporting the problem; the kernel entry wraps it with a quiet period instead
 static const unsigned char StackCheckSignature[] = {0x00, 0x00, 0x01};
-static const WCHAR StackCheckTypeName[] = NC_WIDE("NacreCraft.Util.NativeStackGuard");
-static const WCHAR StackCheckMethodName[] = NC_WIDE("EnsureStack");
-static const WCHAR StackCheckAssemblyName[] = NC_WIDE("NacreCraft.Util");
+
+//StackCheckName reads one of the entry names from the environment, falling back to the built in default
+//The names live there rather than in the binary so the managed side can move the entry without this library being rebuilt;
+//the restart that installs the profiler already owns the environment block the child starts with
+//Both the variable and its value are plain ASCII, so the narrow environment API works on every platform
+static const std::wstring& StackCheckName(const char* variable, const wchar_t* fallback)
+{
+    static std::map<std::string, std::wstring> cache;
+    static std::mutex cacheMutex;
+    std::lock_guard<std::mutex> guard(cacheMutex);
+
+    const auto found = cache.find(variable);
+    if (found != cache.end())
+        return found->second;
+
+    std::wstring value(fallback);
+    const char* raw = std::getenv(variable);
+    if (raw != nullptr && raw[0] != '\0')
+    {
+        wchar_t buffer[512];
+        const size_t converted = std::mbstowcs(buffer, raw, sizeof(buffer) / sizeof(buffer[0]) - 1);
+        if (converted != static_cast<size_t>(-1))
+            value.assign(buffer, converted);
+    }
+
+    return cache.emplace(variable, std::move(value)).first->second;
+}
 
 static const IID IidMetaDataAssemblyEmit = {
     0x211EF15B, 0x5317, 0x4438, {0xB1, 0x96, 0xDE, 0xC8, 0x7B, 0x88, 0x76, 0x93}};
@@ -225,20 +249,21 @@ static mdMemberRef FindOrCreateStackCheckRef(ModuleID moduleId, IMetaDataEmit* e
 
     mdAssemblyRef coreLibRef = 0;
     HRESULT hr = assemblyEmit->DefineAssemblyRef(
-        nullptr, 0, StackCheckAssemblyName, &assemblyMeta, nullptr, 0, 0, &coreLibRef);
+        nullptr, 0, StackCheckName("NCN_STACK_CHECK_ASSEMBLY", L"NacreCraft.Util").c_str(), &assemblyMeta, nullptr, 0, 0, &coreLibRef);
     assemblyEmit->Release();
 
     if (FAILED(hr) || coreLibRef == 0)
         return 0;
 
     mdTypeRef typeRef = 0;
-    hr = emit->DefineTypeRefByName(coreLibRef, StackCheckTypeName, &typeRef);
+    hr = emit->DefineTypeRefByName(coreLibRef,
+        StackCheckName("NCN_STACK_CHECK_TYPE", L"NacreCraft.Util.NativeStackGuard").c_str(), &typeRef);
     if (FAILED(hr) || typeRef == 0)
         return 0;
 
     mdMemberRef memberRef = 0;
     hr = emit->DefineMemberRef(
-        typeRef, StackCheckMethodName, StackCheckSignature,
+        typeRef, StackCheckName("NCN_STACK_CHECK_METHOD", L"EnsureStack").c_str(), StackCheckSignature,
         static_cast<ULONG>(sizeof(StackCheckSignature)), &memberRef);
     if (FAILED(hr) || memberRef == 0)
         return 0;

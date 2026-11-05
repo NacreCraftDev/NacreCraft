@@ -33,6 +33,9 @@ public sealed record DimensionType(
     //MinYLimit lower bound for min_y, maps to vanilla DimensionType.MIN_Y
     public const int MinYLimit = -2032;
 
+    //MOON_BRIGHTNESS_PER_PHASE brightness factor of every moon phase, maps to vanilla MOON_BRIGHTNESS_PER_PHASE
+    public static readonly float[] MOON_BRIGHTNESS_PER_PHASE = { 1.0f, 0.75f, 0.5f, 0.25f, 0.0f, 0.25f, 0.5f, 0.75f };
+
     //DirectCodec element codec, maps to vanilla DIRECT_CODEC; only parses the fields that carry semantics here
     public static readonly Codec<DimensionType> DirectCodec = new DimensionTypeCodec();
 

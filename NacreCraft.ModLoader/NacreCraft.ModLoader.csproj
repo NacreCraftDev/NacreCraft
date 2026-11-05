@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\NacreCraft\NacreCraft.csproj" />
+    <ProjectReference Include="..\NacreCraft.Boot\NacreCraft.Boot.csproj" />
     <ProjectReference Include="..\NacreCraft.Hook\NacreCraft.Hook.csproj" />
     <PackageReference Include="Mono.Cecil" Version="0.11.6" />
   </ItemGroup>
