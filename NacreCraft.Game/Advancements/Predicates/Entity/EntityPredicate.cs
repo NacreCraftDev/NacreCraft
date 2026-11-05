@@ -2,6 +2,7 @@ using NacreCraft.Codec;
 using NacreCraft.Primitives;
 using NacreCraft.Registry;
 using NacreCraft.Registry.Codec;
+using RegSubPredicate = NacreCraft.Registry.EntitySubPredicate;
 
 namespace NacreCraft.Game.Advancements.Predicates.Entity;
 
@@ -11,21 +12,21 @@ namespace NacreCraft.Game.Advancements.Predicates.Entity;
 public sealed class EntityPredicate
 {
     //MapCodec mapping codec from type name to sub-predicate; the value codec is fetched by name from the registry, maps to vanilla MAP_CODEC
-    private static readonly Codec<Dictionary<Identifier, EntitySubPredicate>> MapCodec =
+    private static readonly Codec<Dictionary<Identifier, RegSubPredicate>> MapCodec =
         Codecs.DispatchedMap(IdentifierCodec.Instance, LookupCodec);
 
     //Codec persistence codec, maps to vanilla CODEC
     public static readonly Codec<EntityPredicate> Codec = MapCodec.ComapFlatMap(
         parts => DataResult<EntityPredicate>.Success(new EntityPredicate(parts)),
-        predicate => new Dictionary<Identifier, EntitySubPredicate>(predicate.Parts));
+        predicate => new Dictionary<Identifier, RegSubPredicate>(predicate.Parts));
 
     //Parts the sub-predicate set; keys are type names in the registry
-    public IReadOnlyDictionary<Identifier, EntitySubPredicate> Parts { get; }
+    public IReadOnlyDictionary<Identifier, RegSubPredicate> Parts { get; }
 
     //_combinedPart the merged single sub-predicate; checking goes through it
-    private readonly EntitySubPredicate _combinedPart;
+    private readonly RegSubPredicate _combinedPart;
 
-    public EntityPredicate(Dictionary<Identifier, EntitySubPredicate> parts)
+    public EntityPredicate(Dictionary<Identifier, RegSubPredicate> parts)
     {
         Parts = parts;
         _combinedPart = Combine(parts);
@@ -36,12 +37,12 @@ public sealed class EntityPredicate
         => entity is not null && _combinedPart.Matches(entity, level, position);
 
     //LookupCodec fetches the registered codec from the registry by type name; an unregistered one returns an error codec
-    private static Codec<EntitySubPredicate> LookupCodec(Identifier typeName)
+    private static Codec<RegSubPredicate> LookupCodec(Identifier typeName)
         => BuiltInRegistries.ENTITY_SUB_PREDICATE_TYPE.GetValue(typeName)
             ?? new UnknownSubPredicateCodec(typeName.ToString());
 
     //Combine an empty map is always true; a single one is returned directly; multiple are sorted by type priority then conjoined, maps to vanilla combine
-    private static EntitySubPredicate Combine(Dictionary<Identifier, EntitySubPredicate> parts)
+    private static RegSubPredicate Combine(Dictionary<Identifier, RegSubPredicate> parts)
     {
         if (parts.Count == 0) return TrueSubPredicate.Instance;
         if (parts.Count == 1) return parts.Values.First();
@@ -61,12 +62,12 @@ public sealed class EntityPredicate
     //Builder composite builder, maps to vanilla Builder
     public sealed class Builder
     {
-        private readonly Dictionary<Identifier, EntitySubPredicate> _parts = new();
+        private readonly Dictionary<Identifier, RegSubPredicate> _parts = new();
 
         public static Builder Entity() => new();
 
         //Put registers a sub-predicate by registry name, maps to vanilla put
-        public Builder Put(string typeName, EntitySubPredicate predicate)
+        public Builder Put(string typeName, RegSubPredicate predicate)
         {
             _parts[Identifier.Parse(typeName)] = predicate;
             return this;
@@ -126,7 +127,7 @@ internal sealed class TrueSubPredicate : EntitySubPredicate
 }
 
 //CompositeSubPredicate conjunction of several sub-predicates, maps to vanilla the merge when combine has more than two
-internal sealed class CompositeSubPredicate(IReadOnlyList<EntitySubPredicate> parts) : EntitySubPredicate
+internal sealed class CompositeSubPredicate(IReadOnlyList<NacreCraft.Registry.EntitySubPredicate> parts) : EntitySubPredicate
 {
     public bool Matches(NacreCraft.Registry.Entity entity, ILevelReader? level, Vec3? position)
     {
@@ -137,11 +138,12 @@ internal sealed class CompositeSubPredicate(IReadOnlyList<EntitySubPredicate> pa
 }
 
 //UnknownSubPredicateCodec unregistered sub-predicate type; both parsing and encoding error out
-internal sealed class UnknownSubPredicateCodec(string typeName) : ScalarCodec<EntitySubPredicate>
+internal sealed class UnknownSubPredicateCodec(string typeName) : ScalarCodec<NacreCraft.Registry.EntitySubPredicate>
 {
-    public override DataResult<EntitySubPredicate> Parse<U>(DynamicOps<U> ops, U input)
-        => DataResult<EntitySubPredicate>.Error(() => $"unknown entity sub-predicate type {typeName}");
+    public override DataResult<NacreCraft.Registry.EntitySubPredicate> Parse<U>(DynamicOps<U> ops, U input)
+        => DataResult<NacreCraft.Registry.EntitySubPredicate>.Error(
+            () => $"unknown entity sub-predicate type {typeName}");
 
-    public override DataResult<U> EncodeStart<U>(DynamicOps<U> ops, EntitySubPredicate value)
+    public override DataResult<U> EncodeStart<U>(DynamicOps<U> ops, NacreCraft.Registry.EntitySubPredicate value)
         => DataResult<U>.Error(() => $"unknown entity sub-predicate type {typeName}");
 }

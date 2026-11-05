@@ -28,21 +28,23 @@ public static class EntitySubPredicates
 
     //Register adapts a concrete sub-predicate's codec into the interface version and registers it by name
     private static void Register<T>(string name, Codec<T> codec) where T : class, EntitySubPredicate
-        => Registry<Codec<EntitySubPredicate>>.Register(BuiltInRegistries.ENTITY_SUB_PREDICATE_TYPE, name,
-            new EntitySubPredicateCodecAdapter<T>(codec));
+        => Registry<Codec<NacreCraft.Registry.EntitySubPredicate>>.Register(
+            BuiltInRegistries.ENTITY_SUB_PREDICATE_TYPE, name, new EntitySubPredicateCodecAdapter<T>(codec));
 }
 
-//EntitySubPredicateCodecAdapter adapts a concrete sub-predicate type's codec into the interface version, for the sub-predicate registry to dispatch
-internal sealed class EntitySubPredicateCodecAdapter<T> : ScalarCodec<EntitySubPredicate>
+//EntitySubPredicateCodecAdapter adapts a concrete sub-predicate type's codec into the registry interface version, for the sub-predicate registry to dispatch
+internal sealed class EntitySubPredicateCodecAdapter<T> : ScalarCodec<NacreCraft.Registry.EntitySubPredicate>
     where T : class, EntitySubPredicate
 {
     private readonly Codec<T> _inner;
 
     public EntitySubPredicateCodecAdapter(Codec<T> inner) => _inner = inner;
 
-    public override DataResult<EntitySubPredicate> Parse<U>(DynamicOps<U> ops, U input)
-        => _inner.Parse(ops, input).Map(value => (EntitySubPredicate)value);
+    public override DataResult<NacreCraft.Registry.EntitySubPredicate> Parse<U>(DynamicOps<U> ops, U input)
+        => _inner.Parse(ops, input).Map(value => (NacreCraft.Registry.EntitySubPredicate)value);
 
-    public override DataResult<U> EncodeStart<U>(DynamicOps<U> ops, EntitySubPredicate value)
-        => _inner.EncodeStart(ops, (T)value);
+    public override DataResult<U> EncodeStart<U>(DynamicOps<U> ops, NacreCraft.Registry.EntitySubPredicate value)
+        => value is T typed
+            ? _inner.EncodeStart(ops, typed)
+            : DataResult<U>.Error(() => $"sub-predicate is not a {typeof(T).Name}");
 }
