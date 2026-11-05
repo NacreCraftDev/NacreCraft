@@ -47,6 +47,9 @@ public static class HolderSetCodecs
     //ItemSet item set codec used by an item predicate's items field
     public static readonly Codec<HolderSet<Item>> ItemSet = new HolderSetCodec<Item>(BuiltInRegistries.ITEM);
 
+    //FluidSet fluid set codec used by a fluid predicate's fluids field
+    public static readonly Codec<HolderSet<Fluid>> FluidSet = new HolderSetCodec<Fluid>(BuiltInRegistries.FLUID);
+
     //VillagerTypeSet villager type set codec used by villager type predicate fields
     public static readonly Codec<HolderSet<VillagerType>> VillagerTypeSet =
         new HolderSetCodec<VillagerType>(BuiltInRegistries.VILLAGER_TYPE);

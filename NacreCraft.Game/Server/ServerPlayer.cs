@@ -352,6 +352,7 @@ public sealed class ServerPlayer : Player
     public void DoCloseContainer()
     {
         if (BackpackMenu is null) return;
+        ContainerMenu?.Removed(this);
         ContainerMenu = BackpackMenu;
         BackpackMenu.SendAllDataToRemote();
     }

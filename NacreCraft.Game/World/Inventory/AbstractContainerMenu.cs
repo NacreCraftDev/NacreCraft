@@ -69,6 +69,14 @@ public abstract class AbstractContainerMenu
     //StillValid whether the menu is still valid for the player
     public abstract bool StillValid(ServerPlayer player);
 
+    //SlotsChanged a backing container reported a change, maps to vanilla AbstractContainerMenu.slotsChanged
+    //Menus that derive a result from their inputs override it; the default ignores the notification
+    public virtual void SlotsChanged(Container container) { }
+
+    //Removed the menu is closing, maps to vanilla AbstractContainerMenu.removed
+    //Menus that hold input containers override it to return their contents
+    public virtual void Removed(ServerPlayer player) { }
+
     //AddSlot registers a slot and assigns its index within the menu
     protected Slot AddSlot(Slot slot)
     {

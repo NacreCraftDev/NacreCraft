@@ -4,7 +4,7 @@ namespace NacreCraft.Game.World.Inventory;
 
 //SimpleContainer fixed-size simple container, maps to vanilla net.minecraft.world.SimpleContainer
 //Used for the crafting grid/result slot and similar cases that need only slot read/write without extra logic
-public sealed class SimpleContainer : Container
+public class SimpleContainer : Container
 {
     private readonly ItemStack[] _items;
 

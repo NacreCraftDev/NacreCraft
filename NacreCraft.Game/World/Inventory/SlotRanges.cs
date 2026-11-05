@@ -1,3 +1,5 @@
+using NacreCraft.Codec;
+
 namespace NacreCraft.Game.World.Inventory;
 
 //SlotRanges maps slot names to slot indices, maps to vanilla net.minecraft.world.inventory.SlotRanges
@@ -83,4 +85,11 @@ public static class SlotRanges
 
     //SingleSlotNames list of single-slot names in registration order, used for item_slot argument completion
     public static IReadOnlyList<string> SingleSlotNames() => SingleNames;
+
+    //Codec name to slot range, maps to vanilla SlotRanges.CODEC; an unknown name is a decode error
+    public static readonly Codec<SlotRange> Codec = Codecs.String.ComapFlatMap(
+        name => NameToIds(name) is { } ids
+            ? DataResult<SlotRange>.Success(SlotRange.Of(name, ids))
+            : DataResult<SlotRange>.Error(() => $"Unknown slot range: {name}"),
+        range => range.Name);
 }
