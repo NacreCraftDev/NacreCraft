@@ -25,6 +25,20 @@ public static class ExtraCodecs
     //PositiveInt integer codec rejecting zero and negative values, maps to vanilla ExtraCodecs.POSITIVE_INT
     public static readonly Codec<int> PositiveInt = IntRange(1, int.MaxValue);
 
+    //PositiveFloat float codec rejecting zero and negative values, maps to vanilla ExtraCodecs.POSITIVE_FLOAT
+    public static readonly Codec<float> PositiveFloat = Codecs.Float.ComapFlatMap(
+        value => value > 0.0f
+            ? DataResult<float>.Success(value)
+            : DataResult<float>.Error(() => $"Value {value} must be positive"),
+        value => value);
+
+    //NonEmptyList rejects an empty list, maps to vanilla ExtraCodecs.nonEmptyList
+    public static Codec<IReadOnlyList<T>> NonEmptyList<T>(Codec<IReadOnlyList<T>> codec) => codec.ComapFlatMap(
+        value => value.Count > 0
+            ? DataResult<IReadOnlyList<T>>.Success(value)
+            : DataResult<IReadOnlyList<T>>.Error(() => "List must not be empty"),
+        value => value);
+
     private static DataResult<string> ParseGuardedPath(string directory, string text)
     {
         if (Path.IsPathRooted(text)) return DataResult<string>.Error(() => $"Illegal absolute path: {text}");

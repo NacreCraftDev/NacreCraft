@@ -155,6 +155,9 @@ public static class GameBootstrap
             //Spawn conditions are registered by name for the variant spawn-condition dispatch codec
             NacreCraft.Game.World.Entity.Variant.SpawnConditions.Bootstrap(BuiltInRegistries.SPAWN_CONDITION_TYPE);
             Mark("spawn-conditions");
+            //Dialog input controls are registered by name for the input control dispatch codec
+            NacreCraft.Game.Server.Dialog.InputControlTypes.Bootstrap(BuiltInRegistries.INPUT_CONTROL_TYPE);
+            Mark("input-control-types");
             //Entity attributes are registered before entity types; entity construction builds its table from attributes, and this must also precede registry freeze
             NacreCraft.Registry.EntityAttribute.Attributes.Bootstrap();
             Mark("attributes");
