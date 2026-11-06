@@ -158,6 +158,9 @@ public static class GameBootstrap
             //Dialog input controls are registered by name for the input control dispatch codec
             NacreCraft.Game.Server.Dialog.InputControlTypes.Bootstrap(BuiltInRegistries.INPUT_CONTROL_TYPE);
             Mark("input-control-types");
+            //Slot sources are registered by name for the slot source dispatch codec
+            NacreCraft.Game.World.Items.Slots.SlotSources.Bootstrap(BuiltInRegistries.SLOT_SOURCE_TYPE);
+            Mark("slot-source-types");
             //Entity attributes are registered before entity types; entity construction builds its table from attributes, and this must also precede registry freeze
             NacreCraft.Registry.EntityAttribute.Attributes.Bootstrap();
             Mark("attributes");

@@ -32,6 +32,9 @@ public readonly struct Vec3 : IEquatable<Vec3>
 
     public static Vec3 AtCenterOf(BlockPos pos) => new(pos.X + 0.5, pos.Y + 0.5, pos.Z + 0.5);
 
+    //atBottomCenterOf the bottom center of a block cell, maps to vanilla atBottomCenterOf
+    public static Vec3 AtBottomCenterOf(BlockPos pos) => new(pos.X + 0.5, pos.Y, pos.Z + 0.5);
+
     //WithAxis replaces the component of one axis with a new value, the other two stay, maps to vanilla Vec3.with(Axis)
     //Used to write back the solved axis when clipping movement axis by axis
     public Vec3 WithAxis(Direction.Axis axis, double value) => axis switch

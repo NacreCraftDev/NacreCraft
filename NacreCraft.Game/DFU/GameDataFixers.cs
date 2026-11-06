@@ -1,6 +1,9 @@
 using NacreCraft.DataFixer;
 using NacreCraft.Game.DFU.Fixes;
 using NacreCraft.Game.DFU.Schemas;
+using AddNewChoicesFix = NacreCraft.DataFixer.Fixes.AddNewChoices;
+using FireResistantFix = NacreCraft.DataFixer.Fixes.FireResistantToDamageResistantComponentFix;
+using References = NacreCraft.DataFixer.Fixes.References;
 
 namespace NacreCraft.Game.DFU;
 
@@ -31,8 +34,15 @@ public static class GameDataFixers
         var v3818_3 = builder.AddSchema(3818, 3, (key, parent) => new V3818_3(key, parent));
         var v3825 = builder.AddSchema(3825, 0, (key, parent) => new V3825(key, parent));
         var v3938 = builder.AddSchema(3938, 0, (key, parent) => new V3938(key, parent));
+        var v4054 = builder.AddSchema(4054, 0, Same);
+        var v4057 = builder.AddSchema(4057, 0, Same);
         var v4059 = builder.AddSchema(4059, 0, (key, parent) => new V4059(key, parent));
+        var v4064 = builder.AddSchema(4064, 0, Same);
         var v4067 = builder.AddSchema(4067, 0, (key, parent) => new V4067(key, parent));
+        var v4068 = builder.AddSchema(4068, 0, Same);
+        var v4070 = builder.AddSchema(4070, 0, (key, parent) => new NacreCraft.DataFixer.Schemas.V4070(key, parent));
+        var v4071 = builder.AddSchema(4071, 0, (key, parent) => new NacreCraft.DataFixer.Schemas.V4071(key, parent));
+        var v4081 = builder.AddSchema(4081, 0, Same);
         var v4300 = builder.AddSchema(4300, 0, (key, parent) => new V4300(key, parent));
         var v4306 = builder.AddSchema(4306, 0, (key, parent) => new V4306(key, parent));
         var v4307 = builder.AddSchema(4307, 0, (key, parent) => new V4307(key, parent));
@@ -50,8 +60,19 @@ public static class GameDataFixers
         builder.AddFixer(new ProjectileStoredWeaponFix(v3938));
         builder.AddFixer(new AttributeModifierIdFix(v3938));
         builder.AddFixer(new JukeboxTicksSinceSongStartedFix(v3938));
+        builder.AddFixer(new CarvingStepRemoveFix(v4057));
         builder.AddFixer(new AttributeIdPrefixFix(v4059));
         builder.AddFixer(new FoodToConsumableFix(v4059));
+        builder.AddFixer(new FireResistantFix(v4064));
+        builder.AddFixer(new BoatSplitFix(v4067));
+        builder.AddFixer(new FeatureFlagRemoveFix(v4067, "Remove Bundle experimental feature flag",
+            new HashSet<string> { "minecraft:bundle" }));
+        builder.AddFixer(new LockComponentPredicateFix(v4068));
+        builder.AddFixer(new ContainerBlockEntityLockPredicateFix(v4068));
+        builder.AddFixer(new AddNewChoicesFix(v4070, "Added Pale Oak Boat and Pale Oak Chest Boat", References.Entity));
+        builder.AddFixer(new AddNewChoicesFix(v4071, "Added Creaking", References.Entity));
+        builder.AddFixer(new AddNewChoicesFix(v4071, "Added Creaking Heart", References.BlockEntity));
+        builder.AddFixer(new EntitySalmonSizeFix(v4081));
         builder.AddFixer(new TrialSpawnerConfigInRegistryFix(v4067));
         builder.AddFixer(new EquippableAssetRenameFix(v4300));
         builder.AddFixer(new CustomModelDataExpandFix(v4300));
@@ -61,4 +82,8 @@ public static class GameDataFixers
 
         return builder.Build().Fixer();
     }
+
+    //Same schema factory for versions whose types did not change, maps to vanilla SAME/SAME_NAMESPACED
+    private static NacreCraft.DataFixer.Schemas.Schema Same(int key, NacreCraft.DataFixer.Schemas.Schema? parent)
+        => new(key, parent);
 }

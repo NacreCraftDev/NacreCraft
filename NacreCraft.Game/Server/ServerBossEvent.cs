@@ -1,10 +1,10 @@
-using NacreCraft.Network.Chat;
+﻿using NacreCraft.Network.Chat;
 
 namespace NacreCraft.Game.Server;
 
 //ServerBossEvent a boss bar shown to a set of players, maps to vanilla net.minecraft.server.level.ServerBossEvent
 //The server keeps the authoritative name, progress, colour and overlay, and syncs them through boss event packets
-public sealed class ServerBossEvent(Component name)
+public class ServerBossEvent(Component name)
 {
     private readonly HashSet<Guid> _players = new();
     private float _progress;
@@ -33,11 +33,11 @@ public sealed class ServerBossEvent(Component name)
 
     public IReadOnlyCollection<Guid> Players => _players;
 
-    public bool AddPlayer(Guid playerId) => _players.Add(playerId);
+    public virtual bool AddPlayer(Guid playerId) => _players.Add(playerId);
 
-    public bool RemovePlayer(Guid playerId) => _players.Remove(playerId);
+    public virtual bool RemovePlayer(Guid playerId) => _players.Remove(playerId);
 
-    public void RemoveAllPlayers() => _players.Clear();
+    public virtual void RemoveAllPlayers() => _players.Clear();
 
     public bool ShouldDarkenScreen => DarkenScreen && Visible;
 
@@ -64,3 +64,4 @@ public sealed class ServerBossEvent(Component name)
         Notched20,
     }
 }
+

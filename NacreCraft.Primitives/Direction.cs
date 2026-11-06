@@ -131,6 +131,81 @@ public readonly struct Direction : IEquatable<Direction>
         return fallback ?? North;
     }
 
+    //Get2DDataValue the horizontal index, SOUTH=0 WEST=1 NORTH=2 EAST=3, maps to vanilla get2DDataValue
+    public int Get2DDataValue => Id3D switch
+    {
+        SouthId => 0,
+        WestId => 1,
+        NorthId => 2,
+        EastId => 3,
+        _ => -1
+    };
+
+    //GetYRot the yaw facing the direction, maps to vanilla getYRot
+    public static float GetYRot(Direction direction) => direction.Id3D switch
+    {
+        SouthId => 0f,
+        WestId => 90f,
+        NorthId => 180f,
+        EastId => -90f,
+        _ => throw new ArgumentException($"No yaw for vertical direction {direction}")
+    };
+
+    //IsFacingAngle whether the yaw faces this direction within 45 degrees, maps to vanilla isFacingAngle
+    public bool IsFacingAngle(float yRot)
+        => Math.Abs(DegreesDifference(GetYRot(this), yRot)) < 45.0f;
+
+    //DegreesDifference the signed difference between two angles, maps to vanilla Mth.degreesDifference
+    private static float DegreesDifference(float fromAngle, float toAngle)
+    {
+        var difference = (toAngle - fromAngle) % 360.0f;
+        if (difference >= 180.0f) difference -= 360.0f;
+        if (difference < -180.0f) difference += 360.0f;
+        return difference;
+    }
+
+    //OrderedByNearest the six directions ordered by how close they are to the view angles, maps to vanilla orderedByNearest
+    public static Direction[] OrderedByNearest(float xRot, float yRot)
+    {
+        var pitch = xRot * (MathF.PI / 180f);
+        var yaw = -yRot * (MathF.PI / 180f);
+        var pitchSin = MathF.Sin(pitch);
+        var pitchCos = MathF.Cos(pitch);
+        var yawSin = MathF.Sin(yaw);
+        var yawCos = MathF.Cos(yaw);
+        var xPos = yawSin > 0.0f;
+        var yPos = pitchSin < 0.0f;
+        var zPos = yawCos > 0.0f;
+        var xYaw = xPos ? yawSin : -yawSin;
+        var yMag = yPos ? -pitchSin : pitchSin;
+        var zYaw = zPos ? yawCos : -yawCos;
+        var xMag = xYaw * pitchCos;
+        var zMag = zYaw * pitchCos;
+        var axisX = xPos ? East : West;
+        var axisY = yPos ? Up : Down;
+        var axisZ = zPos ? South : North;
+        if (xYaw > zYaw)
+        {
+            if (yMag > xMag) return MakeDirectionArray(axisY, axisX, axisZ);
+            if (zMag > yMag) return MakeDirectionArray(axisX, axisZ, axisY);
+            return MakeDirectionArray(axisX, axisY, axisZ);
+        }
+        if (yMag > zMag) return MakeDirectionArray(axisY, axisZ, axisX);
+        if (xMag > yMag) return MakeDirectionArray(axisZ, axisX, axisY);
+        return MakeDirectionArray(axisZ, axisY, axisX);
+    }
+
+    //GetFacingAxis the direction along one axis closest to the view angles, maps to vanilla getFacingAxis
+    public static Direction GetFacingAxis(float xRot, float yRot, Axis axis) => axis switch
+    {
+        Axis.X => East.IsFacingAngle(yRot) ? East : West,
+        Axis.Z => South.IsFacingAngle(yRot) ? South : North,
+        _ => xRot < 0.0f ? Up : Down
+    };
+
+    private static Direction[] MakeDirectionArray(Direction axis1, Direction axis2, Direction axis3)
+        => new[] { axis1, axis2, axis3, axis3.Opposite, axis2.Opposite, axis1.Opposite };
+
     //counterClockWise rotates counter-clockwise once, maps to vanilla getCounterClockWise
     //Only defined for horizontal directions, vanilla throws for vertical ones, here it falls back to itself
     public Direction CounterClockWise => Id3D switch
