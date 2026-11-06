@@ -1,43 +1,60 @@
-using NacreCraft.Logging;
-using NacreCraft.Client.Blaze3d.Systems;
-using NacreCraft.Client.Blaze3d.Buffers;
-using NacreCraft.Client.Blaze3d.Textures;
-using NacreCraft.Client.Blaze3d.Shaders;
-using NacreCraft.Client.Blaze3d.Pipeline;
-using NacreCraft.Client.Blaze3d.Vertex;
-using NacreCraft.Client.Blaze3d.Vulkan;
-using NacreCraft.Client.Blaze3d.Platform;
-using NacreCraft.Client.Blaze3d.Font;
-using NacreCraft.Client.Blaze3d.Resource;
-using NacreCraft.Client.Blaze3d.Audio;
-using NacreCraft.Client.Blaze3d.Framegraph;
-using NacreCraft.Client.Blaze3d.Preprocessor;
-using NacreCraft.Client.Blaze3d.Util;
-using NacreCraft.Client.Render;
-using NacreCraft.Client.Render.Model;
-using NacreCraft.Client.Render.Texture;
-using NacreCraft.Client.Render.Texture.Atlas;
-using NacreCraft.Client.Render.Item;
-using NacreCraft.Client.Render.Entity;
-using NacreCraft.Client.Render.Entity.State;
-using NacreCraft.Client.Render.State.Gui;
-using NacreCraft.Client.Gui;
-using NacreCraft.Client.Gui.Render;
-using NacreCraft.Client.Gui.Render.State;
-using NacreCraft.Client.Gui.Render.Pip;
-using NacreCraft.Client.Gui.Navigation;
-using NacreCraft.Client.Gui.Layouts;
-using NacreCraft.Client.Gui.Font;
-using NacreCraft.Client.Gui.Font.Providers;
-using NacreCraft.Client.Gui.Font.Glyphs;
-using NacreCraft.Client.Model;
-using NacreCraft.Client.Model.Geom;
-using NacreCraft.Client.Resources.Metadata.Gui;
+using NacreCraft.Client.Sounds;
 
 namespace NacreCraft.Client.Blaze3d.Audio;
 
-//SoundBuffer maps to vanilla com.mojang.blaze3d.audio.SoundBuffer
-//Placeholder: the package structure is in place, the implementation lands later
+//SoundBuffer one PCM payload and its OpenAL buffer, maps to vanilla com.mojang.blaze3d.audio.SoundBuffer
 public sealed class SoundBuffer
 {
+    private byte[]? _data;
+    private readonly AudioFormat _format;
+    private bool _hasAlBuffer;
+    private uint _alBuffer;
+    private readonly int _size;
+
+    public SoundBuffer(byte[] data, AudioFormat format)
+    {
+        _data = data;
+        _format = format;
+        _size = data.Length;
+    }
+
+    //GetAlBuffer uploads the data on first use, null when OpenAL refuses it
+    public uint? GetAlBuffer()
+    {
+        if (_hasAlBuffer) return _alBuffer;
+        var al = OpenAlUtil.Al;
+        if (_data is null || al is null) return null;
+
+        var buffers = al.GenBuffers(1);
+        if (OpenAlUtil.CheckALError("Creating buffer")) return null;
+        al.BufferData(buffers[0], OpenAlUtil.AudioFormatToOpenAl(_format), _data, _format.SampleRate);
+        if (OpenAlUtil.CheckALError("Assigning buffer data")) return null;
+
+        _alBuffer = buffers[0];
+        _hasAlBuffer = true;
+        _data = null;
+        return _alBuffer;
+    }
+
+    public void DiscardAlBuffer()
+    {
+        if (!_hasAlBuffer) return;
+        OpenAlUtil.Al?.DeleteBuffers(new[] { _alBuffer });
+        if (OpenAlUtil.CheckALError("Deleting stream buffers")) return;
+        _hasAlBuffer = false;
+    }
+
+    //ReleaseAlBuffer hands the buffer to the caller, which now owns its lifetime
+    public uint? ReleaseAlBuffer()
+    {
+        var result = GetAlBuffer();
+        _hasAlBuffer = false;
+        return result;
+    }
+
+    public AudioFormat Format => _format;
+
+    public int Size => _size;
+
+    public bool IsValid() => _data is not null || _hasAlBuffer;
 }

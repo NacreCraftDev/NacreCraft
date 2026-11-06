@@ -12,6 +12,53 @@ public abstract class StructurePoolElement
     //Codec pool element polymorphic codec, dispatches by the element_type field, maps to vanilla StructurePoolElement.CODEC
     public static readonly Codec<StructurePoolElement> Codec = new StructurePoolElementDispatchCodec();
 
+    //EmptyProcessors the empty processor chain every factory uses when none is given, maps to vanilla EMPTY
+    private static readonly Holder<NacreCraft.Registry.StructureProcessorList> EmptyProcessors =
+        Holder<NacreCraft.Registry.StructureProcessorList>.Direct(
+            new StructureProcessorList(Array.Empty<StructureProcessor>()));
+
+    //Single one-template element, maps to vanilla StructurePoolElement.single
+    public static SinglePoolElement Single(string location, StructureTemplatePool.Projection projection)
+        => new(Identifier.Parse(location), EmptyProcessors, projection, Optional<LiquidSettings>.Empty());
+
+    //Single with a processor chain
+    public static SinglePoolElement Single(string location,
+        Holder<NacreCraft.Registry.StructureProcessorList> processors, StructureTemplatePool.Projection projection)
+        => new(Identifier.Parse(location), processors, projection, Optional<LiquidSettings>.Empty());
+
+    //Single with a liquid setting override
+    public static SinglePoolElement Single(string location, LiquidSettings liquidSettings,
+        StructureTemplatePool.Projection projection)
+        => new(Identifier.Parse(location), EmptyProcessors, projection, Optional<LiquidSettings>.Of(liquidSettings));
+
+    //Single with both a processor chain and a liquid setting override
+    public static SinglePoolElement Single(string location,
+        Holder<NacreCraft.Registry.StructureProcessorList> processors, LiquidSettings liquidSettings,
+        StructureTemplatePool.Projection projection)
+        => new(Identifier.Parse(location), processors, projection, Optional<LiquidSettings>.Of(liquidSettings));
+
+    //Legacy one-template element, maps to vanilla StructurePoolElement.legacy
+    public static LegacySinglePoolElement Legacy(string location, StructureTemplatePool.Projection projection)
+        => new(Identifier.Parse(location), EmptyProcessors, projection, Optional<LiquidSettings>.Empty());
+
+    //Legacy with a processor chain
+    public static LegacySinglePoolElement Legacy(string location,
+        Holder<NacreCraft.Registry.StructureProcessorList> processors, StructureTemplatePool.Projection projection)
+        => new(Identifier.Parse(location), processors, projection, Optional<LiquidSettings>.Empty());
+
+    //Empty the shared empty element, maps to vanilla StructurePoolElement.empty
+    public static EmptyPoolElement Empty() => EmptyPoolElement.Instance;
+
+    //Feature a placed feature element, maps to vanilla StructurePoolElement.feature
+    public static FeaturePoolElement Feature(Holder<NacreCraft.Registry.PlacedFeature> feature,
+        StructureTemplatePool.Projection projection)
+        => new(feature, projection);
+
+    //List a list element, maps to vanilla StructurePoolElement.list
+    public static ListPoolElement List(IReadOnlyList<StructurePoolElement> elements,
+        StructureTemplatePool.Projection projection)
+        => new(elements, projection);
+
     private StructureTemplatePool.Projection? _projection;
 
     protected StructurePoolElement(StructureTemplatePool.Projection projection) => _projection = projection;
