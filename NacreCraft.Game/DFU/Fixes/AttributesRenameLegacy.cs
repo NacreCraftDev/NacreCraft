@@ -25,9 +25,14 @@ public class AttributesRenameLegacy : DataFix
     protected override TypeRewriteRule MakeRule()
     {
         var itemStackType = GetInputSchema().GetType(References.ItemStack);
-        var tagF = itemStackType.FindField("tag");
+        //NC models ItemStack as a remainder before the components schema lands, so the legacy tag field is not always present
+        //Skipping that branch keeps the entity/player attribute renames runnable instead of aborting the whole fix
+        var itemStackRule = itemStackType.FindFieldTypeOpt("tag").IsPresent
+            ? FixTypeEverywhereTyped(_name + " (ItemStack)", itemStackType,
+                itemStack => itemStack.UpdateTyped(itemStackType.FindField("tag"), FixItemStackTag))
+            : TypeRewriteRule.Nop();
         return TypeRewriteRule.Seq(
-            FixTypeEverywhereTyped(_name + " (ItemStack)", itemStackType, itemStack => itemStack.UpdateTyped(tagF, FixItemStackTag)),
+            itemStackRule,
             TypeRewriteRule.Seq(
                 FixTypeEverywhereTyped(_name + " (Entity)", GetInputSchema().GetType(References.Entity), FixEntity),
                 FixTypeEverywhereTyped(_name + " (Player)", GetInputSchema().GetType(References.Player), FixEntity)));

@@ -25,6 +25,8 @@ public class RenameEnchantmentsFix : DataFix
     protected override TypeRewriteRule MakeRule()
     {
         var item = GetInputSchema().GetType(References.ItemStack);
+        //NC models ItemStack as a remainder before the components schema lands; without the legacy tag field there is nothing to rename
+        if (!item.FindFieldTypeOpt("tag").IsPresent) return TypeRewriteRule.Nop();
         var tagFinder = item.FindField("tag");
         return FixTypeEverywhereTyped(_name, item, input =>
             input.UpdateTyped(tagFinder, tag => tag.Update(DSL.RemainderFinder(), FixTag)));

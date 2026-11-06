@@ -1,3 +1,4 @@
+using NacreCraft.Client.Waypoints;
 using NacreCraft.Game.Network.Protocol.Game;
 using NacreCraft.Game.World.Entity;
 using NacreCraft.Game.World.Items;
@@ -101,7 +102,7 @@ public sealed class ClientPacketState
     public readonly Dictionary<NacreCraft.Registry.Identifier, byte[]> Cookies = new();
     public (string Host, int Port)? TransferTarget { get; set; }
     public readonly Dictionary<int, double> ProjectilePower = new();
-    public readonly Dictionary<string, object?> Waypoints = new();
+    public readonly ClientWaypointManager Waypoints = new();
     public int DebugValues { get; set; }
     public object? GameTestHighlight { get; set; }
     public readonly List<ClientboundMapItemDataPacket> MapData = new();

@@ -849,8 +849,8 @@ public sealed class ClientGamePacketListenerImpl : ClientGamePacketListener
     public void HandleTestInstanceBlockStatus(ClientboundTestInstanceBlockStatus packet)
         => Log.Debug("HandleTestInstanceBlockStatus");
 
-    //HandleWaypoint tracked waypoint create/update/remove; stored until a waypoint renderer exists
-    public void HandleWaypoint(ClientboundTrackedWaypointPacket packet) => State.Waypoints[packet.Operation.ToString()] = packet.Waypoint;
+    //HandleWaypoint tracked waypoint create/update/remove; the manager keeps them until a waypoint renderer exists
+    public void HandleWaypoint(ClientboundTrackedWaypointPacket packet) => packet.Apply(State.Waypoints);
 
     //Debug value packets come from the server's debug subscriptions, which the client does not enable
     public void HandleDebugChunkValue(ClientboundDebugChunkValuePacket packet) => State.DebugValues++;

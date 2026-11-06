@@ -3,8 +3,10 @@ using System.Threading;
 using NacreCraft.Game.Network.Protocol.Game;
 using NacreCraft.Game.World.Items;
 using NacreCraft.Game.World.Phys.Collision;
+using NacreCraft.Client.Player;
 using NacreCraft.Nbt;
 using NacreCraft.Primitives;
+using NacreCraft.Primitives.Phys;
 using NacreCraft.Registry;
 using NacreCraft.Registry.State;
 using NacreCraft.Storage;
@@ -349,6 +351,21 @@ public sealed class ClientLevel : CollisionGetter
         //Fire the event outside the write lock to prevent a deadlock from reading ClientLevel inside the callback; dispatcher.MarkDirty spreads to itself + 6 neighbors
         SectionDirty?.Invoke(SectionPos.Of(pos));
         return true;
+    }
+
+    //SyncBlockState applies a server-verified predicted block state, maps to vanilla ClientLevel.syncBlockState
+    //When the player now collides with the corrected block, snap to the stored position so the rejection does not leave the player inside it
+    public void SyncBlockState(BlockPos pos, BlockState state, Vec3? playerPos)
+    {
+        if (GetBlockState(pos).Equals(state)) return;
+        SetBlockState(pos, state);
+
+        if (playerPos is not { } snap) return;
+        if (LocalPlayer.Current is not { } player || !ReferenceEquals(player.Level, this)) return;
+        var shape = state.GetCollisionShape(this, pos, CollisionContext.Of(player))
+            .Move(pos.X, pos.Y, pos.Z);
+        if (!shape.IsEmpty && Shapes.JoinIsNotEmpty(shape, Shapes.Create(player.BoundingBox), BooleanOps.And))
+            player.Teleport(snap.X, snap.Y, snap.Z, player.YRot, player.XRot);
     }
 
     //ClientEntity client entity state keeps only the fields needed for rendering and interpolation
