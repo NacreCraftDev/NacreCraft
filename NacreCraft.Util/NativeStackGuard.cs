@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -7,55 +8,20 @@ namespace NacreCraft.Util;
 
 //NativeStackGuard connects the managed crash path to the native layer
 //
-//The stack overflow callback and the injected early check live here. The restart that gets the layer into the process
-//sits in NacreCraft.Boot instead: it has to run before any kernel assembly is loaded, while this type is the injected
-//entry point the native layer looks up by name and therefore cannot move out of the kernel.
+//The stack overflow callback and the throw entry live here. The restart that gets the layer into the process sits in
+//NacreCraft.Boot instead: it has to run before any kernel assembly is loaded, while this type is the entry point the
+//native layer jumps to on a trip and therefore cannot move out of the kernel.
 public static class NativeStackGuard
 {
     //LibraryName file the native layer builds into, without extension
     private const string LibraryName = "nacrecraft_native";
 
-    //Quiet, per thread, whether this thread has already reported and is waiting for room to come back
-    //Per thread rather than shared: one thread's descent must not silence another's report
-    [ThreadStatic]
-    private static bool _quiet;
-
-    //EnsureStack is the entry the injected call points at
-    //
-    //The test is the runtime's own stack probe, which it answers from a limit it has already cached rather than by
-    //asking the system. The common case is a field read and one call inside the runtime; going through the native layer
-    //meant a managed to native transition, a look at the thread's stack limits and a dynamic TLS access on every method
-    //call, and the level generation path calls methods often enough for that to become the work
-    //
-    //It is written to be inlined into every injected call site. A call left as a call costs a frame push and a return
-    //on every method entry of the whole ecosystem, which showed up as a large, call-count proportional slowdown; kept
-    //small and inline the entry costs a handful of instructions. The throw lives in its own method so the body stays
-    //under the inline budget, and the inline hint is only a hint, so the shape matters more than the attribute
-    //
-    //The quiet flag is what the probe alone cannot express. On its own it keeps answering that the stack is short while
-    //the exception is unwound and handled, and the process dies on its way to reporting the problem. A thread that has
-    //tripped stays quiet until the probe says there is room again, which leaves room for the unwind, the catch block
-    //and anything that logs along the way
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void EnsureStack()
-    {
-        if (_quiet)
-        {
-            //Room again means the exception was handled and this thread may report the next one
-            if (RuntimeHelpers.TryEnsureSufficientExecutionStack()) _quiet = false;
-            return;
-        }
-
-        if (RuntimeHelpers.TryEnsureSufficientExecutionStack()) return;
-
-        Trip();
-    }
-
-    //Trip reports the overflow once per descent; never inlined, it is the cold half of EnsureStack
+    //Trip is the entry the machine-code guard jumps to when the stack runs short
+    //The trampoline reaches it with the caller's return address on the stack, so the throw unwinds as if the method
+    //whose entry was replaced had thrown it; the native side owns the quiet period around the trip
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void Trip()
     {
-        _quiet = true;
         throw new InsufficientExecutionStackException();
     }
 
@@ -64,6 +30,13 @@ public static class NativeStackGuard
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int ncn_register_stack_overflow_callback(IntPtr callback, byte[] reportDirectory, UIntPtr length);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ncn_stack_hook_enabled();
+
+    //tripEntry is zero while the guard is disarmed; reserve is read from NCN_STACK_RESERVE when zero
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ncn_configure_stack_guard(IntPtr tripEntry, UIntPtr reserve);
 
     //The delegate is kept alive for the process lifetime: the native side holds its address and would otherwise end up
     //calling a collected stub
@@ -77,6 +50,10 @@ public static class NativeStackGuard
     public static bool Register()
     {
         if (_installed) return true;
+
+        //The throw entry is resolved before anything is armed: finding it compiles the method, and a hook installed
+        //on that entry would send every trip back through the check it just failed
+        var tripEntry = ResolveTripEntry();
 
         try
         {
@@ -93,6 +70,7 @@ public static class NativeStackGuard
 
             _installed = true;
             Log.Info("The native layer is in place and will report a stack overflow");
+            ArmMachineGuard(tripEntry);
             return true;
         }
         catch (DllNotFoundException)
@@ -104,6 +82,75 @@ public static class NativeStackGuard
         {
             Log.Warning("The native layer is present but has no stack overflow entry point");
             return false;
+        }
+    }
+
+    //ResolveTripEntry arms the machine-code guard with a real native entry for Trip
+    //The lookup is done while the guard is disarmed, and a native layer without the new entry points leaves it alone
+    private static IntPtr ResolveTripEntry()
+    {
+        try
+        {
+            _ = ncn_configure_stack_guard(IntPtr.Zero, UIntPtr.Zero);
+        }
+        catch (DllNotFoundException)
+        {
+            return IntPtr.Zero;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return IntPtr.Zero;
+        }
+
+        try
+        {
+            var method = typeof(NativeStackGuard).GetMethod(
+                nameof(Trip), BindingFlags.NonPublic | BindingFlags.Static);
+            if (method is null)
+            {
+                Log.Warning("The stack guard throw entry could not be found, the machine-code guard stays off");
+                return IntPtr.Zero;
+            }
+
+            RuntimeHelpers.PrepareMethod(method.MethodHandle);
+            return method.MethodHandle.GetFunctionPointer();
+        }
+        catch (Exception exception)
+        {
+            Log.Warning($"The stack guard throw entry could not be resolved: {exception.GetType().Name}");
+            return IntPtr.Zero;
+        }
+    }
+
+    //ArmMachineGuard hands the throw entry over when the machine-code guard was asked for
+    //A zero reserve lets the native side read NCN_STACK_RESERVE and fall back to its default
+    private static void ArmMachineGuard(IntPtr tripEntry)
+    {
+        if (tripEntry == IntPtr.Zero)
+            return;
+
+        try
+        {
+            if (ncn_stack_hook_enabled() == 0)
+                return;
+
+            var result = ncn_configure_stack_guard(tripEntry, UIntPtr.Zero);
+            if (result != 0)
+            {
+                Log.Warning($"The native layer refused the machine-code guard, code {result}");
+                return;
+            }
+
+            var address = tripEntry.ToInt64().ToString("X16");
+            Log.Info($"The machine-code stack guard is armed at 0x{address}");
+        }
+        catch (EntryPointNotFoundException)
+        {
+            Log.Warning("The native layer has no machine-code guard entry points, the early check stays off");
+        }
+        catch (Exception exception)
+        {
+            Log.Warning($"Arming the machine-code guard failed: {exception.GetType().Name}: {exception.Message}");
         }
     }
 

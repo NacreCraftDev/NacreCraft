@@ -14,6 +14,7 @@
 //! - `system`: the startup fingerprint carried into a native crash report
 
 mod crash;
+mod hook;
 mod icon;
 mod il;
 mod logging;
@@ -36,20 +37,11 @@ static STARTED: AtomicBool = AtomicBool::new(false);
 //Set once the runtime accepts the compilation mask
 static COMPILATIONS_REPORTED: AtomicBool = AtomicBool::new(false);
 
-//Set once the managed side has handed over the overflow callback
-//
-//That call is made from the assembly holding the injected entry, so it doubles as the signal that this assembly is up
-//and resolvable; nothing is injected before it arrives
-static STACK_GUARD_READY: AtomicBool = AtomicBool::new(false);
-
 //How many method bodies have been reported, only used for the first line of the log
 static COMPILATION_COUNT: AtomicUsize = AtomicUsize::new(0);
 
-//How many bodies were actually rewritten
-static INJECTION_COUNT: AtomicUsize = AtomicUsize::new(0);
-
 //Framework assemblies are left alone when no list is configured
-//They carry their own stack probes already, and rewriting their bodies buys nothing while making every compile slower
+//They carry their own stack probes already, and hooking their entries buys nothing while making every compile slower
 //Anything else, the kernel and every mod alike, is fair game: a deep recursion can start anywhere
 const FRAMEWORK_PREFIXES: &[&str] = &[
     "System",
@@ -60,13 +52,11 @@ const FRAMEWORK_PREFIXES: &[&str] = &[
     "PresentationCore",
 ];
 
-//The assembly holding the entry the injected call points at, which must never be rewritten itself
-//Read from the environment so the managed side can move the entry without this library being rebuilt
-const GUARD_ASSEMBLY_VARIABLE: &str = "NCN_STACK_CHECK_ASSEMBLY";
-const GUARD_ASSEMBLY_DEFAULT: &str = "NacreCraft.Util";
-
-//The resolved name, read once on first use
-static GUARD_ASSEMBLY_ENV: OnceLock<String> = OnceLock::new();
+//Assemblies that must never be hooked
+//
+//The first holds the throw entry a trip jumps to, and a hook on it would send every trip back through the check it just
+//failed; the second holds the restart that installs this layer and runs before the guard can be armed
+const EXCLUDED_ASSEMBLIES: &[&str] = &["NacreCraft.Util", "NacreCraft.Boot"];
 
 //The parsed list, read once on first use
 //None means no list was configured, which stands for "everything except the framework"
@@ -111,18 +101,21 @@ pub extern "C" fn ncn_on_initialize(_profiler_info_unknown: *mut c_void) -> i32 
 #[no_mangle]
 pub extern "C" fn ncn_on_shutdown() {
     logging::write("shutting down");
+
+    //One summary line per run; this is the only moment the counters are guaranteed to still be readable
+    ncn_hook_report();
     stack::uninstall();
 }
 
 /// ncn_on_jit_notifications reports whether the runtime took the compilation mask
-/// Without it no method is ever reported and the early stack check has nothing to attach to
+/// Without it no method is ever reported and no entry can be hooked
 #[no_mangle]
 pub extern "C" fn ncn_on_jit_notifications(taken: bool) {
     COMPILATIONS_REPORTED.store(taken, Ordering::SeqCst);
     if taken {
-        logging::write("the runtime took the compilation mask, early stack checks are possible");
+        logging::write("the runtime took the compilation mask, method entries can be hooked");
     } else {
-        logging::write("the runtime refused the compilation mask, early stack checks are not possible");
+        logging::write("the runtime refused the compilation mask, method entries cannot be hooked");
     }
 }
 
@@ -139,13 +132,98 @@ pub extern "C" fn ncn_on_jit_compiled(function_id: usize) -> i32 {
     0
 }
 
-/// ncn_on_injected reports that the check was inserted into one method body
+/// ncn_stack_hook_enabled answers whether the machine-code guard is on for this run
 #[no_mangle]
-pub extern "C" fn ncn_on_injected() {
-    let seen = INJECTION_COUNT.fetch_add(1, Ordering::Relaxed);
-    if seen == 0 {
-        logging::write("the first method body carrying an early stack check was written");
+pub extern "C" fn ncn_stack_hook_enabled() -> i32 {
+    if hook::is_enabled() { 1 } else { 0 }
+}
+
+/// ncn_stack_hook_ready answers whether the managed throw entry has been handed over
+///
+/// The shell asks before it looks at a compiled method at all: before this point there is nowhere for a trip to go
+#[no_mangle]
+pub extern "C" fn ncn_stack_hook_ready() -> i32 {
+    if hook::is_ready() { 1 } else { 0 }
+}
+
+/// ncn_configure_stack_guard takes the managed throw entry and the reserve size
+///
+/// A zero entry disarms the guard. The managed side does that first, then resolves the throw entry, then arms it: the
+/// lookup compiles the method, and a hook installed on the throw entry would send every trip back through the check.
+#[no_mangle]
+pub extern "C" fn ncn_configure_stack_guard(trip_entry: usize, reserve: usize) -> i32 {
+    hook::configure(trip_entry, reserve)
+}
+
+/// ncn_on_method_compiled hands one compiled method to the hook engine
+#[no_mangle]
+pub unsafe extern "C" fn ncn_on_method_compiled(
+    function_id: usize,
+    code_start: *const u8,
+    code_size: u32,
+) -> i32 {
+    if code_start.is_null() {
+        return -1;
     }
+
+    hook::install(function_id, code_start as usize, code_size);
+    0
+}
+
+/// ncn_hook_stats copies the counters out
+#[no_mangle]
+pub unsafe extern "C" fn ncn_hook_stats(out: *mut hook::HookStats) -> i32 {
+    if out.is_null() {
+        return -1;
+    }
+
+    *out = hook::stats();
+    0
+}
+
+/// ncn_hook_addresses copies the hooked entry addresses out, most recent first is not promised
+#[no_mangle]
+pub unsafe extern "C" fn ncn_hook_addresses(out: *mut usize, capacity: usize) -> i32 {
+    hook::addresses(out, capacity) as i32
+}
+
+/// ncn_hook_debug_state reports the TLS values the trampoline and the helper each read
+#[no_mangle]
+pub unsafe extern "C" fn ncn_hook_debug_state(out: *mut usize, capacity: usize) -> i32 {
+    let values = hook::debug_state();
+    if out.is_null() || capacity < values.len() {
+        return -1;
+    }
+
+    for (index, value) in values.iter().enumerate() {
+        *out.add(index) = *value;
+    }
+    0
+}
+
+/// ncn_hook_report writes one summary line, used by the harness and by a run that wants the numbers in the log
+#[no_mangle]
+pub extern "C" fn ncn_hook_report() {
+    let stats = hook::stats();
+    logging::write(&format!(
+        "machine-code guard: {} attempts, {} hooked, {} deduplicated, {} before the entry was armed, \
+         {} decode skipped, {} alloc skipped, {} patch skipped, {} trampoline bytes, {} ns installing (max {}), \
+         {} slow calls, {} trips, {} thread states, {} threads left unguarded",
+        stats.attempts,
+        stats.hooked,
+        stats.deduplicated,
+        stats.not_ready,
+        stats.skipped_decode,
+        stats.skipped_alloc,
+        stats.skipped_patch,
+        stats.trampoline_bytes,
+        stats.install_nanos,
+        stats.max_install_nanos,
+        stats.slow_calls,
+        stats.trips,
+        stats.thread_inits,
+        stats.disabled_threads
+    ));
 }
 
 /// ncn_on_module_seen records one module the layer was asked about, logged once each
@@ -189,12 +267,12 @@ pub unsafe extern "C" fn ncn_on_module_seen(simple_name: *const c_char, accepted
     if seen == 10 && !ANY_ACCEPTED.load(Ordering::Relaxed) {
         logging::write(
             "warning: ten assemblies were seen and the rewrite list matched none of them; \
-             check NCN_REWRITE_MODULES, a leftover value will disable the early stack check",
+             check NCN_REWRITE_MODULES, a leftover value will disable the guard",
         );
     }
 }
 
-/// ncn_should_rewrite_module answers whether a module's methods get the early stack check
+/// ncn_should_rewrite_module answers whether a module's method entries get a hook
 /// The list is read from NCN_REWRITE_MODULES, a comma or semicolon separated set of assembly simple names; when the
 /// variable is absent a module only qualifies if its assembly references this ecosystem
 /// `ecosystem_reference` carries that fact, which the shell reads off the module's metadata and the Rust side cannot see
@@ -222,16 +300,15 @@ pub unsafe extern "C" fn ncn_should_rewrite_module(
     }
 }
 
-/// is_rewritable decides whether a module's methods get the early stack check
+/// is_rewritable decides whether a module's method entries get a hook
 ///
-/// With NCN_REWRITE_MODULES set the list is taken as written and only what it names is rewritten, which is how a run
-/// can be narrowed for measurement. Without it every assembly counts except the framework ones: a recursion that runs
-/// away can begin in the kernel or in any mod, so leaving mods out would miss exactly the case this is meant to catch.
+/// With NCN_REWRITE_MODULES set the list is taken as written and only what it names is hooked, which is how a run can be
+/// narrowed for measurement. Without it every assembly counts except the framework ones and the two excluded below: a
+/// recursion that runs away can begin in the kernel or in any mod, so leaving mods out would miss exactly the case this
+/// is meant to catch.
 ///
-/// The default also requires the module to reference the ecosystem, because the injected call names a type in one of
-/// the kernel's assemblies. A module that references none of them cannot bind that call and dies when its body is
-/// compiled, which is what happens to the very process that starts the kernel: it is named with the same prefix while
-/// only ever carrying its own assemblies
+/// The default also requires the module to reference this ecosystem. A third-party library's entries are not this
+/// guard's business, and hooking them would put trampolines on code the kernel never wrote
 fn is_rewritable(name: &str, ecosystem_reference: bool) -> bool {
     let configured = REWRITE_LIST.get_or_init(|| {
         let resolved = std::env::var("NCN_REWRITE_MODULES")
@@ -261,19 +338,7 @@ fn is_rewritable(name: &str, ecosystem_reference: bool) -> bool {
 
     match configured {
         Some(list) => list.iter().any(|entry| entry.eq_ignore_ascii_case(name)),
-        None => !is_framework(name) && !is_guard_assembly(name) && ecosystem_reference,
-    }
-}
-
-/// ncn_stack_guard_ready answers whether the assembly holding the injected entry has been loaded
-/// The shell writes nothing before that: a body compiled earlier would demand the assembly ahead of the kernel's own
-/// load order, and the main library would fail to load
-#[no_mangle]
-pub extern "C" fn ncn_stack_guard_ready() -> i32 {
-    if STACK_GUARD_READY.load(Ordering::SeqCst) {
-        1
-    } else {
-        0
+        None => !is_framework(name) && !is_excluded_assembly(name) && ecosystem_reference,
     }
 }
 
@@ -284,16 +349,11 @@ fn is_framework(name: &str) -> bool {
         .any(|prefix| name.starts_with(prefix))
 }
 
-/// is_guard_assembly reports whether a simple name holds the entry the injected call points at
-/// Rewriting that assembly would put the check at the head of the check itself
-fn is_guard_assembly(name: &str) -> bool {
-    let guard = GUARD_ASSEMBLY_ENV.get_or_init(|| {
-        std::env::var(GUARD_ASSEMBLY_VARIABLE)
-            .ok()
-            .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| GUARD_ASSEMBLY_DEFAULT.to_string())
-    });
-    name.eq_ignore_ascii_case(guard)
+/// is_excluded_assembly reports whether a simple name must never be hooked
+fn is_excluded_assembly(name: &str) -> bool {
+    EXCLUDED_ASSEMBLIES
+        .iter()
+        .any(|excluded| name.eq_ignore_ascii_case(excluded))
 }
 
 /// ncn_register_stack_overflow_callback takes the managed handler and the directory its reports belong in
@@ -305,12 +365,7 @@ pub unsafe extern "C" fn ncn_register_stack_overflow_callback(
     report_directory: *const u8,
     length: usize,
 ) -> i32 {
-    //Reaching this entry means the guard assembly is loaded and can be resolved, so injection may begin from here
-    //The moment is worth a line of its own: it is the boundary before which no method body is touched at all
-    if !STACK_GUARD_READY.swap(true, Ordering::SeqCst) {
-        logging::write("the guard assembly is loaded, early stack checks are enabled from here");
-    }
-
+    //Only the crash report path is registered here now; the guard itself is armed by ncn_configure_stack_guard
     if callback == 0 || report_directory.is_null() || length == 0 {
         return -1;
     }

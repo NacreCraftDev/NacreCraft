@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using NacreCraft;
+using NacreCraft.Boot;
 using NacreCraft.Game;
 using NacreCraft.Client;
 using NacreCraft.Network.Chat;

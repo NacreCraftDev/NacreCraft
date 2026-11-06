@@ -12,10 +12,13 @@ public static class SlotSources
     public static readonly Codec<SlotSource> TYPED_CODEC = new SlotSourceDispatchCodec();
 
     //CODEC the typed form with the inline group list as fallback, maps to vanilla CODEC
-    public static readonly Codec<SlotSource> CODEC = Codecs.WithAlternative(TYPED_CODEC,
-        GroupSlotSource.INLINE_CODEC.ComapFlatMap(
-            group => DataResult<SlotSource>.Success(group),
-            source => (GroupSlotSource)source));
+    //Resolved on first use: GroupSlotSource.INLINE_CODEC reads this field while its own type initializer runs, so an
+    //eager value here would hand that initializer a null and leave the slot source codecs unusable
+    public static readonly Codec<SlotSource> CODEC = new LazyCodec<SlotSource>(() =>
+        Codecs.WithAlternative(TYPED_CODEC,
+            GroupSlotSource.INLINE_CODEC.ComapFlatMap(
+                group => DataResult<SlotSource>.Success(group),
+                source => (GroupSlotSource)source)));
 
     public static MapCodec<RegistrySlotSource> Bootstrap(Registry<MapCodec<RegistrySlotSource>> registry)
     {

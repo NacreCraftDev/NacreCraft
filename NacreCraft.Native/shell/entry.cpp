@@ -11,7 +11,6 @@
 #include <cwchar>
 #include <map>
 #include <mutex>
-#include <set>
 #include <string>
 #include <utility>
 #include <unknwn.h>
@@ -89,8 +88,9 @@ void ncn_on_module_load_finished(uint64_t module_id, int32_t hr_status);
 void ncn_on_module_unload_started(uint64_t module_id);
 int32_t ncn_on_get_rejit_parameters(uint64_t module_id, uint32_t method_def, void* function_control);
 int32_t ncn_should_rewrite_module(const char* simple_name, int32_t ecosystem_reference);
-int32_t ncn_stack_guard_ready();
-void ncn_on_injected();
+int32_t ncn_stack_hook_enabled();
+int32_t ncn_stack_hook_ready();
+int32_t ncn_on_method_compiled(size_t function_id, const void* code_start, uint32_t code_size);
 void ncn_on_module_seen(const char* simple_name, int32_t accepted);
 int32_t ncn_com_get_class_object(const GUID* rclsid, const GUID* riid, void** ppv_object);
 int32_t ncn_com_can_unload_now();
@@ -127,7 +127,7 @@ static DWORD BuildProfilerEventMask()
 }
 
 //SetProfilerMask enables the combined mask and reports whether the runtime took it
-//A failure costs both the early stack check and every runtime rewrite, so it is surfaced rather than swallowed
+//A failure costs the stack guard and every runtime rewrite, so it is surfaced rather than swallowed
 static bool SetProfilerMask()
 {
     if (g_profiler_info == nullptr)
@@ -137,26 +137,11 @@ static bool SetProfilerMask()
     return SUCCEEDED(hr);
 }
 
-//---- early stack check injection ----
-
-//The check itself lives on the managed side: reading the thread's stack limit and the quiet period around a trip both
-//belong next to the entry the injected call points at, and a call that never leaves managed code costs a fraction of
-//the transition into this layer did. What is left here is deciding which bodies are worth the check at all
+//---- machine-code guard: module filtering and body scan ----
 
 //Method headers belong to the file format rather than the metadata, so their layout is spelled out here
 //ECMA-335 II.25.4.2: the low bits of the first byte pick between the two layouts and the tiny one carries the size
 static const unsigned char IlFatFormat = 0x3;
-
-//A fat header is a bitfield: the low bits hold the format and flags, the top four the header length in dwords
-//MoreSects marks a section table after the code, and that is where exception handlers are described
-//The value is taken from corhdr.h, where MoreSects is 0x8 and InitLocals is 0x10
-static const unsigned short IlMoreSects = 0x8;
-static const unsigned short IlFatHeaderDwords = 3;
-
-//The format and flags share the low bits, with the header length in the top four
-//Everything in between is an ordinary flag and has to be carried over when the header is rebuilt
-static const unsigned short IlFormatMask = 0x7;
-static const unsigned short IlHeaderSizeMask = 0xF000;
 
 struct IlFatHeader
 {
@@ -165,116 +150,6 @@ struct IlFatHeader
     unsigned int CodeSize;
     unsigned int LocalVarSigTok;
 };
-
-//The call opcode followed by a little endian four byte metadata token
-static const unsigned char IlCallOpcode = 0x28;
-static const unsigned int IlCallSize = 5;
-
-//The check takes no arguments and returns nothing, so it leaves the stack balanced and MaxStack stays as it was
-//A method signature is the calling convention, then the parameter count, then the return type
-//
-//The call points at the kernel entry rather than straight at the framework probe. The probe on its own fires on every
-//call, so once the stack is short it keeps firing while the exception is unwound and handled, and the process ends up
-//dying on its way to reporting the problem; the kernel entry wraps it with a quiet period instead
-static const unsigned char StackCheckSignature[] = {0x00, 0x00, 0x01};
-
-//StackCheckName reads one of the entry names from the environment, falling back to the built in default
-//The names live there rather than in the binary so the managed side can move the entry without this library being rebuilt;
-//the restart that installs the profiler already owns the environment block the child starts with
-//Both the variable and its value are plain ASCII, so the narrow environment API works on every platform
-static const std::wstring& StackCheckName(const char* variable, const wchar_t* fallback)
-{
-    static std::map<std::string, std::wstring> cache;
-    static std::mutex cacheMutex;
-    std::lock_guard<std::mutex> guard(cacheMutex);
-
-    const auto found = cache.find(variable);
-    if (found != cache.end())
-        return found->second;
-
-    std::wstring value(fallback);
-    const char* raw = std::getenv(variable);
-    if (raw != nullptr && raw[0] != '\0')
-    {
-        wchar_t buffer[512];
-        const size_t converted = std::mbstowcs(buffer, raw, sizeof(buffer) / sizeof(buffer[0]) - 1);
-        if (converted != static_cast<size_t>(-1))
-            value.assign(buffer, converted);
-    }
-
-    return cache.emplace(variable, std::move(value)).first->second;
-}
-
-static const IID IidMetaDataAssemblyEmit = {
-    0x211EF15B, 0x5317, 0x4438, {0xB1, 0x96, 0xDE, 0xC8, 0x7B, 0x88, 0x76, 0x93}};
-
-//A metadata token only means something inside the module that defined it, so one reference is kept per module
-static std::map<ModuleID, mdMemberRef> g_stack_check_refs;
-static std::mutex g_stack_check_refs_mutex;
-
-//Bodies already given the check
-//
-//SetILFunctionBody is only defined for the first call on a given method: a method body can be reported for
-//compilation more than once, and replacing it again leaves the runtime with IL it rejects as invalid. Recording what
-//has been handled keeps every later report off a body that was already rewritten
-static std::set<std::pair<ModuleID, mdMethodDef>> g_rewritten_bodies;
-static std::mutex g_rewritten_bodies_mutex;
-
-//MarkRewritten records a body and reports whether this is the first time it was seen
-static bool MarkRewritten(ModuleID moduleId, mdMethodDef methodDef)
-{
-    std::lock_guard<std::mutex> guard(g_rewritten_bodies_mutex);
-    return g_rewritten_bodies.insert(std::make_pair(moduleId, methodDef)).second;
-}
-
-//FindOrCreateStackCheckRef returns the member reference for the helper, creating it on first use in a module
-//Zero means it could not be built, and the caller then leaves the method alone rather than writing IL that cannot bind
-static mdMemberRef FindOrCreateStackCheckRef(ModuleID moduleId, IMetaDataEmit* emit)
-{
-    {
-        std::lock_guard<std::mutex> guard(g_stack_check_refs_mutex);
-        const auto found = g_stack_check_refs.find(moduleId);
-        if (found != g_stack_check_refs.end())
-            return found->second;
-    }
-
-    IMetaDataAssemblyEmit* assemblyEmit = nullptr;
-    if (FAILED(emit->QueryInterface(IidMetaDataAssemblyEmit, reinterpret_cast<void**>(&assemblyEmit))))
-        return 0;
-
-    //The assembly is referenced by name alone: binding in this runtime goes by simple name, and a module touching any
-    //framework type already resolves against the same core library
-    ASSEMBLYMETADATA assemblyMeta;
-    memset(&assemblyMeta, 0, sizeof(assemblyMeta));
-
-    mdAssemblyRef coreLibRef = 0;
-    HRESULT hr = assemblyEmit->DefineAssemblyRef(
-        nullptr, 0, StackCheckName("NCN_STACK_CHECK_ASSEMBLY", L"NacreCraft.Util").c_str(), &assemblyMeta, nullptr, 0, 0, &coreLibRef);
-    assemblyEmit->Release();
-
-    if (FAILED(hr) || coreLibRef == 0)
-        return 0;
-
-    mdTypeRef typeRef = 0;
-    hr = emit->DefineTypeRefByName(coreLibRef,
-        StackCheckName("NCN_STACK_CHECK_TYPE", L"NacreCraft.Util.NativeStackGuard").c_str(), &typeRef);
-    if (FAILED(hr) || typeRef == 0)
-        return 0;
-
-    mdMemberRef memberRef = 0;
-    hr = emit->DefineMemberRef(
-        typeRef, StackCheckName("NCN_STACK_CHECK_METHOD", L"EnsureStack").c_str(), StackCheckSignature,
-        static_cast<ULONG>(sizeof(StackCheckSignature)), &memberRef);
-    if (FAILED(hr) || memberRef == 0)
-        return 0;
-
-    {
-        std::lock_guard<std::mutex> guard(g_stack_check_refs_mutex);
-        g_stack_check_refs[moduleId] = memberRef;
-    }
-
-    return memberRef;
-}
 
 //The prefix every assembly of this ecosystem carries
 static const WCHAR EcosystemNamePrefix[] = NC_WIDE("NacreCraft");
@@ -290,9 +165,9 @@ static std::mutex g_ecosystem_modules_mutex;
 
 //HasEcosystemReference reports whether a module's assembly references anything from this ecosystem
 //
-//The injected call names a type in one of the kernel's assemblies, so a module referencing none of them cannot bind
-//that call: the rewritten body is rejected the moment it is compiled. The host that starts the kernel is exactly this
-//case, it carries the same name prefix while knowing only its own assemblies
+//The default filter only hooks assemblies that reference this ecosystem: those are the kernel's own assemblies and the
+//mods. A third-party library's entries are not this guard's business, and hooking them would put trampolines on code
+//the kernel never wrote
 static bool HasEcosystemReference(ModuleID moduleId)
 {
     {
@@ -556,12 +431,12 @@ static void BuildIlOpcodeTables()
 //needs no idea where the call goes: the interesting cycles pass through an interface, where the token names the
 //interface method rather than whichever implementation is reached
 //
-//A loop is deliberately not a reason to inject. Its frame is taken once at entry and never again, so a body that only
+//A loop is deliberately not a reason to hook. Its frame is taken once at entry and never again, so a body that only
 //loops still returns; the one thing that could grow inside a loop is a stack allocation, and the JIT already probes on
 //every dynamic stack pointer adjustment
 //
-//A body the walk cannot make sense of is taken to be able to. That leaves it exactly as it was before this scan existed,
-//so an unreadable body keeps the check rather than quietly losing it
+//A body the walk cannot make sense of is taken to be able to. That keeps the hook on it, since an unreadable body is
+//exactly the one whose control flow should not be assumed to terminate
 static bool MayExhaustStack(const unsigned char* code, unsigned int codeSize)
 {
     std::call_once(g_ilTablesOnce, BuildIlOpcodeTables);
@@ -609,119 +484,54 @@ static bool MayExhaustStack(const unsigned char* code, unsigned int codeSize)
     return false;
 }
 
-//InjectIntoBody rewrites one method body, keeping the original code and placing the call in front of it
+//---- machine-code stack guard ----
+//The check runs at the machine-code entry. This side only decides which bodies are worth a hook and hands the code
+//address over; decoding, relocation and the trampoline live on the Rust side
+
+//ShouldCheckBody reports whether a body can take part in a descent that never ends
 //
-//Bodies carrying a section table are passed over. That table is where exception handlers are described, and every
-//offset in it is relative to the start of the code, so inserting anything would require shifting all of them by the
-//same amount. Skipping them keeps this step safe to reason about; handlers can be handled afterwards
-static void InjectIntoBody(
-    ModuleID moduleId, mdMethodDef methodDef, IMetaDataEmit* emit, LPCBYTE header)
+//A body with no call always returns, so a chain of such bodies cannot run the stack out. Reading the body is all this
+//does; nothing is replaced, and a section table is harmless here because only the code ahead of it is read.
+static bool ShouldCheckBody(ModuleID moduleId, mdMethodDef methodDef)
 {
+    LPCBYTE header = nullptr;
+    ULONG headerSize = 0;
+    if (FAILED(g_profiler_info->GetILFunctionBody(moduleId, methodDef, &header, &headerSize)) || header == nullptr)
+        return false;
+
     const unsigned char* bytes = reinterpret_cast<const unsigned char*>(header);
-    const bool isFat = (bytes[0] & 0x3) == IlFatFormat;
-
-
     const unsigned char* code = nullptr;
     unsigned int codeSize = 0;
-    unsigned short maxStack = 8;
-    unsigned int localVarSigTok = 0;
-    unsigned short preservedFlags = 0;
 
-    if (isFat)
+    if ((bytes[0] & 0x3) == IlFatFormat)
     {
         const IlFatHeader* fat = reinterpret_cast<const IlFatHeader*>(bytes);
-
-        if ((fat->Flags & IlMoreSects) != 0)
-            return;
-
-        //The header length is stored as a count of dwords, so the code begins that far into the body
         const unsigned int headerBytes = ((fat->Flags >> 12) & 0xF) * 4;
         code = bytes + headerBytes;
         codeSize = fat->CodeSize;
-        maxStack = fat->MaxStack;
-        localVarSigTok = fat->LocalVarSigTok;
-
-        //Only the format and header length bits are rewritten when the header is rebuilt, so the rest are kept here
-        //InitLocals is the one that matters: dropping it leaves the locals uninitialized and the body stops verifying
-        preservedFlags = static_cast<unsigned short>(fat->Flags & ~IlFormatMask & ~IlHeaderSizeMask);
     }
     else
     {
-        //A tiny header packs the size into the byte itself and carries nothing else
         codeSize = (bytes[0] >> 2) & 0x3F;
         code = bytes + 1;
     }
 
-    //Only a body that can take part in an endless descent is worth the check, which keeps it off the many leaf methods
-    //that can never be part of one
-    if (!MayExhaustStack(code, codeSize))
-        return;
+    //An unreadable body keeps the check: the scan's own rule is that what cannot be understood is assumed to recurse
+    if (codeSize == 0)
+        return true;
 
-    const unsigned int newCodeSize = codeSize + IlCallSize;
-
-    //A tiny header cannot describe more than 63 bytes, so a body that no longer fits is left as it is rather than
-    //promoted to a fat header. Promotion is a separate change and not needed to prove the mechanism
-    if (!isFat && newCodeSize > 63)
-        return;
-
-    const mdMemberRef callee = FindOrCreateStackCheckRef(moduleId, emit);
-    if (callee == 0)
-        return;
-
-    IMethodMalloc* allocator = nullptr;
-    if (FAILED(g_profiler_info->GetILFunctionBodyAllocator(moduleId, &allocator)))
-        return;
-
-    const unsigned int headerBytes = isFat ? sizeof(IlFatHeader) : 1;
-    unsigned char* replacement = static_cast<unsigned char*>(allocator->Alloc(headerBytes + newCodeSize));
-    if (replacement != nullptr)
-    {
-        unsigned char* target = replacement;
-
-        if (isFat)
-        {
-            //The format and header length are set for the rebuilt header, every other flag is carried over untouched
-            IlFatHeader* fat = reinterpret_cast<IlFatHeader*>(replacement);
-            fat->Flags = static_cast<unsigned short>(
-                preservedFlags | (IlFatHeaderDwords << 12) | IlFatFormat);
-            fat->MaxStack = maxStack;
-            fat->CodeSize = newCodeSize;
-            fat->LocalVarSigTok = localVarSigTok;
-            target = replacement + sizeof(IlFatHeader);
-        }
-        else
-        {
-            replacement[0] = static_cast<unsigned char>((newCodeSize << 2) | 0x2);
-            target = replacement + 1;
-        }
-
-        //The call is the opcode followed by the token, least significant byte first
-        target[0] = IlCallOpcode;
-        memcpy(target + 1, &callee, sizeof(callee));
-
-        memcpy(target + IlCallSize, code, codeSize);
-
-        if (SUCCEEDED(g_profiler_info->SetILFunctionBody(moduleId, methodDef, replacement)))
-            ncn_on_injected();
-    }
-
-    allocator->Release();
+    return MayExhaustStack(code, codeSize);
 }
 
-//TryInjectStackCheck adds the check to one method body when that method is one this layer should touch
-static void TryInjectStackCheck(FunctionID functionId, BOOL isSafeToBlock)
+//TryHookCompiledMethod installs the machine-code guard on one freshly compiled body
+//
+//JITCompilationFinished is late enough that the body exists and early enough that no call has reached it through this
+//address yet. The runtime reports every version separately (tier0, tier1, OSR), so each one is offered and the address
+//decides whether it was already handled.
+static void TryHookCompiledMethod(FunctionID functionId)
 {
-    //Nothing is written until the assembly holding the injected entry has been loaded
-    //
-    //The kernel's main assembly deliberately reaches for nothing outside the framework while it initializes: the
-    //resolver that can find this layer's assembly is installed from inside that very initialization, so resolving the
-    //entry any earlier would fail and take the whole main library load down with it. A body compiled before then has
-    //to be left alone, and the managed side says when that point has passed
-    if (ncn_stack_guard_ready() == 0)
-        return;
-
-    //Replacing a body is not safe while the runtime is at a point it cannot block, so those are passed over
-    if (isSafeToBlock == FALSE)
+    //Before the managed throw entry is handed over a trip has nowhere to go
+    if (ncn_stack_hook_ready() == 0)
         return;
 
     ClassID classId = 0;
@@ -730,33 +540,19 @@ static void TryInjectStackCheck(FunctionID functionId, BOOL isSafeToBlock)
     if (FAILED(g_profiler_info->GetFunctionInfo(functionId, &classId, &moduleId, &methodDef)))
         return;
 
-    //A module outside the rewrite list is the common case by far and its verdict is cached, so asking first keeps the
-    //bookkeeping below off every framework body the runtime compiles
+    //Framework assemblies and anything outside the configured set answer from a per-module cache
     if (!IsRewritableModule(moduleId))
         return;
 
-    //Replacing a body twice is not something the runtime supports, so a method already handled is left alone
-    if (!MarkRewritten(moduleId, methodDef))
+    if (!ShouldCheckBody(moduleId, methodDef))
         return;
 
-    IMetaDataImport* import = nullptr;
-    IMetaDataEmit* emit = nullptr;
-    if (FAILED(g_profiler_info->GetModuleMetaData(
-            moduleId, ofRead | ofWrite, IidMetaDataImport, reinterpret_cast<IUnknown**>(&import))))
+    LPCBYTE start = nullptr;
+    ULONG size = 0;
+    if (FAILED(g_profiler_info->GetCodeInfo(functionId, &start, &size)) || start == nullptr || size == 0)
         return;
-    if (FAILED(import->QueryInterface(IidMetaDataEmit, reinterpret_cast<void**>(&emit))))
-    {
-        import->Release();
-        return;
-    }
 
-    LPCBYTE header = nullptr;
-    ULONG headerSize = 0;
-    if (SUCCEEDED(g_profiler_info->GetILFunctionBody(moduleId, methodDef, &header, &headerSize)))
-        InjectIntoBody(moduleId, methodDef, emit, header);
-
-    emit->Release();
-    import->Release();
+    ncn_on_method_compiled(static_cast<size_t>(functionId), start, static_cast<uint32_t>(size));
 }
 
 namespace nacrecraft_native {
@@ -855,12 +651,22 @@ public:
         return S_OK;
     }
 
-    //JITCompilationStarted fires before a method body is handed to the JIT, which is the only moment its IL can be
-    //replaced. The Rust side decides whether this method is one of the ones carrying a stack check
+    //JITCompilationStarted only counts bodies now: the guard works on the finished machine code, and the body is still
+    //useful here for the "contains a call" scan done at the finished callback
     HRESULT STDMETHODCALLTYPE JITCompilationStarted(FunctionID functionId, BOOL fIsSafeToBlock) override
     {
+        (void)fIsSafeToBlock;
         ncn_on_jit_compiled(static_cast<size_t>(functionId));
-        TryInjectStackCheck(functionId, fIsSafeToBlock);
+        return S_OK;
+    }
+
+    //JITCompilationFinished is where the machine-code guard is installed: the body exists and the entry has not been
+    //called through this address yet
+    HRESULT STDMETHODCALLTYPE JITCompilationFinished(FunctionID functionId, HRESULT hrStatus, BOOL fIsSafeToBlock) override
+    {
+        (void)fIsSafeToBlock;
+        if (SUCCEEDED(hrStatus) && ncn_stack_hook_enabled() != 0)
+            TryHookCompiledMethod(functionId);
         return S_OK;
     }
 
@@ -1146,6 +952,10 @@ static mdAssemblyRef FindOrCreateAssemblyRef(IMetaDataAssemblyImport* assembly_i
         return mdAssemblyRefNil;
     return created;
 }
+
+//The emit side of the assembly reference table, needed only where a module's reference is created
+static const IID IidMetaDataAssemblyEmit = {
+    0x211EF15B, 0x5317, 0x4438, {0xB1, 0x96, 0xDE, 0xC8, 0x7B, 0x88, 0x76, 0x93}};
 
 //ncn_ensure_type_ref makes sure a module carries a reference to a type and answers its TypeRef token
 extern "C" uint32_t ncn_ensure_type_ref(uint64_t module_id, const char* assembly_name, const char* type_name)

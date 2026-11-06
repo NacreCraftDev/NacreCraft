@@ -11,6 +11,9 @@ crate-type = ["cdylib"]
 cc = "1.2"
 
 [dependencies]
+#The machine-code hook decodes and relocates the instructions it displaces; only the decoder, encoder and block
+#encoder are needed, so the formatters and instruction-info tables stay out of the binary
+iced-x86 = { version = "1.22", default-features = false, features = ["std", "decoder", "encoder", "block_encoder", "instr_info"] }
 #default_fonts would embed four typefaces, over two megabytes of them, while the report window already takes its
 #typeface from the system so it can draw the local language
 egui = { version = "0.36.2", default-features = false }

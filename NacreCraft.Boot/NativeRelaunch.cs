@@ -101,11 +101,11 @@ public static class NativeRelaunch
         startInfo.Environment["CORECLR_PROFILER_PATH"] = library;
         startInfo.Environment[AttachedFlag] = "1";
 
-        //The stack check entry is named here rather than compiled into the native library, so moving it later only
-        //changes these three lines. The native side falls back to the same defaults when they are absent
-        startInfo.Environment["NCN_STACK_CHECK_ASSEMBLY"] = "NacreCraft.Util";
-        startInfo.Environment["NCN_STACK_CHECK_TYPE"] = "NacreCraft.Util.NativeStackGuard";
-        startInfo.Environment["NCN_STACK_CHECK_METHOD"] = "EnsureStack";
+        //The reserve the machine-code guard keeps above the guard page; the native side falls back to the same value
+        //when this is absent. The guard is on by default and NCN_STACK_CHECK=0 turns it off for a comparison run; both
+        //settings are inherited by the child untouched, so a measurement sets them on the parent process
+        if (!startInfo.Environment.TryGetValue("NCN_STACK_RESERVE", out var reserve) || string.IsNullOrEmpty(reserve))
+            startInfo.Environment["NCN_STACK_RESERVE"] = (512 * 1024).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         //The rewrite list is left alone: the layer decides on its own when the variable is absent, and that default
         //covers every assembly except the framework ones, mods included
