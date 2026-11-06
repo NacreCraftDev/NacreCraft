@@ -95,10 +95,14 @@ public sealed class AttributeType<Value> : IAttributeType
     }
 
     //CheckAllowedModifier checks whether the modifier belongs to this type
+    //A boxed modifier is also accepted when the typed modifier inside it is the library instance, which is what the typed Modify overload produces
     public void CheckAllowedModifier(AttributeModifier<Value, object> modifier)
     {
         if (ReferenceEquals(modifier, AttributeModifier.Override<Value>())) return;
         if (ModifierLibrary.Values.Any(existing => ReferenceEquals(existing, modifier))) return;
+        if (modifier is IBoxedModifier boxed
+            && ModifierLibrary.Values.Any(existing => existing is IBoxedModifier library
+                && ReferenceEquals(library.InnerModifier, boxed.InnerModifier))) return;
         throw new ArgumentException($"Modifier {modifier} is not valid for {this}");
     }
 

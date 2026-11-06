@@ -44,10 +44,10 @@ public static class PlacementUtils
         => ResourceKey<RegistryPlacedFeature>.Create(Registries.PLACED_FEATURE, Identifier.WithDefaultNamespace(name));
 
     //Bootstrap registers every built-in placed feature data class, maps to vanilla bootstrap
-    //CavePlacements joins this list once CaveFeatures (and its ProcessorLists dependency) is ported
     public static void Bootstrap(BootstrapContext<RegistryPlacedFeature> context)
     {
         AquaticPlacements.Bootstrap(context);
+        CavePlacements.Bootstrap(context);
         EndPlacements.Bootstrap(context);
         MiscOverworldPlacements.Bootstrap(context);
         NetherPlacements.Bootstrap(context);

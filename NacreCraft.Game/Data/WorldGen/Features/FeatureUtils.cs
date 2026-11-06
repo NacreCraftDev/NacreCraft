@@ -11,10 +11,10 @@ namespace NacreCraft.Game.Data.WorldGen.Features;
 public static class FeatureUtils
 {
     //Bootstrap registers every built-in configured feature data class, maps to vanilla bootstrap
-    //CaveFeatures joins this list with its own slice
     public static void Bootstrap(BootstrapContext<RegistryConfiguredFeature> context)
     {
         AquaticFeatures.Bootstrap(context);
+        CaveFeatures.Bootstrap(context);
         EndFeatures.Bootstrap(context);
         MiscOverworldFeatures.Bootstrap(context);
         NetherFeatures.Bootstrap(context);

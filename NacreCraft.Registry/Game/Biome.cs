@@ -93,4 +93,87 @@ public class Biome : RegistryIdentified
 
     //SetRegistryId is backfilled by the data-driven loading flow when writing into the registry
     public void SetRegistryId(Identifier id) => _id = id;
+
+    //BiomeBuilder the vanilla Biome.BiomeBuilder form the biome data classes use
+    public sealed class BiomeBuilder
+    {
+        private bool _hasPrecipitation = true;
+        private float _temperature;
+        private float _downfall;
+        private TemperatureModifier _temperatureModifier = TemperatureModifier.None;
+        private readonly EnvironmentAttributeMap.Builder _attributes = EnvironmentAttributeMap.CreateBuilder();
+        private BiomeSpecialEffects? _specialEffects;
+        private MobSpawnSettings? _mobSpawnSettings;
+        private BiomeGenerationSettings? _generationSettings;
+
+        public BiomeBuilder HasPrecipitation(bool hasPrecipitation)
+        {
+            _hasPrecipitation = hasPrecipitation;
+            return this;
+        }
+
+        public BiomeBuilder Temperature(float temperature)
+        {
+            _temperature = temperature;
+            return this;
+        }
+
+        public BiomeBuilder Downfall(float downfall)
+        {
+            _downfall = downfall;
+            return this;
+        }
+
+        public BiomeBuilder PutAttributes(EnvironmentAttributeMap attributes)
+        {
+            _attributes.PutAll(attributes);
+            return this;
+        }
+
+        public BiomeBuilder SetAttribute<Value>(EnvironmentAttribute<Value> attribute, Value value)
+        {
+            _attributes.Set(attribute, value);
+            return this;
+        }
+
+        //Modify adjusts an existing attribute, maps to vanilla BiomeBuilder.modifyAttribute
+        public BiomeBuilder Modify<Value, Argument>(EnvironmentAttribute<Value> attribute,
+            AttributeModifier<Value, Argument> modifier, Argument argument)
+        {
+            _attributes.Modify(attribute, modifier, argument);
+            return this;
+        }
+
+        public BiomeBuilder SpecialEffects(BiomeSpecialEffects specialEffects)
+        {
+            _specialEffects = specialEffects;
+            return this;
+        }
+
+        public BiomeBuilder MobSpawnSettings(MobSpawnSettings mobSpawnSettings)
+        {
+            _mobSpawnSettings = mobSpawnSettings;
+            return this;
+        }
+
+        public BiomeBuilder GenerationSettings(BiomeGenerationSettings generationSettings)
+        {
+            _generationSettings = generationSettings;
+            return this;
+        }
+
+        public BiomeBuilder TemperatureAdjustment(TemperatureModifier temperatureModifier)
+        {
+            _temperatureModifier = temperatureModifier;
+            return this;
+        }
+
+        public Biome Build()
+        {
+            if (_specialEffects is null || _mobSpawnSettings is null || _generationSettings is null)
+                throw new InvalidOperationException("You are missing parameters to build a proper biome");
+            return new Biome(new ClimateSettings(_hasPrecipitation, _temperature, _temperatureModifier, _downfall),
+                _attributes.Build(), _specialEffects, _generationSettings, _mobSpawnSettings);
+        }
+    }
 }

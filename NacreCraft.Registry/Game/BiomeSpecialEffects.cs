@@ -53,4 +53,47 @@ public sealed class BiomeSpecialEffects
 
     //WaterColorHex hex string for network sync, maps to vanilla ExtraCodecs.STRING_RGB_COLOR encoded form
     public string WaterColorHex => "#" + (WaterColor & 0xFFFFFF).ToString("x6", CultureInfo.InvariantCulture);
+
+    //Builder the vanilla BiomeSpecialEffects.Builder form used by the biome data classes
+    public sealed class Builder
+    {
+        private int _waterColor = 4159204;
+        private Optional<int> _foliageColor = Optional<int>.Empty();
+        private Optional<int> _dryFoliageColor = Optional<int>.Empty();
+        private Optional<int> _grassColor = Optional<int>.Empty();
+        private NacreCraft.Registry.GrassColorModifier _grassColorModifier = NacreCraft.Registry.GrassColorModifier.None;
+
+        public Builder WaterColor(int color)
+        {
+            _waterColor = color;
+            return this;
+        }
+
+        public Builder FoliageColor(int color)
+        {
+            _foliageColor = Optional<int>.Of(color);
+            return this;
+        }
+
+        public Builder DryFoliageColor(int color)
+        {
+            _dryFoliageColor = Optional<int>.Of(color);
+            return this;
+        }
+
+        public Builder GrassColor(int color)
+        {
+            _grassColor = Optional<int>.Of(color);
+            return this;
+        }
+
+        public Builder GrassColorModifier(NacreCraft.Registry.GrassColorModifier modifier)
+        {
+            _grassColorModifier = modifier;
+            return this;
+        }
+
+        public BiomeSpecialEffects Build()
+            => new(_waterColor, _foliageColor, _dryFoliageColor, _grassColor, _grassColorModifier);
+    }
 }

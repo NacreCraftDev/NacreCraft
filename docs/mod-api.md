@@ -425,7 +425,7 @@ Usage lines are computed on the fly from the command tree's node structure: lite
 
 ***
 
-## 4. Server facades
+## 4. Facades and extension points
 
 The facades in this chapter all live under `NacreCraft.ModApi.Wrapper`; after `using NacreCraft.ModApi.Wrapper;` they are available.
 
@@ -560,6 +560,46 @@ Rules worth knowing before choosing this over a plain event:
 - The tables are concurrent, but the provider itself runs on the caller's thread; a provider that reads mutable world state must cope with being called from wherever the query came.
 - Queries do not touch kernel code, so a lookup works on both client and server, in `Init` and in callbacks alike — unlike the chapter 4 facades, which throw outside the server main loop.
 
+### 4.5 Mod packs
+
+A mod can contribute a data pack and, on the client, a resource pack, so its recipes, tags, loot tables, functions and assets load with the game. Registration happens in `Init`; staging happens later, right before the kernel's pack repository scans, so the file layout is decided only after every mod had its say.
+
+```csharp
+using NacreCraft.ModApi.Pack;
+
+//resources embedded in this mod: data/... and assets/... are taken as pack content
+NcModPacks.Register("mymod");
+
+//a folder or a zip works the same way; priority decides who wins a resource conflict
+NcModPacks.RegisterFolder("mymod.config", "config-packs/mymod", NcPackSide.ServerData, priority: 10);
+NcModPacks.RegisterZip("mymod.zip", "packs/mymod.zip", NcPackSide.ServerData);
+```
+
+| Entry | Notes |
+| --- | --- |
+| `Register(id, side, priority, enabledByDefault)` | uses the calling mod assembly; takes embedded resources named `data/...`, `assets/...`, `pack.mcmeta` and `pack.png` |
+| `RegisterFolder(id, path, ...)` | copies a directory; the directory itself is not part of the pack |
+| `RegisterZip(id, path, ...)` | extracts the archive; one wrapping directory is flattened when the pack has no `pack.mcmeta` at its root |
+| `Registered` | every registration so far, in registration order |
+
+Staging result: a folder named `ncmod-<id>` under `datapacks/` on the server and under `resourcepacks/` on the client. `pack.mcmeta` is generated when the pack does not ship one, using the running pack format, so a pack cannot be rejected as incompatible. The folder carries a `.ncmod-pack.json` marker naming its id and a fingerprint of the source; an unchanged source is not copied again, and a folder whose mod is gone is deleted on the next start.
+
+Settings live in `config/nacrecraft-modapi/mod_packs.json`:
+
+```json
+{
+  "packs": {
+    "mymod": { "enabled": true, "priority": 0 }
+  }
+}
+```
+
+- `enabled` false keeps the pack out of the repository entirely, and removes its staged folder.
+- `priority` orders the mod packs against each other; a higher value wins a resource conflict. Mod packs always sit above vanilla and below user packs, matching Fabric's ordering, so a server owner can still override a mod with a hand-made pack.
+- The file is written with an entry per registered pack on first run; unknown ids stay untouched.
+
+Take effect on restart. `/reload` and `/datapack` are still kernel stubs (`resource reload is not implemented`, `datapack pack repository is not wired to the server yet`), so changing the config or the pack content needs a server restart until the kernel wires a re-scan.
+
 ***
 
 ## 5. Internals
@@ -577,6 +617,7 @@ You do not need this section to write mods, but it may help when debugging.
 | `Internal.BlockProbe.OnXxx(...)`                         | CallSite ×3 | block events; breaking and drops hook `ServerBlockUpdates`, state changes hook the interface method on `IBlockUpdateSink`; the break probe reads back the cancellation verdict |
 | `Internal.InteractionProbe.OnXxx(object, object)`        | CallSite ×5 | interaction events; each probe replays the original packet handler first, then publishes |
 | `Internal.ClientProbe.OnXxx(object, object)`             | CallSite ×3 | client connection events; the login probe replays the original handler, the two disconnect probes cover the login phase and the configuration/play phases |
+| `Internal.PackProbe.OnXxx(...)`                          | CallSite ×4 | mod packs; the discovery probes stage the packs before the source scans, the selection probes filter disabled packs and order the rest |
 
 `SignalProbe`'s signature takes only `string`, and the reference-typed parameters of the other probes are declared as `object`. That is a widening choice: the replacement is called with whatever the original call site pushes, and `object` accepts all of it while staying valid if a kernel signature later widens to a base type. Kernel types appear only inside method bodies, where a cast is safe.
 
@@ -590,7 +631,7 @@ The order that keeps this true is in the loader, not in the probe: replacement a
 
 ### 5.2 Hook point list
 
-ModApi's `ncmod.json` contains thirty-two rules, matching the table in 2.1 one-to-one. To change a hook point or add a rule, edit this file; after editing, rebuild (it is an embedded resource) and put the resulting dll back into `mods/` — the latter is already done automatically by `ncm build`'s deploy step, and missing it manifests as the rules not taking effect at all.
+ModApi's `ncmod.json` contains thirty-six rules; the event rows in 2.1 map one-to-one, and the pack rows in 4.5 add four more. To change a hook point or add a rule, edit this file; after editing, rebuild (it is an embedded resource) and put the resulting dll back into `mods/` — the latter is already done automatically by `ncm build`'s deploy step, and missing it manifests as the rules not taking effect at all.
 
 The four lifecycle phases come from three hook shapes: `Starting` is a Mark on `DedicatedServer::InitServer` (the first statement of boot), `Started` and `Stopping` are Marks on `MinecraftServer::Run` and `DedicatedServer::Stop` entries, and `Stopped` needs no rule of its own — `ServerProbe.OnServerRun` wraps the single call to `Run`, publishes `Stopped` when it returns, and only then lets the captured server instance go.
 

@@ -110,6 +110,12 @@ public sealed class EnvironmentAttributeMap
             return this;
         }
 
+        //Modify with a typed modifier argument; AttributeModifier is invariant, so the argument is widened through the existing adapter
+        //The biome data classes pass FloatModifier.Multiply and similar typed modifiers straight in
+        public Builder Modify<Value, Argument>(EnvironmentAttribute<Value> attribute,
+            AttributeModifier<Value, Argument> modifier, Argument argument)
+            => Modify(attribute, new ObjectArgumentModifier<Value, Argument>(modifier), argument!);
+
         public Builder Set<Value>(EnvironmentAttribute<Value> attribute, Value value)
             => Modify(attribute, AttributeModifier.Override<Value>(), value!);
 

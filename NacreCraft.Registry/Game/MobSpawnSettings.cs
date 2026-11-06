@@ -123,4 +123,38 @@ public sealed class MobSpawnSettings
         Spawners = spawners;
         SpawnCosts = spawnCosts;
     }
+
+    //Builder the vanilla MobSpawnSettings.Builder form the biome data classes use
+    public sealed class Builder
+    {
+        private float _creatureSpawnProbability = DefaultCreatureSpawnProbability;
+        private readonly Dictionary<MobCategory, List<SpawnerData>> _spawners = new();
+        private readonly Dictionary<Identifier, MobSpawnCost> _spawnCosts = new();
+
+        public Builder CreatureSpawnProbability(float probability)
+        {
+            _creatureSpawnProbability = probability;
+            return this;
+        }
+
+        public Builder AddSpawn(MobCategory category, SpawnerData data) => AddSpawn(category, data.Weight, data);
+
+        public Builder AddSpawn(MobCategory category, int weight, SpawnerData data)
+        {
+            if (!_spawners.TryGetValue(category, out var list)) _spawners[category] = list = new List<SpawnerData>();
+            list.Add(new SpawnerData(data.Type, data.MinCount, data.MaxCount, weight));
+            return this;
+        }
+
+        public Builder AddMobCharge(Identifier type, double energyBudget, double charge)
+        {
+            _spawnCosts[type] = new MobSpawnCost(energyBudget, charge);
+            return this;
+        }
+
+        public MobSpawnSettings Build()
+            => new(_creatureSpawnProbability,
+                _spawners.ToDictionary(entry => entry.Key, entry => (IReadOnlyList<SpawnerData>)entry.Value),
+                _spawnCosts);
+    }
 }

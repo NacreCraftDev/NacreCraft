@@ -188,6 +188,27 @@ public static class BlockTags
     //TrailRuinsReplaceable blocks trail ruin archaeology turns into suspicious gravel, maps to vanilla trail_ruins_replaceable
     public static readonly TagKey<NacreCraft.Registry.Block> TrailRuinsReplaceable = Create("trail_ruins_replaceable");
 
+    //DripstoneReplaceable blocks a dripstone cluster or large dripstone may replace, maps to vanilla dripstone_replaceable_blocks
+    public static readonly TagKey<NacreCraft.Registry.Block> DripstoneReplaceable = Create("dripstone_replaceable_blocks");
+
+    //SulfurSpikeReplaceable blocks a sulfur spike cluster may replace, maps to vanilla sulfur_spike_replaceable
+    public static readonly TagKey<NacreCraft.Registry.Block> SulfurSpikeReplaceable = Create("sulfur_spike_replaceable");
+
+    //AzaleaRootReplaceable blocks the azalea root system may replace, maps to vanilla azalea_root_replaceable
+    public static readonly TagKey<NacreCraft.Registry.Block> AzaleaRootReplaceable = Create("azalea_root_replaceable");
+
+    //AzaleaGrowsOn blocks the azalea root system may start on, maps to vanilla azalea_grows_on
+    public static readonly TagKey<NacreCraft.Registry.Block> AzaleaGrowsOn = Create("azalea_grows_on");
+
+    //ReplaceableByTrees blocks a tree may overwrite, maps to vanilla replaceable_by_trees
+    public static readonly TagKey<NacreCraft.Registry.Block> ReplaceableByTrees = Create("replaceable_by_trees");
+
+    //LushGroundReplaceable blocks a lush caves clay patch may replace, maps to vanilla lush_ground_replaceable
+    public static readonly TagKey<NacreCraft.Registry.Block> LushGroundReplaceable = Create("lush_ground_replaceable");
+
+    //GeodeInvalidBlocks blocks a geode must not carve into, maps to vanilla geode_invalid_blocks
+    public static readonly TagKey<NacreCraft.Registry.Block> GeodeInvalidBlocks = Create("geode_invalid_blocks");
+
     //Create builds the key from the vanilla block tag path
     private static TagKey<NacreCraft.Registry.Block> Create(string path)
         => TagKey<NacreCraft.Registry.Block>.Create(Registries.BLOCK,

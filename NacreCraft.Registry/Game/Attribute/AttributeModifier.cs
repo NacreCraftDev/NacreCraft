@@ -150,11 +150,19 @@ internal sealed class OverrideModifier<Value> : AttributeModifier<Value, object>
 }
 
 //ObjectArgumentModifier erases the concrete Argument type to object so it can go into the modifier library
-internal sealed class ObjectArgumentModifier<Subject, Argument> : AttributeModifier<Subject, object>
+//IBoxedModifier exposes the typed modifier inside so an equivalent instance can be matched against the library by reference
+internal interface IBoxedModifier
+{
+    object InnerModifier { get; }
+}
+
+internal sealed class ObjectArgumentModifier<Subject, Argument> : AttributeModifier<Subject, object>, IBoxedModifier
 {
     private readonly AttributeModifier<Subject, Argument> _inner;
 
     public ObjectArgumentModifier(AttributeModifier<Subject, Argument> inner) { _inner = inner; }
+
+    public object InnerModifier => _inner;
 
     public Subject Apply(Subject subject, object argument) => _inner.Apply(subject, (Argument)argument);
 
