@@ -34,15 +34,15 @@ using NacreCraft.Client.Model.Geom;
 using NacreCraft.Client.Resources.Metadata.Gui;
 namespace NacreCraft.Client.Gui.Font;
 
-//SpaceGlyphProvider maps to vanilla SpaceProvider
+//SpaceProvider maps to vanilla com.mojang.blaze3d.font.SpaceProvider
 //Spaces have only advance, no bitmap; the advances Map<int,float> converts to an EmptyGlyph dictionary
 //The advances field of a "space" provider in font/*.json defines the width of each space character
 //e.g. U+0020 regular space advance=4.0, U+00A0 no-break space advance=4.0
-public sealed class SpaceGlyphProvider : IGlyphProvider
+public sealed class SpaceProvider : IGlyphProvider
 {
     private readonly Dictionary<int, EmptyGlyph> _glyphs;
 
-    public SpaceGlyphProvider(IReadOnlyDictionary<int, float> advances)
+    public SpaceProvider(IReadOnlyDictionary<int, float> advances)
     {
         _glyphs = new Dictionary<int, EmptyGlyph>(advances.Count);
         foreach (var (codepoint, advance) in advances)

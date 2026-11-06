@@ -68,7 +68,7 @@ public sealed class TtfDefinition : IGlyphProviderDefinition
     public bool IsReference => false;
     public IGlyphProviderDefinition.ILoader? AsLoader => new TtfLoader(this);
 
-    //TtfLoader implements ILoader.Load, opening the TTF stream via IFontResourceAccessor and reading bytes to build a TtfGlyphProvider
+    //TtfLoader implements ILoader.Load, opening the TTF stream via IFontResourceAccessor and reading bytes to build a TrueTypeGlyphProvider
     private sealed class TtfLoader : IGlyphProviderDefinition.ILoader
     {
         private readonly TtfDefinition _def;
@@ -83,7 +83,7 @@ public sealed class TtfDefinition : IGlyphProviderDefinition
                 using var ms = new MemoryStream();
                 stream.CopyTo(ms);
                 var bytes = ms.ToArray();
-                return new TtfGlyphProvider(bytes, _def.Size, _def.Oversample, _def.Shift.X, _def.Shift.Y, _def.Skip);
+                return new TrueTypeGlyphProvider(bytes, _def.Size, _def.Oversample, _def.Shift.X, _def.Shift.Y, _def.Skip);
             }
         }
     }
@@ -107,7 +107,7 @@ public sealed class SpaceDefinition : IGlyphProviderDefinition
         private readonly SpaceDefinition _def;
         public SpaceLoader(SpaceDefinition def) => _def = def;
 
-        public IGlyphProvider? Load(IFontResourceAccessor resources) => new SpaceGlyphProvider(_def.Advances);
+        public IGlyphProvider? Load(IFontResourceAccessor resources) => new SpaceProvider(_def.Advances);
     }
 }
 

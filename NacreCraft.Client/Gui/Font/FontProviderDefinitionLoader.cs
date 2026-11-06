@@ -150,7 +150,7 @@ public static class FontProviderDefinitionLoader
                     advances[cp] = pair.Value.GetSingle();
             }
         }
-        var provider = new SpaceGlyphProvider(advances);
+        var provider = new SpaceProvider(advances);
         return new() { new(provider, filter) };
     }
 

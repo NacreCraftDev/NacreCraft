@@ -38,10 +38,10 @@ using NacreCraft.Client.Resources.Metadata.Gui;
 
 namespace NacreCraft.Client.Gui.Font;
 
-//TtfGlyphProvider maps to vanilla TrueTypeGlyphProvider
+//TrueTypeGlyphProvider maps to vanilla com.mojang.blaze3d.font.TrueTypeGlyphProvider
 //Vanilla uses FreeType; we use StbTrueTypeSharp, a different API shape but equivalent metrics
 //GCHandle Pinned pins the TTF bytes so the stbtt_fontinfo internal data pointer stays valid for a long lifetime
-public sealed unsafe class TtfGlyphProvider : IGlyphProvider
+public sealed unsafe class TrueTypeGlyphProvider : IGlyphProvider
 {
     private readonly byte[] _ttfBytes;
     private readonly GCHandle _ttfPin;
@@ -57,7 +57,7 @@ public sealed unsafe class TtfGlyphProvider : IGlyphProvider
     //GetGlyph actually uses stbtt_FindGlyphIndex to check whether a codepoint really has a glyph
     private static readonly HashSet<int> s_bmpRange = BuildBmpRange();
 
-    public TtfGlyphProvider(byte[] ttfBytes, float size, float oversample, float shiftX, float shiftY, string skip)
+    public TrueTypeGlyphProvider(byte[] ttfBytes, float size, float oversample, float shiftX, float shiftY, string skip)
     {
         _ttfBytes = ttfBytes;
         _oversample = oversample;
@@ -147,7 +147,7 @@ public sealed unsafe class TtfGlyphProvider : IGlyphProvider
     //Fields are internal so the sibling nested class TtfGlyphBitmap can access them; C# nested classes cannot access each other's private members
     private sealed class TtfGlyph : IUnbakedGlyph
     {
-        internal readonly TtfGlyphProvider _owner;
+        internal readonly TrueTypeGlyphProvider _owner;
         internal readonly int _index;
         internal readonly int _width;
         internal readonly int _height;
@@ -155,7 +155,7 @@ public sealed unsafe class TtfGlyphProvider : IGlyphProvider
         internal readonly float _bearingY;
         internal readonly IGlyphInfo _info;
 
-        public TtfGlyph(TtfGlyphProvider owner, int index, int width, int height, float advance, float bearingX, float bearingY)
+        public TtfGlyph(TrueTypeGlyphProvider owner, int index, int width, int height, float advance, float bearingX, float bearingY)
         {
             _owner = owner;
             _index = index;

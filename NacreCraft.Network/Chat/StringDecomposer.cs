@@ -49,6 +49,10 @@ public static class StringDecomposer
     //IterateBackwards backward traversal, mirrors vanilla iterateBackwards
     //From the end backward, a low surrogate preceded by a high surrogate merges into a codepoint, otherwise ReplacementChar
     public static bool IterateBackwards(string text, Style style, FormattedCharSink output)
+        => IterateBackwards(text, style, c => c, output);
+
+    //IterateBackwards with a per-character modifier, the bidi mirroring hook of vanilla
+    public static bool IterateBackwards(string text, Style style, Func<int, int> reverseCharModifier, FormattedCharSink output)
     {
         int size = text.Length;
         int i = size - 1;
@@ -66,11 +70,15 @@ public static class StringDecomposer
                 if (char.IsHighSurrogate(high))
                 {
                     i--;
-                    if (!output(i, style, char.ConvertToUtf32(high, ch))) return false;
+                    if (!output(i, style, reverseCharModifier(char.ConvertToUtf32(high, ch)))) return false;
                 }
                 else if (!output(i, style, ReplacementChar)) return false;
             }
-            else if (!FeedChar(style, output, i, ch)) return false;
+            else if (char.IsSurrogate(ch))
+            {
+                if (!output(i, style, ReplacementChar)) return false;
+            }
+            else if (!output(i, style, reverseCharModifier(ch))) return false;
             i--;
         }
         return true;

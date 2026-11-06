@@ -31,7 +31,13 @@ public static class FormattedCharSequences
 
     //Backward backward traversal of plain text, mirrors vanilla FormattedCharSequence.backward
     public static FormattedCharSequence Backward(string text, Style style)
-        => string.IsNullOrEmpty(text) ? Empty : output => StringDecomposer.IterateBackwards(text, style, output);
+        => Backward(text, style, c => c);
+
+    //Backward with a per-character modifier, used by bidi reordering for mirrored punctuation
+    public static FormattedCharSequence Backward(string text, Style style, Func<int, int> reverseCharModifier)
+        => string.IsNullOrEmpty(text)
+            ? Empty
+            : output => StringDecomposer.IterateBackwards(text, style, reverseCharModifier, output);
 
     //Composite combines two segments, mirrors vanilla FormattedCharSequence.fromPair
     //After the first segment completes it continues to the second; either returning false stops

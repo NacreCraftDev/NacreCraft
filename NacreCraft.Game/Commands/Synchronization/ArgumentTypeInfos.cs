@@ -209,10 +209,10 @@ public sealed class DoubleArgumentInfo : ArgumentTypeInfo
     }
 }
 
-//StringArgumentInfo string argument, writes only the ids of the three parse modes
-public sealed class StringArgumentInfo : ArgumentTypeInfo
+//StringArgumentSerializer string argument, writes only the ids of the three parse modes, maps to vanilla StringArgumentSerializer
+public sealed class StringArgumentSerializer : ArgumentTypeInfo
 {
-    public static readonly StringArgumentInfo Instance = new();
+    public static readonly StringArgumentSerializer Instance = new();
 
     public override Type ArgumentClrType => typeof(StringArgumentType);
 
@@ -383,7 +383,7 @@ public static class ArgumentTypeInfos
         Register("brigadier:double", DoubleArgumentInfo.Instance);                             //2
         Register("brigadier:integer", IntegerArgumentInfo.Instance);                           //3
         Register("brigadier:long", LongArgumentInfo.Instance);                                 //4
-        Register("brigadier:string", StringArgumentInfo.Instance);                             //5
+        Register("brigadier:string", StringArgumentSerializer.Instance);                       //5
         Register("entity", EntityArgumentInfo.Instance);                                        //6
         Register("game_profile", new PlaceholderArgumentInfo());                            //7
         Register("block_pos", new SingletonArgumentInfo(typeof(BlockPosArgument), BlockPosArgument.BlockPos)); //8

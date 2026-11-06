@@ -10,11 +10,13 @@ public sealed class SubStringSource
 {
     private readonly string _plainText;
     private readonly List<Style> _charStyles;
+    private readonly Func<int, int> _reverseCharModifier;
 
-    private SubStringSource(string plainText, List<Style> charStyles)
+    private SubStringSource(string plainText, List<Style> charStyles, Func<int, int> reverseCharModifier)
     {
         _plainText = plainText;
         _charStyles = charStyles;
+        _reverseCharModifier = reverseCharModifier;
     }
 
     public string PlainText => _plainText;
@@ -41,10 +43,14 @@ public sealed class SubStringSource
         return parts;
     }
 
-    public static SubStringSource Create(FormattedText text) => Create(text, s => s);
+    public static SubStringSource Create(FormattedText text) => Create(text, c => c, s => s);
+
+    public static SubStringSource Create(FormattedText text, Func<string, string> shaper)
+        => Create(text, c => c, shaper);
 
     //Create records one style per character of every visited run, maps to vanilla create
-    public static SubStringSource Create(FormattedText text, Func<string, string> shaper)
+    //reverseCharModifier is applied while walking a reversed run, used for bidi mirroring
+    public static SubStringSource Create(FormattedText text, Func<int, int> reverseCharModifier, Func<string, string> shaper)
     {
         var plainText = new StringBuilder();
         var charStyles = new List<Style>();
@@ -55,9 +61,11 @@ public sealed class SubStringSource
                 charStyles.Add(style);
             return Optional<object>.Empty();
         }, Style.Empty);
-        return new SubStringSource(shaper(plainText.ToString()), charStyles);
+        return new SubStringSource(shaper(plainText.ToString()), charStyles, reverseCharModifier);
     }
 
-    private static FormattedCharSequence Run(string text, Style style, bool reverse)
-        => reverse ? FormattedCharSequences.Backward(text, style) : FormattedCharSequences.Forward(text, style);
+    private FormattedCharSequence Run(string text, Style style, bool reverse)
+        => reverse
+            ? FormattedCharSequences.Backward(text, style, _reverseCharModifier)
+            : FormattedCharSequences.Forward(text, style);
 }
