@@ -8,12 +8,13 @@ This file grows as the API grows. For architectural background, differences from
 
 - Dependencies: `NacreCraft` (the main library), `NacreCraft.Game`
 
-The public surface is split into three namespaces:
+The public surface is split into five namespaces:
 
 | Namespace | Contents | Notes |
 | --- | --- | --- |
 | `NacreCraft.ModApi.Wrapper` | Event and subscription class `NcEvent<T>`, `Nc*` facades, `Nc*` object handles | Wrapper layer; kernel types appear only where the purity policy whitelists them |
 | `NacreCraft.ModApi.Content` | Content registration: `NcContent`, `NcBlockSettings` | API layer; content base classes are extension points, not wrapped handles |
+| `NacreCraft.ModApi.Network` | Custom payload channels: `NcNetworking`, `NcChannel` | API layer; raw byte payloads |
 | `NacreCraft.ModApi.Extension` | `[Inject]` / `[Mixin]` annotations | Extension points; rules bind to kernel class and method names |
 | `NacreCraft.ModApi.Internal` | Injection probes | Do not reference directly |
 
@@ -630,6 +631,42 @@ public sealed class RubyItem : Item
 - The registration window is open only inside the callback (`IsOpen` is false outside it); a duplicate id throws, and the block's or item's `Id` must equal the registration key.
 - **Block items are not supported in v1**: `BlockItem` is `sealed` and hardcodes the `minecraft:` namespace, and the placement path checks the concrete type. A registered block can be placed with `/setblock` or worldgen, but not from a survival item yet. Registering a plain custom item works.
 
+### 4.7 Network channels
+
+`NcNetworking.Register` creates a channel keyed by a `namespace:path` id. Register it in `Init` on both sides; the same id must be registered on each side, and a duplicate registration throws.
+
+```csharp
+using NacreCraft.ModApi.Network;
+
+var channel = NcNetworking.Register("mymod:main");
+
+channel.Received.Subscribe(args =>
+    Log.Info($"{args.Payload.Length} bytes serverbound={args.IsServerbound}"));
+
+// Server side
+channel.SendToPlayer(player, payload);
+channel.SendToAll(payload);
+
+// Client side
+channel.SendToServer(payload);
+```
+
+| Member | Notes |
+| --- | --- |
+| `NcNetworking.Register(id)` | creates the channel; call once per id |
+| `NcNetworking.Find(id)` | returns a registered channel, `null` when absent |
+| `NcChannel.Id` | the identifier carried by every packet |
+| `NcChannel.Received` | `NcEvent<NcChannelMessageArgs>`; `Player` is the sender on the server and `null` on the client |
+| `NcChannel.SendToPlayer` / `SendToAll` | server side only |
+| `NcChannel.SendToServer` | client side only; throws when there is no active connection |
+
+Boundaries of v1:
+
+- Payloads are raw `byte[]`; the mod owns their format. A payload larger than the kernel limit is rejected before it reaches the connection.
+- The server probe covers the play phase. Configuration-phase custom payloads are ignored on the server, while the client probe covers both play and configuration.
+- The client handler has no behavior to preserve, so the client probe publishes without replaying it; the server probe replays the play handler first.
+- A packet on a channel the receiving side never registered is logged and dropped.
+
 ***
 
 ## 5. Internals
@@ -648,6 +685,8 @@ You do not need this section to write mods, but it may help when debugging.
 | `Internal.InteractionProbe.OnXxx(object, object)`        | CallSite ×5 | interaction events; each probe replays the original packet handler first, then publishes |
 | `Internal.ClientProbe.OnXxx(object, object)`             | CallSite ×3 | client connection events; the login probe replays the original handler, the two disconnect probes cover the login phase and the configuration/play phases |
 | `Internal.PackProbe.OnXxx(...)`                          | CallSite ×4 | mod packs; the discovery probes stage the packs before the source scans, the selection probes filter disabled packs and order the rest |
+| `Internal.NetworkProbe.OnScheduleIfPossible` / `OnHandleNow` | CallSite ×2 | inbound packets; one event covers every phase |
+| `Internal.NetworkChannelProbe.OnServerCustomPayload` / `OnClientCustomPayload` | CallSite ×2 | custom payload channels; the server probe replays the play handler, the client probe publishes directly |
 
 `SignalProbe`'s signature takes only `string`, and the reference-typed parameters of the other probes are declared as `object`. That is a widening choice: the replacement is called with whatever the original call site pushes, and `object` accepts all of it while staying valid if a kernel signature later widens to a base type. Kernel types appear only inside method bodies, where a cast is safe.
 
@@ -661,7 +700,7 @@ The order that keeps this true is in the loader, not in the probe: replacement a
 
 ### 5.2 Hook point list
 
-ModApi's `ncmod.json` contains thirty-seven rules; the event rows in 2.1 map one-to-one, the pack rows in 4.5 add four more, and the content registration row in 4.6 adds one. To change a hook point or add a rule, edit this file; after editing, rebuild (it is an embedded resource) and put the resulting dll back into `mods/` — the latter is already done automatically by `pit build`'s deploy step, and missing it manifests as the rules not taking effect at all.
+ModApi's `ncmod.json` contains thirty-nine rules; the event rows in 2.1 map one-to-one, the pack rows in 4.5 add four more, the content registration row in 4.6 adds one, and the network channel rows in 4.7 add two. To change a hook point or add a rule, edit this file; after editing, rebuild (it is an embedded resource) and put the resulting dll back into `mods/` — the latter is already done automatically by `pit build`'s deploy step, and missing it manifests as the rules not taking effect at all.
 
 The four lifecycle phases come from three hook shapes: `Starting` is a Mark on `DedicatedServer::InitServer` (the first statement of boot), `Started` and `Stopping` are Marks on `MinecraftServer::Run` and `DedicatedServer::Stop` entries, and `Stopped` needs no rule of its own — `ServerProbe.OnServerRun` wraps the single call to `Run`, publishes `Stopped` when it returns, and only then lets the captured server instance go.
 
@@ -691,7 +730,7 @@ The following are hook points whose locations are confirmed but that have not ye
 | Command execution | `CommandSourceStack::SendSuccess` / `SendFailure` (the response half, with many call sites) |
 | Network           | per-packet-type `ServerGamePacketListenerImpl::HandleXxx` (currently only a unified entry point) |
 
-Directions already done: level ticks became `ServerEvents.LevelTick`, saved data persistence became `ServerEvents.SavedDataSaving`, command execution became `ServerEvents.CommandExecuted`, blocks became `ServerEvents.BlockChanged` / `BlockBroken` / `ItemDropped`, the five player packet handlers became `PlayerUseBlock` / `PlayerUseItem` / `PlayerInteractEntity` / `PlayerPickItemFromBlock` / `PlayerPickItemFromEntity`, client connection phases became `ClientEvents.Join` / `Disconnect`, and the lifecycle is now four phases (`Starting` / `Started` / `Stopping` / `Stopped`).
+Directions already done: level ticks became `ServerEvents.LevelTick`, saved data persistence became `ServerEvents.SavedDataSaving`, command execution became `ServerEvents.CommandExecuted`, blocks became `ServerEvents.BlockChanged` / `BlockBroken` / `ItemDropped`, the five player packet handlers became `PlayerUseBlock` / `PlayerUseItem` / `PlayerInteractEntity` / `PlayerPickItemFromBlock` / `PlayerPickItemFromEntity`, client connection phases became `ClientEvents.Join` / `Disconnect`, the lifecycle is now four phases (`Starting` / `Started` / `Stopping` / `Stopped`), and custom payloads became `NcNetworking` channels (section 4.7).
 
 Two infrastructure pieces landed with the wrapper purity policy: handler exceptions are isolated inside `NcEvent.Publish` (logged, never propagated into the kernel), and cancellable events exist as a mechanism (`INcCancellable` + probe-side verdict readback), first used by `ServerEvents.PlayerBlockBreak`.
 
