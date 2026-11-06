@@ -127,6 +127,14 @@ public static class SoundEvents
     public static readonly SoundEvent NetherWoodDoorOpen = Create("block.nether_wood_door.open");
     public static readonly SoundEvent NetherWoodDoorClose = Create("block.nether_wood_door.close");
 
+    //Mob effect application sounds, maps to the vanilla APPLY_EFFECT_* events
+    public static readonly SoundEvent ApplyEffectBadOmen = Create("event.mob_effect.bad_omen");
+    public static readonly SoundEvent ApplyEffectTrialOmen = Create("event.mob_effect.trial_omen");
+    public static readonly SoundEvent ApplyEffectRaidOmen = Create("event.mob_effect.raid_omen");
+
+    //Silverfish hurt, played when the infested effect spawns a silverfish, maps to vanilla SILVERFISH_HURT
+    public static readonly SoundEvent SilverfishHurt = Create("entity.silverfish.hurt");
+
     //Create builds an event under the default namespace from the vanilla sound path
     private static SoundEvent Create(string path) => new(Identifier.WithDefaultNamespace(path));
 }

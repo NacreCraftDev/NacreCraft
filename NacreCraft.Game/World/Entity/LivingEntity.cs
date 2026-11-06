@@ -14,6 +14,7 @@ using AttributeMap = NacreCraft.Registry.EntityAttribute.AttributeMap;
 using AttributeSupplier = NacreCraft.Registry.EntityAttribute.AttributeSupplier;
 using AttributeDef = NacreCraft.Registry.EntityAttribute.Attribute;
 using EntityAttributes = NacreCraft.Registry.EntityAttribute.Attributes;
+using GameMobEffect = NacreCraft.Game.World.Effect.MobEffect;
 
 namespace NacreCraft.Game.World.Entity;
 
@@ -43,6 +44,32 @@ public abstract class LivingEntity : NacreCraft.Registry.Entity, IEquipmentHolde
 
     //GetAttributeValue gets the attribute's final value, maps to vanilla getAttributeValue
     public double GetAttributeValue(AttributeDef attribute) => _attributes.GetValue(attribute);
+
+    //_damageSources shared damage source factory; the sources only depend on the registry, so one instance is enough
+    private static DamageSources? _damageSources;
+
+    //DamageSources the damage source factory, maps to vanilla LivingEntity.damageSources
+    public NacreCraft.Game.World.Damage.DamageSources DamageSources()
+        => _damageSources ??= new DamageSources(BuiltInRegistries.DAMAGE_TYPE);
+
+    //GetRandom the entity's own random source, maps to vanilla LivingEntity.getRandom
+    public RandomSource GetRandom() => _random;
+
+    //IsInvertedHealAndHarm whether healing and harming are inverted, maps to vanilla isInvertedHealAndHarm
+    //Undead override this; no undead mob is ported yet, so the base answers false
+    public virtual bool IsInvertedHealAndHarm => false;
+
+    //Heal raises health by the given amount, maps to vanilla heal
+    public void Heal(float amount)
+    {
+        if (IsDeadOrDying) return;
+        SetHealth(Health + amount);
+    }
+
+    //HurtServer applies damage in the context of a level, maps to vanilla hurtServer
+    //The level is not needed by the current damage pipeline, which already carries what it needs in the source
+    public virtual bool HurtServer(NacreCraft.Storage.ServerLevel level, DamageSource source, float amount)
+        => Hurt(amount, source);
 
     //Equipment the equipment slots, maps to vanilla LivingEntity.createEquipment
     //Mob and Player each held their own copy before the LivingEntity layer existed
@@ -83,44 +110,92 @@ public abstract class LivingEntity : NacreCraft.Registry.Entity, IEquipmentHolde
     //HasEffect whether the effect is active, maps to vanilla hasEffect
     public bool HasEffect(Holder<NacreCraft.Registry.MobEffect> effect) => Effects.Get(effect) is not null;
 
+    //GetEffect the active instance of one effect, null when absent, maps to vanilla getEffect
+    public MobEffectInstance? GetEffect(Holder<NacreCraft.Registry.MobEffect> effect) => Effects.Get(effect);
+
     //AddEffect adds an effect, maps to the core of vanilla addEffect
     //An effect already present is only replaced when the new one is stronger, or equally strong and longer lasting;
     //a weaker or shorter one is refused, which is what MobEffectInstance.update decides in vanilla
     public virtual bool AddEffect(MobEffectInstance effect)
     {
-        if (Effects.Get(effect.Effect) is { } existing)
+        var existing = Effects.Get(effect.Effect);
+        if (existing is not null)
         {
             if (effect.Amplifier < existing.Amplifier) return false;
             if (effect.Amplifier == existing.Amplifier && effect.Duration < existing.Duration) return false;
         }
 
         Effects.Add(effect.Effect, effect);
+        var mobEffect = effect.Effect.Value as GameMobEffect;
+        if (mobEffect is null) return true;
+        //A refreshed effect swaps its attribute modifiers, a new one installs them, maps to onEffectAdded/onEffectUpdated
+        if (Attributes is { } attributes)
+        {
+            if (existing is not null) mobEffect.RemoveAttributeModifiers(attributes);
+            mobEffect.AddAttributeModifiers(attributes, effect.Amplifier);
+        }
+        if (existing is null) mobEffect.OnEffectAdded(this, effect.Amplifier);
+        mobEffect.OnEffectStarted(this, effect.Amplifier);
         return true;
     }
 
     //RemoveEffect removes one effect, maps to vanilla removeEffect
-    public virtual bool RemoveEffect(Holder<NacreCraft.Registry.MobEffect> effect) => Effects.Remove(effect);
+    public virtual bool RemoveEffect(Holder<NacreCraft.Registry.MobEffect> effect)
+    {
+        if (!Effects.Remove(effect)) return false;
+        RemoveEffectAttributeModifiers(effect);
+        return true;
+    }
+
+    //RemoveEffectAttributeModifiers drops the modifiers an effect installed, maps to vanilla onEffectsRemoved
+    private void RemoveEffectAttributeModifiers(Holder<NacreCraft.Registry.MobEffect> effect)
+    {
+        if (effect.Value is GameMobEffect mobEffect && Attributes is { } attributes)
+            mobEffect.RemoveAttributeModifiers(attributes);
+    }
 
     //RemoveAllEffects clears every effect and reports whether anything was removed, maps to vanilla removeAllEffects
     public virtual bool RemoveAllEffects()
     {
         if (Effects.Map.Count == 0) return false;
+        var effects = Effects.Map.Keys.ToList();
         Effects.Clear();
+        foreach (var effect in effects) RemoveEffectAttributeModifiers(effect);
         return true;
     }
 
-    //TickEffects ages the active effects and drops the expired ones, maps to the effect part of vanilla tickEffects
+    //TickEffects ages the active effects, runs their tick logic and drops the expired ones
+    //maps to the effect part of vanilla tickEffects: shouldApplyEffectTickThisTick gates applyEffectTick, and an effect whose
+    //tick returns false is removed immediately (bad omen handing over to raid omen is the canonical case)
     public virtual void TickEffects()
     {
         if (Effects.Map.Count == 0) return;
+        var level = Level as NacreCraft.Storage.ServerLevel;
         List<Holder<NacreCraft.Registry.MobEffect>>? expired = null;
-        foreach (var (effect, instance) in Effects.Map)
+        //A snapshot is needed because ticking an effect may add or remove effects on the same entity
+        foreach (var (effect, instance) in Effects.Map.ToList())
         {
+            if (level is not null && effect.Value is GameMobEffect mobEffect)
+            {
+                var tickCount = instance.IsInfiniteDuration ? TickCount : instance.Duration;
+                if (mobEffect.ShouldApplyEffectTickThisTick(tickCount, instance.Amplifier)
+                    && !mobEffect.ApplyEffectTick(level, this, instance.Amplifier))
+                {
+                    (expired ??= new()).Add(effect);
+                    continue;
+                }
+            }
             instance.Tick();
             if (instance.Expired) (expired ??= new()).Add(effect);
         }
         if (expired is null) return;
-        foreach (var effect in expired) Effects.Remove(effect);
+        foreach (var effect in expired)
+        {
+            //Removal goes straight to the map here: ServerPlayer.TickEffects diffs the map afterwards and sends the packet,
+            //so calling the virtual RemoveEffect would send a duplicate
+            if (!Effects.Remove(effect)) continue;
+            RemoveEffectAttributeModifiers(effect);
+        }
     }
 
     //--- Walk and swing animation, maps to the vanilla LivingEntity animation state ---
@@ -283,7 +358,8 @@ public abstract class LivingEntity : NacreCraft.Registry.Entity, IEquipmentHolde
     public float MaxAbsorption => (float)GetAttributeValue(EntityAttributes.MaxAbsorption);
 
     //SetAbsorptionAmount sets the absorption health, maps to vanilla setAbsorptionAmount
-    public void SetAbsorptionAmount(float amount) => AbsorptionAmount = Math.Max(0f, amount);
+    //The shield is capped by the MAX_ABSORPTION attribute, which the absorption effect raises while it is active
+    public void SetAbsorptionAmount(float amount) => AbsorptionAmount = Math.Clamp(amount, 0f, MaxAbsorption);
 
     //Hurt applies damage from a source, maps to the core of vanilla hurtServer
     //Tag checks, item blocking, enchantment protection, stats and criteria triggers need systems that are not wired up yet
@@ -305,6 +381,10 @@ public abstract class LivingEntity : NacreCraft.Registry.Entity, IEquipmentHolde
             ActuallyHurt(source, amount);
         }
         DealDefaultKnockback(source, amount, false);
+        if (amount > 0f && Level is NacreCraft.Storage.ServerLevel level)
+            foreach (var instance in Effects.Map.Values.ToList())
+                if (instance.Effect.Value is GameMobEffect mobEffect)
+                    mobEffect.OnMobHurt(level, this, instance.Amplifier, source, amount);
         if (Health <= 0f) TriggerDeath();
         LastDamageSource = source;
         return true;
@@ -368,6 +448,12 @@ public abstract class LivingEntity : NacreCraft.Registry.Entity, IEquipmentHolde
     {
         if (_deathHandled) return;
         _deathHandled = true;
+        //Every active effect hears about the death before the death hook, which is where weaving/oozing/infested/wind charged fire
+        //maps to vanilla triggerOnDeathMobEffects
+        if (Level is NacreCraft.Storage.ServerLevel level)
+            foreach (var instance in Effects.Map.Values.ToList())
+                if (instance.Effect.Value is GameMobEffect mobEffect)
+                    mobEffect.OnMobRemoved(level, this, instance.Amplifier, NacreCraft.Registry.RemovalReason.KILLED);
         Die();
         RaiseDied();
     }

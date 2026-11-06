@@ -33,6 +33,13 @@ public sealed class MobEffectInstance
         ShowIcon = visible;
     }
 
+    //Copy constructor copies every field, maps to vanilla new MobEffectInstance(MobEffectInstance)
+    public MobEffectInstance(MobEffectInstance other)
+        : this(other.Effect, other.Duration, other.Amplifier, other.IsAmbient, other.IsVisible)
+    {
+        ShowIcon = other.ShowIcon;
+    }
+
     //Effect effect registry reference; the network codec uses it to look up the registry id
     public Holder<NacreCraft.Registry.MobEffect> Effect { get; }
 
@@ -49,13 +56,19 @@ public sealed class MobEffectInstance
     public bool IsVisible { get; }
 
     //ShowIcon whether the icon is shown
-    public bool ShowIcon { get; }
+    public bool ShowIcon { get; private set; }
 
     //Tick decrements the duration every tick; -1 means infinite and does not decrement
     public void Tick()
     {
         if (Duration > 0) Duration--;
     }
+
+    //IsInfiniteDuration whether the effect never expires, maps to vanilla isInfiniteDuration
+    public bool IsInfiniteDuration => Duration == -1;
+
+    //EndsWithin whether the effect ends within the given ticks, maps to vanilla endsWithin
+    public bool EndsWithin(int ticks) => !IsInfiniteDuration && Duration <= ticks;
 
     //Expired duration reached zero, maps to the vanilla effect expiring
     public bool Expired => Duration == 0;

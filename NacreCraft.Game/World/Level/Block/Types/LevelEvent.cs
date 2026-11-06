@@ -12,4 +12,7 @@ public class LevelEvent
 
     //SoundDispenserLaunch a projectile left the dispenser, maps to vanilla SOUND_DISPENSER_LAUNCH
     public const int SoundDispenserLaunch = 1002;
+
+    //AnimationSpawnCobweb cobweb placement puff, sent by the weaving effect, maps to vanilla ANIMATION_SPAWN_COBWEB
+    public const int AnimationSpawnCobweb = 3018;
 }

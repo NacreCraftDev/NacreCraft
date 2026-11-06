@@ -130,6 +130,32 @@ public static class EntityTypes
         public override float Height => 0.25f;
     }
 
+    //SilverfishType silverfish, maps to vanilla EntityTypes.SILVERFISH
+    //The silverfish mob class is not ported, so the type carries no factory and spawning degrades to a null return
+    public sealed class SilverfishType : EntityType<object>
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("silverfish");
+        public override int RawId => 114;
+        //Silverfish are tracked at eight chunks, maps to vanilla clientTrackingRange(8)
+        public override int TrackingRangeChunks => 8;
+        //Silverfish collision box 0.4 x 0.3, maps to vanilla sized(0.4f, 0.3f)
+        public override float Width => 0.4f;
+        public override float Height => 0.3f;
+    }
+
+    //SlimeType slime, maps to vanilla EntityTypes.SLIME
+    //The slime mob class is not ported, so the type carries no factory and spawning degrades to a null return
+    public sealed class SlimeType : EntityType<object>
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("slime");
+        public override int RawId => 117;
+        //Slimes are tracked at ten chunks, maps to vanilla clientTrackingRange(10)
+        public override int TrackingRangeChunks => 10;
+        //Small slime box 0.52 square, maps to vanilla sized(0.52f, 0.52f)
+        public override float Width => 0.52f;
+        public override float Height => 0.52f;
+    }
+
     //TntType primed TNT, maps to vanilla EntityTypes.TNT
     public sealed class TntType : EntityType<object>
     {
@@ -167,6 +193,12 @@ public static class EntityTypes
     //TRIDENT thrown trident type, the channeling entity predicate checks for it
     public static readonly TridentType TRIDENT = new();
 
+    //SILVERFISH silverfish type, spawned by the infested effect; the mob class is not ported, so no factory is given
+    public static readonly SilverfishType SILVERFISH = new();
+
+    //SLIME slime type, spawned by the oozing effect; the mob class is not ported, so no factory is given
+    public static readonly SlimeType SLIME = new();
+
     //_byRawId reverse map from network index to type, used by AddEntity decoding to resolve the entity type
     private static readonly Dictionary<int, EntityType<object>> ByRawId = new();
 
@@ -188,6 +220,8 @@ public static class EntityTypes
         Register(PLAYER);
         Register(LIGHTNING_BOLT);
         Register(TRIDENT);
+        Register(SILVERFISH);
+        Register(SLIME);
     }
 
     //ById resolves an entity type by network index, null when unregistered

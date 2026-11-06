@@ -143,6 +143,9 @@ public static partial class Blocks
     //Mycelium mycelium block; carving it out must recompute the top texture together with the dirt below
     public static BlockBehaviour Mycelium => Lookup("mycelium");
 
+    //Cobweb cobweb block, placed by the weaving effect, maps to vanilla Blocks.COBWEB
+    public static BlockBehaviour Cobweb => Lookup("cobweb");
+
     //Lookup returns a registered block by registry name, falls back to air before the block table has bootstrapped
     private static BlockBehaviour Lookup(string path)
         => BuiltInRegistries.BLOCK.GetValue(Identifier.WithDefaultNamespace(path)) as BlockBehaviour ?? AIR;

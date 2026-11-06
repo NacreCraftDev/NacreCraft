@@ -75,6 +75,25 @@ public class Player : LivingEntity
     //FoodLevel hunger value, default 20
     public int FoodLevel { get; set; } = 20;
 
+    //FoodSaturation food saturation, maps to the vanilla FoodData saturation field
+    //The FoodData drain loop is not ported, so this only moves when the saturation effect feeds the player
+    public float FoodSaturation { get; set; }
+
+    //FoodExhaustion accumulated exhaustion, maps to vanilla FoodData exhaustion
+    //The exhaustion to saturation/food conversion is not ported yet; the hunger effect still records its exhaustion here
+    public float FoodExhaustion { get; private set; }
+
+    //Eat applies food and saturation, maps to vanilla FoodData.eat
+    //Saturation is capped by the hunger level, matching the vanilla clamp
+    public void Eat(int food, float saturationModifier)
+    {
+        FoodLevel = Math.Min(20, FoodLevel + food);
+        FoodSaturation = Math.Min(FoodLevel, FoodSaturation + food * saturationModifier * 2.0f);
+    }
+
+    //CauseFoodExhaustion adds exhaustion, maps to vanilla Player.causeFoodExhaustion
+    public void CauseFoodExhaustion(float amount) => FoodExhaustion += amount;
+
     //AbsorptionHealth absorption health (golden apple etc.), default 0, used to render absorption hearts
     public float AbsorptionHealth { get; set; }
 
