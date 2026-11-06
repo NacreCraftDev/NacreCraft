@@ -211,8 +211,8 @@ Note: even an empty `hooks` works here — events like `ServerEvents.Started` ar
 The easiest way to start is the template:
 
 ```
-dotnet new install NacreCraft.ModsProjectType
-dotnet new ncm -n MyMod -e server
+dotnet new install NacreCraft.ModSDK.Template
+dotnet new pit -n MyMod -e server
 ```
 
 If the local package has not been published yet, use `dotnet new install <nupkg path>`, or run `dotnet pack` in the repository and then install the output.

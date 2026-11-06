@@ -651,7 +651,7 @@ You do not need this section to write mods, but it may help when debugging.
 
 `SignalProbe`'s signature takes only `string`, and the reference-typed parameters of the other probes are declared as `object`. That is a widening choice: the replacement is called with whatever the original call site pushes, and `object` accepts all of it while staying valid if a kernel signature later widens to a base type. Kernel types appear only inside method bodies, where a cast is safe.
 
-Injection timing is a separate matter. Rules built by `ncm` register the replacement assembly by path, and `NacreCraft.Hook` resolves the replacement method from that file's metadata (`RegisterReplacementPath`), so a kernel type inside a probe signature never loads that type's assembly and never closes its rewrite window.
+Injection timing is a separate matter. Rules built by `pit` register the replacement assembly by path, and `NacreCraft.Hook` resolves the replacement method from that file's metadata (`RegisterReplacementPath`), so a kernel type inside a probe signature never loads that type's assembly and never closes its rewrite window.
 
 The only things that cannot be `object` in a signature are value-type parameters and return values: `object` is a reference on the stack while `float`/`bool` are values, and a mismatch is invalid IL. So `PlayerProbe.OnHurtPlayer` keeps `float` for the damage amount, and `OnRemovePlayer` and `OnHurtPlayer` keep `bool` return values.
 
@@ -661,7 +661,7 @@ The order that keeps this true is in the loader, not in the probe: replacement a
 
 ### 5.2 Hook point list
 
-ModApi's `ncmod.json` contains thirty-seven rules; the event rows in 2.1 map one-to-one, the pack rows in 4.5 add four more, and the content registration row in 4.6 adds one. To change a hook point or add a rule, edit this file; after editing, rebuild (it is an embedded resource) and put the resulting dll back into `mods/` — the latter is already done automatically by `ncm build`'s deploy step, and missing it manifests as the rules not taking effect at all.
+ModApi's `ncmod.json` contains thirty-seven rules; the event rows in 2.1 map one-to-one, the pack rows in 4.5 add four more, and the content registration row in 4.6 adds one. To change a hook point or add a rule, edit this file; after editing, rebuild (it is an embedded resource) and put the resulting dll back into `mods/` — the latter is already done automatically by `pit build`'s deploy step, and missing it manifests as the rules not taking effect at all.
 
 The four lifecycle phases come from three hook shapes: `Starting` is a Mark on `DedicatedServer::InitServer` (the first statement of boot), `Started` and `Stopping` are Marks on `MinecraftServer::Run` and `DedicatedServer::Stop` entries, and `Stopped` needs no rule of its own — `ServerProbe.OnServerRun` wraps the single call to `Run`, publishes `Stopped` when it returns, and only then lets the captured server instance go.
 

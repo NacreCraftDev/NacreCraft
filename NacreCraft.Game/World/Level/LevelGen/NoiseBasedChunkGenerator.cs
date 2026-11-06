@@ -27,6 +27,8 @@ public class NoiseBasedChunkGenerator : ChunkGenerator
 {
     public NoiseGeneratorSettings Settings { get; }
 
+    public override Identifier? GetTypeNameForDataFixer() => Identifier.WithDefaultNamespace("noise");
+
     //RandomState is created once per world seed and reused for the whole session, matching vanilla's world-level singleton semantics
     //The density tree mapAll and NormalNoise are expensive to instantiate; rebuilding per chunk is slow and would make neighboring chunks' noise discontinuous
     //volatile: the other half of the double-checked lock; without it another thread could see a non-null object that is not fully constructed

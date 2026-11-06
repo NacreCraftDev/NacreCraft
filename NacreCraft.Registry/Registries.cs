@@ -161,6 +161,15 @@ public static class Registries
     public static readonly ResourceKey<Registry<LootItemCondition>> PREDICATE = CreateRegistryKey<LootItemCondition>("predicate");
     public static readonly ResourceKey<Registry<Advancement>> ADVANCEMENT = CreateRegistryKey<Advancement>("advancement");
     public static readonly ResourceKey<Registry<Recipe<object>>> RECIPE = CreateRegistryKey<Recipe<object>>("recipe");
+
+    //LevelStemToLevel maps a level stem key to the level key with the same id, maps to vanilla levelStemToLevel
+    public static ResourceKey<Level> LevelStemToLevel(ResourceKey<LevelStem> levelStem)
+        => ResourceKey<Level>.Create(DIMENSION, levelStem.Identifier);
+
+    //LevelToLevelStem maps a level key to the level stem key with the same id, maps to vanilla levelToLevelStem
+    public static ResourceKey<LevelStem> LevelToLevelStem(ResourceKey<Level> level)
+        => ResourceKey<LevelStem>.Create(LEVEL_STEM, level.Identifier);
+
     //Build a registry's ResourceKey from its registry name
     private static ResourceKey<Registry<T>> CreateRegistryKey<T>(string name) where T : class
         => ResourceKeys.CreateRegistryKey<T>(Identifier.WithDefaultNamespace(name));

@@ -23,6 +23,8 @@ public sealed class FlatLevelSource : ChunkGenerator
 
     public IReadOnlyList<BlockState?> Layers => _layers;
 
+    public override Identifier? GetTypeNameForDataFixer() => Identifier.WithDefaultNamespace("flat");
+
     //FillFromNoise writes the layer stack from the bottom of the chunk, maps to vanilla fillFromNoise
     public override void FillFromNoise(object blender, object structures, ChunkAccess chunk, RandomSource random)
     {

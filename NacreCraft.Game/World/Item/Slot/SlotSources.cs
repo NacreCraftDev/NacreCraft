@@ -29,6 +29,8 @@ public static class SlotSources
         Registry<MapCodec<RegistrySlotSource>>.Register(registry,
             Identifier.WithDefaultNamespace("limit_slots"), LimitSlotSource.ControlCodec);
         Registry<MapCodec<RegistrySlotSource>>.Register(registry,
+            Identifier.WithDefaultNamespace("slot_range"), RangeSlotSource.ControlCodec);
+        Registry<MapCodec<RegistrySlotSource>>.Register(registry,
             Identifier.WithDefaultNamespace("contents"), ContentsSlotSource.ControlCodec);
         return Registry<MapCodec<RegistrySlotSource>>.Register(registry,
             Identifier.WithDefaultNamespace("empty"), EmptySlotSource.ControlCodec);

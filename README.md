@@ -71,7 +71,7 @@ Layers are dependency tiers — layer 0 depends on nothing, layer 4 sits on top 
 |---|---|
 | **NacreCraft** (this one) | Kernel, game layer, GPU, client/server, loader, TPGA |
 | [NacreCraft.ModApi](https://github.com/NacreCraftDev/NacreCraft.ModApi) | The mod API surface, together with the kernel reference assemblies it builds against |
-| [NacreCraft.DevTools](https://github.com/NacreCraftDev/NacreCraft.DevTools) | The `ncm` CLI and the `dotnet new ncm` project template |
+| [NacreCraft.DevTools](https://github.com/NacreCraftDev/NacreCraft.DevTools) | The `pit` CLI and the `dotnet new pit` project template |
 
 Client, server and loader builds are published separately.
 

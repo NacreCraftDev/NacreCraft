@@ -15,6 +15,8 @@ public sealed class DebugLevelSource : ChunkGenerator
     public const int Height = 70;
     public const int BarrierHeight = 60;
 
+    public override Identifier? GetTypeNameForDataFixer() => Identifier.WithDefaultNamespace("debug");
+
     private static readonly BlockState AirState = Blocks.AIR.DefaultBlockState;
 
     //AllBlocks every registered block state in registry order, maps to vanilla ALL_BLOCKS

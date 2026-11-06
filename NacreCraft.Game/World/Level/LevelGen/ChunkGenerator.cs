@@ -23,6 +23,9 @@ public abstract class ChunkGenerator
         BiomeSource = biomeSource;
     }
 
+    //GetTypeNameForDataFixer registry id of this generator, written into the chunk datafix context; null when unknown
+    public virtual Identifier? GetTypeNameForDataFixer() => null;
+
     //GetGenDepth maximum generation depth, maps to vanilla getGenDepth
     //The total chunk height from lowest to highest; subclasses derive it from settings
     public abstract int GetGenDepth();

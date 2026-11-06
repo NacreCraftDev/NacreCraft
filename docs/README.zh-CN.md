@@ -83,7 +83,7 @@ NacreCraft 与原版是等价实现，既不是 Minecraft 的衍生物，也不�
 |---|---|
 | **NacreCraft**（本仓库） | 内核、业务层、GPU、客户端/服务端、加载器、TPGA |
 | [NacreCraft.ModApi](https://github.com/NacreCraftDev/NacreCraft.ModApi) | 模组 API 表面，连同它编译所依赖的内核引用程序集 |
-| [NacreCraft.DevTools](https://github.com/NacreCraftDev/NacreCraft.DevTools) | `ncm` 命令行工具与 `dotnet new ncm` 项目模板 |
+| [NacreCraft.DevTools](https://github.com/NacreCraftDev/NacreCraft.DevTools) | `pit` 命令行工具与 `dotnet new pit` 项目模板 |
 
 客户端、服务端与加载器的构建产物另行发布。
 

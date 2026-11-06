@@ -105,6 +105,8 @@ public static class GameProtocols
             .AddPacket(GamePacketTypes.ClientboundContainerSetData, ClientboundContainerSetDataPacket.StreamCodec)
             .AddPacket(GamePacketTypes.ClientboundContainerSetSlot, ClientboundContainerSetSlotPacket.StreamCodec)
             .AddPacketCommon(CommonPacketTypes.ClientboundDisconnect, ClientboundDisconnectPacket.StreamCodec)
+            //custom_payload is a common packet in the play phase too; without it the server cannot send mod payloads to a real client
+            .AddPacketCommon(CommonPacketTypes.ClientboundCustomPayload, ClientboundCustomPayloadPacket.StreamCodec)
             .AddPacket(GamePacketTypes.ClientboundEntityEvent, ClientboundEntityEventPacket.StreamCodec)
             .AddPacket(GamePacketTypes.ClientboundEntityPositionSync, ClientboundEntityPositionSyncPacket.StreamCodec)
             .AddPacket(GamePacketTypes.ClientboundForgetLevelChunk, ClientboundForgetLevelChunkPacket.StreamCodec)
