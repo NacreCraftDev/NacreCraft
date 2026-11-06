@@ -13,6 +13,7 @@ The public surface is split into three namespaces:
 | Namespace | Contents | Notes |
 | --- | --- | --- |
 | `NacreCraft.ModApi.Wrapper` | Event and subscription class `NcEvent<T>`, `Nc*` facades, `Nc*` object handles | Wrapper layer; kernel types appear only where the purity policy whitelists them |
+| `NacreCraft.ModApi.Content` | Content registration: `NcContent`, `NcBlockSettings` | API layer; content base classes are extension points, not wrapped handles |
 | `NacreCraft.ModApi.Extension` | `[Inject]` / `[Mixin]` annotations | Extension points; rules bind to kernel class and method names |
 | `NacreCraft.ModApi.Internal` | Injection probes | Do not reference directly |
 
@@ -600,6 +601,35 @@ Settings live in `config/nacrecraft-modapi/mod_packs.json`:
 
 Take effect on restart. `/reload` and `/datapack` are still kernel stubs (`resource reload is not implemented`, `datapack pack repository is not wired to the server yet`), so changing the config or the pack content needs a server restart until the kernel wires a re-scan.
 
+### 4.6 Content registration
+
+`NcContent.Register` fires once per process, after vanilla blocks and items are registered and before the registries freeze. Subscribe in `Init`; the callback runs on both the server and the client.
+
+```csharp
+using NacreCraft.ModApi.Content;
+using NacreCraft.Registry;
+
+NcContent.Register.Subscribe(args =>
+{
+    args.RegisterBlock(Identifier.Parse("mymod:ruby_block"),
+        NcBlockSettings.Create().Strength(3f, 6f).LightLevel(7));
+
+    args.RegisterItem(Identifier.Parse("mymod:ruby"), new RubyItem());
+});
+
+public sealed class RubyItem : Item
+{
+    public override Identifier Id => Identifier.Parse("mymod:ruby");
+}
+```
+
+- `RegisterBlock(id, settings)` creates a block whose behavior comes from the settings: `Strength`, `LightLevel`, `RandomTicks`, `NoOcclusion`, `NoCollision`, state properties via `Property`, default values via `DefaultState`.
+- `RegisterBlock(id, block)` registers a `BlockBehaviour` subclass when behavior callbacks need overrides.
+- `RegisterItem(id, item)` registers an `Item` subclass.
+- Content base classes are the deliberate exception to the wrapper purity policy: `BlockBehaviour` and `Item` are meant to be subclassed, exactly like Fabric's `Block` and `Item`. A kernel rename breaks the mod, the same way it does in Fabric.
+- The registration window is open only inside the callback (`IsOpen` is false outside it); a duplicate id throws, and the block's or item's `Id` must equal the registration key.
+- **Block items are not supported in v1**: `BlockItem` is `sealed` and hardcodes the `minecraft:` namespace, and the placement path checks the concrete type. A registered block can be placed with `/setblock` or worldgen, but not from a survival item yet. Registering a plain custom item works.
+
 ***
 
 ## 5. Internals
@@ -610,7 +640,7 @@ You do not need this section to write mods, but it may help when debugging.
 
 | Class                                                    | Form        | Responsibility                                              |
 | -------------------------------------------------------- | ----------- | ----------------------------------------------------------- |
-| `Internal.SignalProbe.OnSignal(string)`                  | Mark ×5     | all "something happened" signals funnel into one method, dispatched to the matching event by `label` |
+| `Internal.SignalProbe.OnSignal(string)`                  | Mark ×6     | all "something happened" signals funnel into one method, dispatched to the matching event by `label` |
 | `Internal.CommandProbe.OnCommandsReady(object)`          | CallSite    | replaces the call to `EffectCommand::Register`; after restoring the original call it fires `CommandRegister` |
 | `Internal.PlayerProbe.OnXxx(object, ...)`                | CallSite ×6 | player events, one method per hook point; after restoring the original call it publishes the event |
 | `Internal.LevelProbe.OnChunkXxxAssigned(object, object)` | CallSite ×3 | chunk events, hooked at the assignment sites of `ServerChunkCache`'s three callback properties; a wrapper delegate is layered on before handing control back to the kernel |
@@ -631,7 +661,7 @@ The order that keeps this true is in the loader, not in the probe: replacement a
 
 ### 5.2 Hook point list
 
-ModApi's `ncmod.json` contains thirty-six rules; the event rows in 2.1 map one-to-one, and the pack rows in 4.5 add four more. To change a hook point or add a rule, edit this file; after editing, rebuild (it is an embedded resource) and put the resulting dll back into `mods/` — the latter is already done automatically by `ncm build`'s deploy step, and missing it manifests as the rules not taking effect at all.
+ModApi's `ncmod.json` contains thirty-seven rules; the event rows in 2.1 map one-to-one, the pack rows in 4.5 add four more, and the content registration row in 4.6 adds one. To change a hook point or add a rule, edit this file; after editing, rebuild (it is an embedded resource) and put the resulting dll back into `mods/` — the latter is already done automatically by `ncm build`'s deploy step, and missing it manifests as the rules not taking effect at all.
 
 The four lifecycle phases come from three hook shapes: `Starting` is a Mark on `DedicatedServer::InitServer` (the first statement of boot), `Started` and `Stopping` are Marks on `MinecraftServer::Run` and `DedicatedServer::Stop` entries, and `Stopped` needs no rule of its own — `ServerProbe.OnServerRun` wraps the single call to `Run`, publishes `Stopped` when it returns, and only then lets the captured server instance go.
 
@@ -664,6 +694,8 @@ The following are hook points whose locations are confirmed but that have not ye
 Directions already done: level ticks became `ServerEvents.LevelTick`, saved data persistence became `ServerEvents.SavedDataSaving`, command execution became `ServerEvents.CommandExecuted`, blocks became `ServerEvents.BlockChanged` / `BlockBroken` / `ItemDropped`, the five player packet handlers became `PlayerUseBlock` / `PlayerUseItem` / `PlayerInteractEntity` / `PlayerPickItemFromBlock` / `PlayerPickItemFromEntity`, client connection phases became `ClientEvents.Join` / `Disconnect`, and the lifecycle is now four phases (`Starting` / `Started` / `Stopping` / `Stopped`).
 
 Two infrastructure pieces landed with the wrapper purity policy: handler exceptions are isolated inside `NcEvent.Publish` (logged, never propagated into the kernel), and cancellable events exist as a mechanism (`INcCancellable` + probe-side verdict readback), first used by `ServerEvents.PlayerBlockBreak`.
+
+Content registration v1 is done for blocks and plain items (section 4.6). Block items still wait on a kernel-side change: `BlockItem` is `sealed` and hardcodes the `minecraft:` namespace, and `ServerBlockUpdates.PlaceHeldBlock` checks the concrete type.
 
 Hooking the block cell on `SetBlock` does not work: it has two default parameters, `notifyNeighbors` and `strict`, so compiled call sites take anywhere from 4 to 6 parameters, and since CallSite matches by "type + method name" without looking at the parameter list, one replacement method cannot handle all three stack shapes. Instead it hooks two places: state sync hooks `IBlockUpdateSink::BlockChanged` (the only interface call in `ServerLevel.SetBlock`, covering every change with client sync), and breaking and drops hook `ServerBlockUpdates`' own methods.
 

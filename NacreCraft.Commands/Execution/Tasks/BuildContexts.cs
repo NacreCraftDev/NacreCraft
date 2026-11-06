@@ -42,6 +42,12 @@ public class BuildContexts<T>
                     {
                         modifiers = modifiers.SetForked();
                     }
+                    if (contextToRun.GetCustomModifier() is { } customModifier)
+                    {
+                        customModifier.Apply(originalSource, currentSources, currentStage, modifiers,
+                            ExecutionControl<T>.Create(context, frame));
+                        return;
+                    }
                     var modifier = contextToRun.GetRedirectModifier();
                     if (modifier is CustomModifierExecutor<T> customModifierExecutor)
                     {

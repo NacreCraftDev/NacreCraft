@@ -93,7 +93,12 @@ public sealed class LiteralCommandNode<S> : CommandNode<S>
         var builder = LiteralArgumentBuilder<S>.Literal(_literal);
         builder.Requires(GetRequirement());
         builder.Forward(GetRedirect(), GetRedirectModifier(), IsFork());
-        if (GetCommand() != null)
+        builder.SetCustomModifier(GetCustomModifier());
+        if (GetCustomExecutor() is { } executor)
+        {
+            builder.Executes(executor);
+        }
+        else if (GetCommand() != null)
         {
             builder.Executes(GetCommand()!);
         }

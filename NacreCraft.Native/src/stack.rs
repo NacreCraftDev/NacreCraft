@@ -131,6 +131,16 @@ unsafe extern "system" fn handle_exception(exception: *mut ExceptionPointers) ->
 
     let code = (*record).code;
 
+    // A null dereference reaches here as a hardware fault before the runtime turns it into a managed
+    // NullReferenceException. Reporting it would leave a crash report and a shutdown banner behind every ordinary null
+    // bug, and the process would carry on as if nothing happened.
+    if code == 0xC000_0005 {
+        let accessed = (*record).information.get(1).copied().unwrap_or(0);
+        if accessed < 0x1_0000 {
+            return EXCEPTION_CONTINUE_SEARCH;
+        }
+    }
+
     // A stack overflow keeps its own path: it has to run on the pages Windows holds in reserve, and the crash component
     // formats more text than fits there
     if code == EXCEPTION_STACK_OVERFLOW {

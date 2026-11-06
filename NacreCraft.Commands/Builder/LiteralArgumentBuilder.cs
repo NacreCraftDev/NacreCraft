@@ -22,6 +22,8 @@ public sealed class LiteralArgumentBuilder<S> : ArgumentBuilder<S, LiteralArgume
     public override LiteralCommandNode<S> Build()
     {
         var result = new LiteralCommandNode<S>(_literal, GetCommand(), GetRequirement(), GetRedirect(), GetRedirectModifier(), IsFork());
+        result.SetCustomExecutor(_customExecutor);
+        result.SetCustomModifier(_customModifier);
 
         foreach (var argument in GetArguments())
         {

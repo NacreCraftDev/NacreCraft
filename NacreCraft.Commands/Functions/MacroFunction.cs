@@ -82,9 +82,9 @@ public class MacroFunction<T> : CommandFunction<T>
         switch (tag)
         {
             case FloatTag floatTag:
-                return floatTag.Value.ToString(DecimalFormatString, CultureInfo.InvariantCulture);
+                return FormatJavaDecimal(floatTag.Value);
             case DoubleTag doubleTag:
-                return doubleTag.Value.ToString(DecimalFormatString, CultureInfo.InvariantCulture);
+                return FormatJavaDecimal(doubleTag.Value);
             case ByteTag byteTag:
                 return byteTag.Value.ToString();
             case ShortTag shortTag:
@@ -98,6 +98,40 @@ public class MacroFunction<T> : CommandFunction<T>
         }
     }
 
+    //FormatJavaDecimal formats with the vanilla DecimalFormat("#") pattern: at most 15 fraction digits, trailing zeros dropped,
+    //and a fractional value in (-1,1) loses its leading zero (".5" rather than "0.5"), which is what the Java formatter does
+    private static string FormatJavaDecimal(double value)
+    {
+        if (value == 0.0) return "0";
+        var text = value.ToString(DecimalFormatString, CultureInfo.InvariantCulture);
+        if (text.StartsWith("0.", StringComparison.Ordinal)) return text[1..];
+        if (text.StartsWith("-0.", StringComparison.Ordinal)) return "-" + text[2..];
+        return text;
+    }
+
+    //ListHash the Java List.hashCode of the parameter values, which vanilla uses to name the instantiated function
+    //A C# List has reference equality, so the content hash has to be computed explicitly
+    private static int ListHash(List<string> values)
+    {
+        var hash = 1;
+        foreach (var value in values)
+        {
+            hash = unchecked(31 * hash + StringHash(value));
+        }
+        return hash;
+    }
+
+    //StringHash the Java String.hashCode of one value
+    private static int StringHash(string value)
+    {
+        var hash = 0;
+        foreach (var c in value)
+        {
+            hash = unchecked(31 * hash + c);
+        }
+        return hash;
+    }
+
     private InstantiatedFunction<T> SubstituteAndParse(List<string> values, CommandDispatcher<T> dispatcher)
     {
         var newEntries = new List<UnboundEntryAction<T>>(_entries.Count);
@@ -107,7 +141,7 @@ public class MacroFunction<T> : CommandFunction<T>
             LookupValues(values, entry.Parameters, entryArguments);
             newEntries.Add(entry.Instantiate(entryArguments, dispatcher, _id));
         }
-        return new PlainTextFunction<T>(_id.WithPath(id => id + "/" + values.GetHashCode()), newEntries);
+        return new PlainTextFunction<T>(_id.WithPath(id => id + "/" + ListHash(values)), newEntries);
     }
 
     //LookupValues selects values by index, reusing the output list; maps to vanilla lookupValues

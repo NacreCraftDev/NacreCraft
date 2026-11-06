@@ -37,7 +37,7 @@ public sealed class PlayerDataStorage
         }
         catch (Exception e)
         {
-            Log.Error($"Player save write failed {player.Profile.Name}: {e.Message}");
+            Log.Error($"Player save write failed {player.Profile.Name}: {e}");
         }
     }
 

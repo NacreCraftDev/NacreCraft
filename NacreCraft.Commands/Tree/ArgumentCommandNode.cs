@@ -85,8 +85,13 @@ public sealed class ArgumentCommandNode<S, T> : ArgumentCommandNode<S>
         var builder = RequiredArgumentBuilder<S, T>.Argument(_name, _type);
         builder.Requires(GetRequirement());
         builder.Forward(GetRedirect(), GetRedirectModifier(), IsFork());
+        builder.SetCustomModifier(GetCustomModifier());
         builder.Suggests(_customSuggestions);
-        if (GetCommand() != null)
+        if (GetCustomExecutor() is { } executor)
+        {
+            builder.Executes(executor);
+        }
+        else if (GetCommand() != null)
         {
             builder.Executes(GetCommand()!);
         }

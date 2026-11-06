@@ -20,6 +20,8 @@ public sealed class SystemReport
     public SystemReport()
     {
         SetDetail("NacreCraft Version", SharedConstants.Version);
+        SetDetail("NacreCraft Release", BuildInfo.GameVersion);
+        SetDetail("NacreCraft Build", BuildInfo.BuildNumber);
         SetDetail("Protocol Version", SharedConstants.ProtocolVersion.ToString());
         SetDetail("World Data Version", SharedConstants.WorldDataVersion.ToString());
         SetDetail("Operating System", $"{RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})");

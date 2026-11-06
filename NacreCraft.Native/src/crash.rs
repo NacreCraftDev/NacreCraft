@@ -243,23 +243,22 @@ pub unsafe fn record(fault: &Fault) -> i32 {
 unsafe fn write_console(text: &str) {
     use win::{GetStdHandle, WriteFile};
 
-    // Both handles are written so the banner survives redirection of either stream, but a console usually backs both with
-    // the same screen buffer. Writing that twice prints the whole block twice, so a handle already written is skipped
-    let mut previous = std::ptr::null_mut();
-    for kind in [STD_ERROR_HANDLE, STD_OUTPUT_HANDLE] {
-        let handle = GetStdHandle(kind);
-        if handle.is_null() || handle as isize == -1 || handle == previous {
-            continue;
+    // Stderr carries crash output by convention; stdout is only used when that write fails outright. Both are distinct
+    // handles even when they point at the same console, so comparing them cannot stop the block being printed twice.
+    let mut handle = GetStdHandle(STD_ERROR_HANDLE);
+    if handle.is_null() || handle as isize == -1 {
+        handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    }
+    if handle.is_null() || handle as isize == -1 {
+        return;
+    }
+
+    let mut written: u32 = 0;
+    if WriteFile(handle, text.as_ptr(), text.len() as u32, &mut written, std::ptr::null_mut()) == 0 {
+        let fallback = GetStdHandle(STD_OUTPUT_HANDLE);
+        if !fallback.is_null() && fallback as isize != -1 {
+            let _ = WriteFile(fallback, text.as_ptr(), text.len() as u32, &mut written, std::ptr::null_mut());
         }
-        previous = handle;
-        let mut written: u32 = 0;
-        let _ = WriteFile(
-            handle,
-            text.as_ptr(),
-            text.len() as u32,
-            &mut written,
-            std::ptr::null_mut(),
-        );
     }
 }
 

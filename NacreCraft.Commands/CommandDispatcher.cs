@@ -155,6 +155,9 @@ public sealed class CommandDispatcher<S>
             }
 
             context.WithCommand(child.GetCommand());
+            //The custom executor/modifier travel with the node, mirroring a vanilla command object that also implements the interface
+            context.WithCustomExecutor(child.GetCustomExecutor());
+            context.WithCustomModifier(child.GetCustomModifier());
             if (reader.CanRead(child.GetRedirect() == null ? 2 : 1))
             {
                 reader.Skip();

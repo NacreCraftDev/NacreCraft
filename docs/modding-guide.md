@@ -25,6 +25,9 @@ ncm means NacreCraft mod. An ncm is a .NET class library dll with an `ncmod.json
 | Namespace | Contents | What you get |
 | --- | --- | --- |
 | `NacreCraft.ModApi.Wrapper` | `ServerEvents` / `ClientEvents` / `NetworkEvents`, `NcServer` / `NcWorld` / `NcPlayers` / `NcLists` / `NcRegistries` / `NcRecipes` / `NcStartup`, and object handles like `NcPlayer` / `NcLevel` | wrapper types; no kernel types on the public surface |
+| `NacreCraft.ModApi.Content` | `NcContent`, `NcBlockSettings` | register custom blocks and items; `BlockBehaviour` / `Item` are meant to be subclassed |
+| `NacreCraft.ModApi.Capability` | `NcBlockApiLookup` / `NcItemApiLookup` / `NcEntityApiLookup` | publish and query services between mods |
+| `NacreCraft.ModApi.Pack` | `NcModPacks` | contribute a data or resource pack |
 | `NacreCraft.ModApi.Extension` | `[Inject]` / `[Mixin]` annotations | rules bind to kernel class and method names |
 
 - **For stability, use `Wrapper`**. The facades handle the kernel's tedious call ordering for you (writing a single block while touching the level, the player list, and the sync chain is one example), and event args are all wrapper types. The cost is that capabilities the facades do not expose are unavailable to you.
@@ -119,7 +122,7 @@ Note the order: **declarations are scanned, rewritten bytes are loaded, and entr
 | Code injection | Mixin (annotations in source; members are mixed into the target class at class load) | `NacreCraft.Hook` (rules declared in a manifest or annotations; bytes are rewritten in place during assembly resolution, and mixins move members into the target type) |
 | Injection granularity | any line in a method body, including locals and intermediate expression values | fourteen forms (call site, single call argument, field read/write, constructor, type check, boxing, local variable, constant, whole-method-body replacement, probes, etc.), with insert-before or insert-after |
 | Loading model | Fabric Loader + Knot class loader | single default ALC + `AssemblyLoadContext.Resolving` |
-| Official API scope | Fabric API has a great many modules | NacreCraft-ModApi currently has only event and command extension points |
+| Official API scope | Fabric API has a great many modules | NacreCraft-ModApi covers events, commands, capability lookups, mod packs and block/item registration; many Fabric modules are still unported |
 
 ### 3.1 Concept mapping
 
@@ -133,7 +136,7 @@ Note the order: **declarations are scanned, rewritten bytes are loaded, and entr
 | `@ModifyArg` | `CallArg`, see [injection.md 9](injection.md#9-modifying-a-single-call-argument); `@ModifyArgs` (all arguments in one callback) has no equivalent |
 | `@Slice` | `SliceFrom` / `SliceTo`, see [injection.md 4](injection.md#4-narrowing-to-one-site-host-scoping-and-placement) |
 | `@Accessor` / `@Invoker` | `NcAccess`, reflective handles with caching, see [mod-api.md 4.3](mod-api.md#43-private-member-access); `private` members also need no visibility widening when writing a rule |
-| `Registry.register(...)` | the kernel registry (`BuiltInRegistries`) |
+| `Registry.register(...)` | `NcContent.Register` for custom content, `BuiltInRegistries` for vanilla lookups |
 | `ServerLifecycleEvents.SERVER_STARTED` | `ServerEvents.Started` |
 | `ServerTickEvents.END_SERVER_TICK` | `ServerEvents.Tick` |
 | `CommandRegistrationCallback` | `ServerEvents.CommandRegister` |
@@ -145,7 +148,7 @@ Note the order: **declarations are scanned, rewritten bytes are loaded, and entr
 
 - **AccessWidener**: none. Visibility is no obstacle to IL rewriting in NC; `private` methods can be hooked the same way (the rewriter works at the byte level).
 - **Yarn / Mojang mappings**: not needed. NC is C# source translated directly from vanilla, with type and method names corresponding to vanilla, only with naming style following C#.
-- **The vast majority of Fabric API modules**: only capabilities covered by `NacreCraft-ModApi` are available; for the rest, write your own injection rules or wait for the API to catch up.
+- **The vast majority of Fabric API modules**: `NacreCraft-ModApi` covers events, commands, capability lookups, mod packs, and block/item registration (block items are still pending); for the rest, write your own injection rules or wait for the API to catch up.
 - **Mixin's targeting syntax**: there is no `@At`-style string, and replacing bytecode at an arbitrary line is not offered. What NC has instead, and what it can and cannot reach, is the whole subject of [injection.md](injection.md).
 
 ### 3.3 A side-by-side example

@@ -38,6 +38,8 @@ public sealed class RequiredArgumentBuilder<S, T> : ArgumentBuilder<S, RequiredA
     public override ArgumentCommandNode<S, T> Build()
     {
         var result = new ArgumentCommandNode<S, T>(_name, _type, GetCommand(), GetRequirement(), GetRedirect(), GetRedirectModifier(), IsFork(), _suggestionsProvider);
+        result.SetCustomExecutor(_customExecutor);
+        result.SetCustomModifier(_customModifier);
 
         foreach (var argument in GetArguments())
         {

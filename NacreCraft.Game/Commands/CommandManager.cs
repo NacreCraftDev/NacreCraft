@@ -106,6 +106,7 @@ public sealed class CommandManager
         RegisterSchedule();
         RegisterDataPack();
         RegisterFunction();
+        RegisterReturn();
         RegisterLocate();
         RegisterLoot();
         RegisterPlace();
@@ -139,7 +140,7 @@ public sealed class CommandManager
             var builder = child.CreateBuilder();
             builder.Requires(_ => true);
             if (builder.GetRedirect() is { } redirect && !redirect.CanUse(source))
-                builder.Forward(null, null, false);
+                builder.Forward(null, (RedirectModifier<CommandSourceStack>?)null, false);
             var copy = builder.Build();
             target.AddChild(copy);
             CopyUsable(child, copy, source);
@@ -148,11 +149,27 @@ public sealed class CommandManager
 
     //Execute runs a player command; parse failures and syntax errors are reported to the executor like vanilla
     public int Execute(ServerPlayer player, string command)
+        => Execute(new ServerCommandSource(player, _server), command);
+
+    //Execute runs a command from any source, for cases with no executing player such as the console
+    //The command goes through the execution engine like vanilla performCommand: the same queue, quota and fork limits apply,
+    //and /return inside a function can hand a value back through the frame return consumer
+    public int Execute(CommandSourceStack source, string command)
     {
-        var source = new ServerCommandSource(player, _server);
+        var input = TrimOptionalPrefix(command);
+        //A manager built without a server (tree construction tests) has no gamerules to size the queue, so it keeps the direct path
+        if (_server is null) return _dispatcher.Execute(input, source);
         try
         {
-            return _dispatcher.Execute(command, source);
+            var parse = _dispatcher.Parse(input, source);
+            var chain = FinishParsing(parse, source);
+            if (chain is null) return 0;
+            //The engine reports the value through the source callback; capture it so callers still get the brigadier-style int
+            var result = 0;
+            var callback = new CapturingResultCallback(value => result = value);
+            ExecuteInContext(source, context => ExecutionContext<CommandSourceStack>.QueueInitialCommandExecution(
+                context, input, chain, source.WithCallback(callback), callback));
+            return result;
         }
         catch (CommandSyntaxException e)
         {
@@ -161,19 +178,37 @@ public sealed class CommandManager
         }
     }
 
-    //Execute runs a command from any source, for cases with no executing player such as the console
-    //Player sources go through the overload above; this maps to the general form of vanilla performPrefixedCommand
-    public int Execute(CommandSourceStack source, string command)
+    //TrimOptionalPrefix drops one leading slash, maps to vanilla Commands.trimOptionalPrefix
+    private static string TrimOptionalPrefix(string command)
+        => command.StartsWith('/') ? command[1..] : command;
+
+    //FinishParsing validates the parse and flattens it into a context chain; a syntax error is reported and yields null
+    //maps to vanilla Commands.finishParsing
+    private static ContextChain<CommandSourceStack>? FinishParsing(ParseResults<CommandSourceStack> parse,
+        CommandSourceStack source)
     {
         try
         {
-            return _dispatcher.Execute(command, source);
+            NacreCraft.Commands.Functions.CommandFunction<CommandSourceStack>.ValidateParseResults(parse);
+            var chain = ContextChain<CommandSourceStack>.TryFlatten(parse.GetContext().Build(parse.GetReader().String));
+            if (!chain.IsPresent)
+            {
+                throw CommandSyntaxException.BuiltInExceptions.DispatcherUnknownCommand()
+                    .CreateWithContext(parse.GetReader());
+            }
+            return chain.Get();
         }
         catch (CommandSyntaxException e)
         {
             source.SendFailure(e.Message);
-            return 0;
+            return null;
         }
+    }
+
+    //CapturingResultCallback forwards the final result to the caller of Execute
+    private sealed class CapturingResultCallback(Action<int> sink) : CommandResultCallback
+    {
+        public void OnResult(bool success, int result) => sink(success ? result : 0);
     }
 
     //_currentExecutionContext the execution context running on this thread, maps to vanilla CURRENT_EXECUTION_CONTEXT
@@ -475,6 +510,10 @@ public sealed class CommandManager
     //RegisterFunction registers the vanilla function command tree
     private void RegisterFunction()
         => FunctionCommand.Register(_dispatcher);
+
+    //RegisterReturn registers the vanilla return command tree
+    private void RegisterReturn()
+        => ReturnCommand.Register(_dispatcher);
 
     //RegisterLocate registers the vanilla locate command tree
     private void RegisterLocate()

@@ -1,5 +1,6 @@
 using NacreCraft.Commands.Builder;
 using NacreCraft.Commands.Context;
+using NacreCraft.Commands.Execution;
 using NacreCraft.Commands.Suggestion;
 
 namespace NacreCraft.Commands.Tree;
@@ -19,6 +20,12 @@ public abstract class CommandNode<S> : IComparable<CommandNode<S>>
     private readonly bool _forks;
     private Command<S>? _command;
 
+    //_customExecutor custom executor attached to this node; vanilla stores it as the command object itself, here it needs its own slot
+    private CustomCommandExecutor<S>? _customExecutor;
+
+    //_customModifier custom redirect modifier; same story as the custom executor, a delegate cannot carry an interface
+    private CustomModifierExecutor<S>? _customModifier;
+
     protected CommandNode(Command<S>? command, Predicate<S> requirement, CommandNode<S>? redirect, RedirectModifier<S>? modifier, bool forks)
     {
         _command = command;
@@ -29,6 +36,18 @@ public abstract class CommandNode<S> : IComparable<CommandNode<S>>
     }
 
     public Command<S>? GetCommand() => _command;
+
+    //GetCustomExecutor the custom executor attached to the node, null for ordinary commands
+    public CustomCommandExecutor<S>? GetCustomExecutor() => _customExecutor;
+
+    //GetCustomModifier the custom redirect modifier attached to the node, null for ordinary redirects
+    public CustomModifierExecutor<S>? GetCustomModifier() => _customModifier;
+
+    //SetCustomExecutor attaches a custom executor; only the builder path calls it
+    internal void SetCustomExecutor(CustomCommandExecutor<S>? executor) => _customExecutor = executor;
+
+    //SetCustomModifier attaches a custom redirect modifier; only the builder path calls it
+    internal void SetCustomModifier(CustomModifierExecutor<S>? modifier) => _customModifier = modifier;
 
     public IReadOnlyCollection<CommandNode<S>> GetChildren() => _children.Values;
 
@@ -53,6 +72,9 @@ public abstract class CommandNode<S> : IComparable<CommandNode<S>>
             {
                 child._command = node.GetCommand();
             }
+            //Merging a node keeps its custom executor/modifier, which is what carries /return run onto an existing literal
+            if (node._customExecutor != null) child._customExecutor = node._customExecutor;
+            if (node._customModifier != null) child._customModifier = node._customModifier;
             foreach (var grandchild in node.GetChildren())
             {
                 child.AddChild(grandchild);

@@ -389,6 +389,20 @@ pub unsafe extern "C" fn ncn_register_stack_overflow_callback(
     0
 }
 
+/// ncn_set_product_info records the version line the managed side reports
+/// It arrives as UTF-8 bytes; a missing call only leaves the native report without the version block
+#[no_mangle]
+pub unsafe extern "C" fn ncn_set_product_info(line: *const u8, length: usize) {
+    if line.is_null() || length == 0 {
+        return;
+    }
+
+    let bytes = std::slice::from_raw_parts(line, length);
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        system::set_product(text.to_string());
+    }
+}
+
 /// ReportWindowRequest is the layout the managed side fills in
 /// Every string arrives as UTF-8 bytes plus its length, and the field order has to stay in step with the C# struct
 /// Body carries the text to show directly; report_path carries a file to read it from. A caller supplies one of them,

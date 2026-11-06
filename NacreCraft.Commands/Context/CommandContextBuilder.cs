@@ -17,6 +17,7 @@ public sealed class CommandContextBuilder<S>
     private CommandContextBuilder<S>? _child;
     private StringRange _range;
     private RedirectModifier<S>? _modifier;
+    private CustomModifierExecutor<S>? _customModifier;
     private bool _forks;
 
     public CommandContextBuilder(CommandDispatcher<S> dispatcher, S source, CommandNode<S> rootNode, int start)
@@ -53,20 +54,29 @@ public sealed class CommandContextBuilder<S>
 
     //WithCustomExecutor registers a custom executor, mirroring the dual role of CommandAdapter on a vanilla command node
     //A delegate cannot implement an interface, so the command slot gets a placeholder delegate and the custom executor is stored separately
-    public CommandContextBuilder<S> WithCustomExecutor(CustomCommandExecutor<S> executor)
+    //Passing null clears it, which is what a node without a custom executor does while parsing deeper
+    public CommandContextBuilder<S> WithCustomExecutor(CustomCommandExecutor<S>? executor)
     {
-        _command = CustomCommandExecutor<S>.NotExecutable;
         _customExecutor = executor;
+        if (executor != null) _command = CustomCommandExecutor<S>.NotExecutable;
         return this;
     }
 
     public CustomCommandExecutor<S>? GetCustomExecutor() => _customExecutor;
+
+    //WithCustomModifier registers a custom redirect modifier; null clears it when an ordinary node follows
+    public CommandContextBuilder<S> WithCustomModifier(CustomModifierExecutor<S>? modifier)
+    {
+        _customModifier = modifier;
+        return this;
+    }
 
     public CommandContextBuilder<S> WithNode(CommandNode<S> node, StringRange range)
     {
         _nodes.Add(new ParsedCommandNode<S>(node, range));
         _range = StringRange.Encompassing(_range, range);
         _modifier = node.GetRedirectModifier();
+        _customModifier = node.GetCustomModifier();
         _forks = node.IsFork();
         return this;
     }
@@ -76,6 +86,7 @@ public sealed class CommandContextBuilder<S>
         var copy = new CommandContextBuilder<S>(_dispatcher, _source, _rootNode, _range.Start);
         copy._command = _command;
         copy._customExecutor = _customExecutor;
+        copy._customModifier = _customModifier;
         foreach (var (k, v) in _arguments)
         {
             copy._arguments[k] = v;
@@ -83,6 +94,7 @@ public sealed class CommandContextBuilder<S>
         copy._nodes.AddRange(_nodes);
         copy._child = _child;
         copy._range = _range;
+        copy._modifier = _modifier;
         copy._forks = _forks;
         return copy;
     }
@@ -111,7 +123,7 @@ public sealed class CommandContextBuilder<S>
 
     public CommandContext<S> Build(string input)
     {
-        return new CommandContext<S>(_source, input, _arguments, _command, _rootNode, _nodes, _range, _child?.Build(input), _modifier, _forks, _customExecutor);
+        return new CommandContext<S>(_source, input, _arguments, _command, _rootNode, _nodes, _range, _child?.Build(input), _modifier, _forks, _customExecutor, _customModifier);
     }
 
     public CommandDispatcher<S> GetDispatcher() => _dispatcher;

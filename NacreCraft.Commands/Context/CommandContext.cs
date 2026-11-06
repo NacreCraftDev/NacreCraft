@@ -36,8 +36,9 @@ public sealed class CommandContext<S>
     private readonly RedirectModifier<S>? _modifier;
     private readonly bool _forks;
     private readonly CustomCommandExecutor<S>? _customExecutor;
+    private readonly CustomModifierExecutor<S>? _customModifier;
 
-    public CommandContext(S source, string input, Dictionary<string, ParsedArgument<S>> arguments, Command<S>? command, CommandNode<S> rootNode, List<ParsedCommandNode<S>> nodes, StringRange range, CommandContext<S>? child, RedirectModifier<S>? modifier, bool forks, CustomCommandExecutor<S>? customExecutor = null)
+    public CommandContext(S source, string input, Dictionary<string, ParsedArgument<S>> arguments, Command<S>? command, CommandNode<S> rootNode, List<ParsedCommandNode<S>> nodes, StringRange range, CommandContext<S>? child, RedirectModifier<S>? modifier, bool forks, CustomCommandExecutor<S>? customExecutor = null, CustomModifierExecutor<S>? customModifier = null)
     {
         _source = source;
         _input = input;
@@ -50,6 +51,7 @@ public sealed class CommandContext<S>
         _modifier = modifier;
         _forks = forks;
         _customExecutor = customExecutor;
+        _customModifier = customModifier;
     }
 
     public CommandContext<S> CopyFor(S source)
@@ -58,7 +60,7 @@ public sealed class CommandContext<S>
         {
             return this;
         }
-        return new CommandContext<S>(source, _input, _arguments, _command, _rootNode, _nodes, _range, _child, _modifier, _forks, _customExecutor);
+        return new CommandContext<S>(source, _input, _arguments, _command, _rootNode, _nodes, _range, _child, _modifier, _forks, _customExecutor, _customModifier);
     }
 
     public CommandContext<S>? GetChild() => _child;
@@ -77,6 +79,9 @@ public sealed class CommandContext<S>
 
     //CustomExecutor custom executor; once BuildContexts detects it, execution bypasses the ordinary command delegate path
     public CustomCommandExecutor<S>? CustomExecutor => _customExecutor;
+
+    //GetCustomModifier the custom redirect modifier of this stage, null for ordinary redirects
+    public CustomModifierExecutor<S>? GetCustomModifier() => _customModifier;
 
     public S GetSource() => _source;
 

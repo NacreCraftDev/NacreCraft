@@ -41,6 +41,20 @@ public sealed class ServerCommandSource : CommandSourceStack
         _level = level;
     }
 
+    //Copy constructor used by WithCallback; every field that decides where a command runs and who it runs as is carried over
+    private ServerCommandSource(ServerCommandSource other, CommandResultCallback callback)
+        : base(other.SenderName, other.PermissionLevel, other.Output, other.AcceptsSuccess, other.AcceptsFailure)
+    {
+        Player = other.Player;
+        Server = other.Server;
+        _position = other._position;
+        _level = other._level;
+        Callback = callback;
+    }
+
+    //WithCallback returns a server source again, so command executors can still cast to ServerCommandSource
+    public override ServerCommandSource WithCallback(CommandResultCallback callback) => new(this, callback);
+
     //Console the console command source, for cases with no executing entity such as the server GUI input box
     //maps to vanilla DedicatedServer.createCommandSourceStack with sender name Server and full permission
     public static ServerCommandSource Console(MinecraftServer server) => new("Server", 4, server);

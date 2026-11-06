@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using NacreCraft.Config;
 using NacreCraft.Logging;
 
 namespace NacreCraft.Util;
@@ -30,6 +31,9 @@ public static class NativeStackGuard
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int ncn_register_stack_overflow_callback(IntPtr callback, byte[] reportDirectory, UIntPtr length);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern void ncn_set_product_info(byte[] line, UIntPtr length);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int ncn_stack_hook_enabled();
@@ -69,6 +73,7 @@ public static class NativeStackGuard
             }
 
             _installed = true;
+            ReportProductInfo();
             Log.Info("The native layer is in place and will report a stack overflow");
             ArmMachineGuard(tripEntry);
             return true;
@@ -119,6 +124,24 @@ public static class NativeStackGuard
         {
             Log.Warning($"The stack guard throw entry could not be resolved: {exception.GetType().Name}");
             return IntPtr.Zero;
+        }
+    }
+
+    //ReportProductInfo hands the build identity to the native layer, so its crash reports carry the same version text
+    //An older native layer has no such export, and that must not cost the stack overflow callback
+    private static void ReportProductInfo()
+    {
+        try
+        {
+            var line = Encoding.UTF8.GetBytes(
+                $"NacreCraft {SharedConstants.Version} (release {BuildInfo.GameVersion}, build {BuildInfo.BuildNumber})");
+            ncn_set_product_info(line, (UIntPtr)line.Length);
+        }
+        catch (EntryPointNotFoundException)
+        {
+        }
+        catch (DllNotFoundException)
+        {
         }
     }
 

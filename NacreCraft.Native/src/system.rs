@@ -11,14 +11,38 @@ use std::sync::OnceLock;
 
 static INFO: OnceLock<String> = OnceLock::new();
 
+/// The version line the managed side reports once its own assemblies are up
+static PRODUCT: OnceLock<String> = OnceLock::new();
+
+/// The two blocks merged, so the fault path copies one string without allocating
+static MERGED: OnceLock<String> = OnceLock::new();
+
 /// capture collects the fingerprint; the first call wins and later ones are ignored
 pub fn capture() {
     let _ = INFO.set(collect());
+    merge();
 }
 
-/// describe returns the cached fingerprint, or a note when capture never ran
+/// set_product records what the managed side reported for this build; it arrives on the first managed call
+pub fn set_product(line: String) {
+    let _ = PRODUCT.set(line);
+    merge();
+}
+
+fn merge() {
+    let (Some(info), Some(product)) = (INFO.get(), PRODUCT.get()) else {
+        return;
+    };
+    let _ = MERGED.set(format!("{product}\n{info}"));
+}
+
+/// describe returns the cached blocks, or whatever was captured when the managed side never reported
 pub fn describe() -> &'static str {
-    INFO.get().map(String::as_str).unwrap_or("the system fingerprint was not captured")
+    MERGED
+        .get()
+        .or_else(|| INFO.get())
+        .map(String::as_str)
+        .unwrap_or("the system fingerprint was not captured")
 }
 
 #[cfg(windows)]

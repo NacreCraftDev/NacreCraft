@@ -1,3 +1,4 @@
+using NacreCraft.Commands.Execution;
 using NacreCraft.Commands.Tree;
 
 namespace NacreCraft.Commands.Builder;
@@ -13,6 +14,9 @@ public abstract class ArgumentBuilder<S>
     protected CommandNode<S>? _target;
     protected RedirectModifier<S>? _modifier;
     protected bool _forks;
+    //_customExecutor/_customModifier custom executors live next to the delegate slots, since a C# delegate cannot implement an interface
+    protected CustomCommandExecutor<S>? _customExecutor;
+    protected CustomModifierExecutor<S>? _customModifier;
 
     public IReadOnlyCollection<CommandNode<S>> GetArguments() => _arguments.GetChildren();
 
@@ -39,8 +43,35 @@ public abstract class ArgumentBuilder<S>
         }
         _target = target;
         _modifier = modifier;
+        _customModifier = null;
         _forks = fork;
     }
+
+    //ForwardCustom overrides the redirect with a custom modifier; the delegate slot stays empty and BuildContexts hands control to the executor
+    public void ForwardCustom(CommandNode<S>? target, CustomModifierExecutor<S> modifier, bool fork)
+    {
+        if (_arguments.GetChildren().Count > 0)
+        {
+            throw new InvalidOperationException("Cannot forward a node with children");
+        }
+        _target = target;
+        _modifier = null;
+        _customModifier = modifier;
+        _forks = fork;
+    }
+
+    //Executes installs a custom executor; the command slot gets the not-executable placeholder so ordinary dispatch never runs it
+    public void Executes(CustomCommandExecutor<S> executor)
+    {
+        _command = CustomCommandExecutor<S>.NotExecutable;
+        _customExecutor = executor;
+    }
+
+    //SetCustomExecutor copies the attached executor when a node rebuilds its builder
+    internal void SetCustomExecutor(CustomCommandExecutor<S>? executor) => _customExecutor = executor;
+
+    //SetCustomModifier copies the attached modifier when a node rebuilds its builder
+    internal void SetCustomModifier(CustomModifierExecutor<S>? modifier) => _customModifier = modifier;
 
     public abstract CommandNode<S> Build();
 }
@@ -79,6 +110,14 @@ public abstract class ArgumentBuilder<S, T> : ArgumentBuilder<S> where T : Argum
         return GetThis();
     }
 
+    //Executes installs a custom executor, maps to the CommandAdapter dual role on a vanilla command node
+    public T Executes(CustomCommandExecutor<S> executor)
+    {
+        _command = CustomCommandExecutor<S>.NotExecutable;
+        _customExecutor = executor;
+        return GetThis();
+    }
+
     public new T Requires(Predicate<S> requirement)
     {
         _requirement = requirement;
@@ -87,7 +126,7 @@ public abstract class ArgumentBuilder<S, T> : ArgumentBuilder<S> where T : Argum
 
     public T Redirect(CommandNode<S> target)
     {
-        return Forward(target, null, false);
+        return Forward(target, (RedirectModifier<S>?)null, false);
     }
 
     public T Redirect(CommandNode<S> target, SingleRedirectModifier<S>? modifier)
@@ -108,6 +147,14 @@ public abstract class ArgumentBuilder<S, T> : ArgumentBuilder<S> where T : Argum
     public new T Forward(CommandNode<S>? target, RedirectModifier<S>? modifier, bool fork)
     {
         base.Forward(target, modifier, fork);
+        return GetThis();
+    }
+
+    //ForwardCustom installs a custom redirect modifier, maps to a RedirectModifier that also implements CustomModifierExecutor
+    //Named differently from Forward so existing Forward(target, null, fork) calls stay unambiguous
+    public T ForwardCustom(CommandNode<S>? target, CustomModifierExecutor<S> modifier, bool fork)
+    {
+        base.ForwardCustom(target, modifier, fork);
         return GetThis();
     }
 }

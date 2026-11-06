@@ -48,7 +48,8 @@ public class CommandSourceStack : ExecutionCommandSource<CommandSourceStack>
         => LevelBasedPermissionSet.ForLevel((NacreCraft.Registry.PermissionLevel)PermissionLevel);
 
     //Callback result callback defaults to empty; maps to vanilla CommandSourceStack's callback defaulting to EMPTY
-    public CommandResultCallback Callback { get; private set; } = CommandResultCallback.Empty;
+    //Derived sources keep their extra fields through WithCallback, so the setter is protected
+    public CommandResultCallback Callback { get; protected set; } = CommandResultCallback.Empty;
 
     //WithCallback swaps the callback and returns a shallow copy; derived classes override to keep their own fields
     public virtual CommandSourceStack WithCallback(CommandResultCallback callback)
