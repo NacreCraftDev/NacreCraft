@@ -707,6 +707,12 @@ public static partial class Blocks
             => (ReferenceEquals(state.Owner, CAMPFIRE) || ReferenceEquals(state.Owner, SOUL_CAMPFIRE))
                 && state.HasProperty(BlockStateProperties.Lit)
                 && state.GetValue(BlockStateProperties.Lit);
+
+        //CanLight whether flint and steel can light it, maps to vanilla canLight
+        public static bool CanLight(BlockState state)
+            => (ReferenceEquals(state.Owner, CAMPFIRE) || ReferenceEquals(state.Owner, SOUL_CAMPFIRE))
+                && state.HasProperty(BlockStateProperties.Lit)
+                && !state.GetValue(BlockStateProperties.Lit);
     }
 
     //BaseFireBlock fire and soul fire, a one-pixel-thick flame layer that does not take part in collisions

@@ -60,6 +60,9 @@ public static partial class Blocks
         private readonly string _name;
         private readonly BlockSet _material;
         private readonly bool _canOpenByHand;
+
+        //CanOpenByHand whether a bare hand opens it, maps to vanilla BlockSetType.canOpenByHand
+        public bool CanOpenByHand => _canOpenByHand;
         private readonly SoundEvent _openSound;
         private readonly SoundEvent _closeSound;
 

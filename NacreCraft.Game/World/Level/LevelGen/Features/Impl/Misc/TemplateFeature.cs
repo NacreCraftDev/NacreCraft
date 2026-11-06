@@ -46,6 +46,9 @@ public sealed class TemplateEntry
         Template = template;
         Rotations = rotations;
     }
+
+    //Of an entry with the default rotations, maps to vanilla TemplateEntry.of(Identifier)
+    public static TemplateEntry Of(Identifier template) => new(template, DefaultRotations);
 }
 
 //TemplateFeature structure template feature, maps to vanilla TemplateFeature

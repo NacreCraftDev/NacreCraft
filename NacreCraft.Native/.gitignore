@@ -1,0 +1,4 @@
+# Local verification harnesses; they run against the build but are not part of the layer
+p0/
+p1/
+p2/

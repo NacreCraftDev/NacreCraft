@@ -1,4 +1,4 @@
-using NacreCraft.Logging;
+﻿using NacreCraft.Logging;
 
 namespace NacreCraft.Resources;
 
@@ -62,8 +62,9 @@ public sealed class FolderRepositorySource : IRepositorySource
     private sealed class FolderPackDetector : PackDetector<PackResources>
     {
         protected override PackResources? CreateDirectoryPack(string content)
-            => new FolderPackResources("file/" + Path.GetFileName(content), content);
+            => new PathPackResources("file/" + Path.GetFileName(content), content);
 
         protected override PackResources? CreateZipPack(string content) => null;
     }
 }
+

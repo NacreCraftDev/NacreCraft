@@ -84,6 +84,16 @@ public abstract class ServerLevel : ILevelReader, NacreCraft.Registry.IEntityIns
         NacreCraft.Registry.GameEvent.Context context)
         => GameEventHook?.Invoke(this, source, gameEvent, pos, context);
 
+    //GameEvent posts a game event at a block position, maps to vanilla Level.gameEvent(Entity, GameEvent, BlockPos)
+    public void GameEvent(NacreCraft.Registry.Entity? source, NacreCraft.Registry.GameEvent gameEvent, BlockPos pos)
+        => GameEvent(source, gameEvent, new Vec3(pos.X + 0.5, pos.Y + 0.5, pos.Z + 0.5));
+
+    //GetEntitiesOfClass entities in the area whose runtime type matches, maps to vanilla getEntitiesOfClass
+    //The base level has no entity index, so a level without entity management answers empty; PersistentServerLevel overrides it
+    public virtual IReadOnlyList<T> GetEntitiesOfClass<T>(AABB area, Predicate<T>? selector = null)
+        where T : NacreCraft.Registry.Entity
+        => Array.Empty<T>();
+
     //GameTime, the total world game time
     public long GameTime { get; set; }
 

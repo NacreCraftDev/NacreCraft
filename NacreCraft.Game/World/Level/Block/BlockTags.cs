@@ -1,4 +1,4 @@
-using NacreCraft.Primitives;
+﻿using NacreCraft.Primitives;
 using NacreCraft.Registry;
 
 namespace NacreCraft.Game.World.Level.Block;
@@ -113,8 +113,84 @@ public static class BlockTags
     //Walls all wall types; fence gates use it to decide whether to place in the walled state, maps to vanilla walls
     public static readonly TagKey<NacreCraft.Registry.Block> Walls = Create("walls");
 
+    //Trapdoors all trapdoor types, pathfinding treats them as TRAPDOOR cells, maps to vanilla trapdoors
+    public static readonly TagKey<NacreCraft.Registry.Block> Trapdoors = Create("trapdoors");
+
+    //Fences all fence types, pathfinding treats them as FENCE cells, maps to vanilla fences
+    public static readonly TagKey<NacreCraft.Registry.Block> Fences = Create("fences");
+
+    //Speleothems pointed dripstone and similar, pathfinding marks them DAMAGE_CAUTIOUS, maps to vanilla speleothems
+    public static readonly TagKey<NacreCraft.Registry.Block> Speleothems = Create("speleothems");
+
+    //Fire fire blocks, pathfinding marks them FIRE and checks neighbors for it, maps to vanilla fire
+    public static readonly TagKey<NacreCraft.Registry.Block> Fire = Create("fire");
+
+    //Rails all rail types, dispensers place minecarts only onto a rail, maps to vanilla rails
+    public static readonly TagKey<NacreCraft.Registry.Block> Rails = Create("rails");
+
+    //OverworldCarverReplaceables blocks an overworld cave or canyon may carve through, maps to vanilla overworld_carver_replaceables
+    public static readonly TagKey<NacreCraft.Registry.Block> OverworldCarverReplaceables = Create("overworld_carver_replaceables");
+
+    //NetherCarverReplaceables blocks a nether cave may carve through, maps to vanilla nether_carver_replaceables
+    public static readonly TagKey<NacreCraft.Registry.Block> NetherCarverReplaceables = Create("nether_carver_replaceables");
+
+    //BaseStoneOverworld the overworld base stone set, ore features replace it, maps to vanilla base_stone_overworld
+    public static readonly TagKey<NacreCraft.Registry.Block> BaseStoneOverworld = Create("base_stone_overworld");
+
+    //BaseStoneNether the nether base stone set, maps to vanilla base_stone_nether
+    public static readonly TagKey<NacreCraft.Registry.Block> BaseStoneNether = Create("base_stone_nether");
+
+    //StoneOreReplaceables stone variants an overworld ore may replace, maps to vanilla stone_ore_replaceables
+    public static readonly TagKey<NacreCraft.Registry.Block> StoneOreReplaceables = Create("stone_ore_replaceables");
+
+    //DeepslateOreReplaceables deepslate variants an overworld ore may replace, maps to vanilla deepslate_ore_replaceables
+    public static readonly TagKey<NacreCraft.Registry.Block> DeepslateOreReplaceables = Create("deepslate_ore_replaceables");
+
+    //IceSpikeReplaceable blocks an ice spike may replace, maps to vanilla ice_spike_replaceable
+    public static readonly TagKey<NacreCraft.Registry.Block> IceSpikeReplaceable = Create("ice_spike_replaceable");
+
+    //ForestRockCanPlaceOn blocks a forest rock may sit on, maps to vanilla forest_rock_can_place_on
+    public static readonly TagKey<NacreCraft.Registry.Block> ForestRockCanPlaceOn = Create("forest_rock_can_place_on");
+
+    //FeaturesCannotReplace blocks features must not overwrite, maps to vanilla features_cannot_replace
+    public static readonly TagKey<NacreCraft.Registry.Block> FeaturesCannotReplace = Create("features_cannot_replace");
+
+    //LavaPoolStoneCannotReplace blocks a lava lake's stone shell must not overwrite, maps to vanilla lava_pool_stone_cannot_replace
+    public static readonly TagKey<NacreCraft.Registry.Block> LavaPoolStoneCannotReplace = Create("lava_pool_stone_cannot_replace");
+
+    //CannotReplaceBelowTreeTrunk blocks a tree must not turn into dirt below its trunk, maps to vanilla cannot_replace_below_tree_trunk
+    public static readonly TagKey<NacreCraft.Registry.Block> CannotReplaceBelowTreeTrunk = Create("cannot_replace_below_tree_trunk");
+
+    //BeneathTreePodzolReplaceable blocks a mega spruce turns into podzol, maps to vanilla beneath_tree_podzol_replaceable
+    public static readonly TagKey<NacreCraft.Registry.Block> BeneathTreePodzolReplaceable = Create("beneath_tree_podzol_replaceable");
+
+    //HugeBrownMushroomCanPlaceOn blocks a huge brown mushroom may grow on, maps to vanilla huge_brown_mushroom_can_place_on
+    public static readonly TagKey<NacreCraft.Registry.Block> HugeBrownMushroomCanPlaceOn = Create("huge_brown_mushroom_can_place_on");
+
+    //HugeRedMushroomCanPlaceOn blocks a huge red mushroom may grow on, maps to vanilla huge_red_mushroom_can_place_on
+    public static readonly TagKey<NacreCraft.Registry.Block> HugeRedMushroomCanPlaceOn = Create("huge_red_mushroom_can_place_on");
+
+    //MangroveLogsCanGrowThrough blocks a mangrove trunk may pass through, maps to vanilla mangrove_logs_can_grow_through
+    public static readonly TagKey<NacreCraft.Registry.Block> MangroveLogsCanGrowThrough = Create("mangrove_logs_can_grow_through");
+
+    //MangroveRootsCanGrowThrough blocks mangrove roots may pass through, maps to vanilla mangrove_roots_can_grow_through
+    public static readonly TagKey<NacreCraft.Registry.Block> MangroveRootsCanGrowThrough = Create("mangrove_roots_can_grow_through");
+
+    //MossReplaceable blocks a moss patch may replace, maps to vanilla moss_replaceable
+    public static readonly TagKey<NacreCraft.Registry.Block> MossReplaceable = Create("moss_replaceable");
+
+    //Doors all door types, village zombie degradation strips them, maps to vanilla doors
+    public static readonly TagKey<NacreCraft.Registry.Block> Doors = Create("doors");
+
+    //AncientCityReplaceable blocks ancient city degradation may rot, maps to vanilla ancient_city_replaceable
+    public static readonly TagKey<NacreCraft.Registry.Block> AncientCityReplaceable = Create("ancient_city_replaceable");
+
+    //TrailRuinsReplaceable blocks trail ruin archaeology turns into suspicious gravel, maps to vanilla trail_ruins_replaceable
+    public static readonly TagKey<NacreCraft.Registry.Block> TrailRuinsReplaceable = Create("trail_ruins_replaceable");
+
     //Create builds the key from the vanilla block tag path
     private static TagKey<NacreCraft.Registry.Block> Create(string path)
         => TagKey<NacreCraft.Registry.Block>.Create(Registries.BLOCK,
             Identifier.WithDefaultNamespace(path));
 }
+

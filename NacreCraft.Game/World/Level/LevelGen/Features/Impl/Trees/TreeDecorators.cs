@@ -74,6 +74,9 @@ public static class TreeDecoratorTypes
     public static readonly TreeDecoratorType<CreakingHeartDecorator> CreakingHeart =
         Register("creaking_heart", CreakingHeartDecorator.Codec);
 
+    public static readonly TreeDecoratorType<AttachedToLogsDecorator> AttachedToLogs =
+        Register("attached_to_logs", AttachedToLogsDecorator.Codec);
+
     private static TreeDecoratorType<T> Register<T>(string path, MapCodec<T> codec) where T : TreeDecorator
     {
         var type = new SimpleTreeDecoratorType<T>(path, codec);
@@ -541,6 +544,47 @@ public sealed class AttachedToLeavesDecorator : TreeDecorator
             if (!context.IsAir(leafPos.Offset(direction.StepX * i, direction.StepY * i, direction.StepZ * i)))
                 return false;
         return true;
+    }
+}
+
+//AttachedToLogsDecorator attaches a block to trunk faces, used by fallen trees, maps to vanilla AttachedToLogsDecorator
+public sealed class AttachedToLogsDecorator : TreeDecorator
+{
+    public static readonly MapCodec<AttachedToLogsDecorator> Codec =
+        RecordCodecBuilder.Of3<AttachedToLogsDecorator, float, BlockStateProvider, IReadOnlyList<PrimDirection>>(
+            Codecs.Float.FieldOf("probability")
+                .ForGetter<AttachedToLogsDecorator, float>(d => d.Probability),
+            BlockStateProvider.Codec.FieldOf("block_provider")
+                .ForGetter<AttachedToLogsDecorator, BlockStateProvider>(d => d.BlockProvider),
+            DirectionCodec.Instance.ListOf().FieldOf("directions")
+                .ForGetter<AttachedToLogsDecorator, IReadOnlyList<PrimDirection>>(d => d.Directions),
+            (probability, blockProvider, directions) =>
+                new AttachedToLogsDecorator(probability, blockProvider, directions));
+
+    public float Probability { get; }
+    public BlockStateProvider BlockProvider { get; }
+    public IReadOnlyList<PrimDirection> Directions { get; }
+
+    public AttachedToLogsDecorator(float probability, BlockStateProvider blockProvider,
+        IReadOnlyList<PrimDirection> directions)
+    {
+        Probability = probability;
+        BlockProvider = blockProvider;
+        Directions = directions;
+    }
+
+    public override TreeDecoratorType Type => TreeDecoratorTypes.AttachedToLogs;
+
+    public override void Place(Context context)
+    {
+        var random = context.Random;
+        foreach (var logPos in TreeUtil.ShuffledCopy(context.Logs, random))
+        {
+            var direction = TreeUtil.GetRandom(Directions, random);
+            var placementPos = logPos.Offset(direction);
+            if (random.NextFloat() <= Probability && context.IsAir(placementPos))
+                context.SetBlock(placementPos, BlockProvider.GetState(context.Level, random, placementPos));
+        }
     }
 }
 

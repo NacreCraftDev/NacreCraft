@@ -39,6 +39,9 @@ public static class ExtraCodecs
             : DataResult<IReadOnlyList<T>>.Error(() => "List must not be empty"),
         value => value);
 
+    //CompactList accepts a single element or a list, maps to vanilla ExtraCodecs.compactListCodec
+    public static Codec<IReadOnlyList<T>> CompactList<T>(Codec<T> elementCodec) => new CompactListCodec<T>(elementCodec);
+
     private static DataResult<string> ParseGuardedPath(string directory, string text)
     {
         if (Path.IsPathRooted(text)) return DataResult<string>.Error(() => $"Illegal absolute path: {text}");
@@ -67,4 +70,18 @@ public static class ExtraCodecs
         }
         return segments.Count == 0 ? null : string.Join('/', segments);
     }
+}
+
+//CompactListCodec accepts either one element or a list of elements, maps to the vanilla compactListCodec
+internal sealed class CompactListCodec<T>(Codec<T> elementCodec) : ScalarCodec<IReadOnlyList<T>>
+{
+    public override DataResult<IReadOnlyList<T>> Parse<U>(DynamicOps<U> ops, U input)
+    {
+        var single = elementCodec.Parse(ops, input);
+        if (single.Result().IsPresent) return DataResult<IReadOnlyList<T>>.Success(new[] { single.Result().Get() });
+        return elementCodec.ListOf().Parse(ops, input);
+    }
+
+    public override DataResult<U> EncodeStart<U>(DynamicOps<U> ops, IReadOnlyList<T> value)
+        => elementCodec.ListOf().EncodeStart(ops, value);
 }

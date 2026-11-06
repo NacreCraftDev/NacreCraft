@@ -61,6 +61,10 @@ public abstract class Block
     //IsAir whether it is an air block, maps to vanilla BlockState.isAir; surface rules and placement checks rely on it
     public virtual bool IsAir => false;
 
+    //IsPathfindable whether an entity can move through this state in the given mode, maps to vanilla BlockBehaviour.isPathfindable
+    //The registry base answers false; the game-layer block behaviour supplies the vanilla default rules
+    public virtual bool IsPathfindable(BlockState state, PathComputationType type) => false;
+
     //RandomTicks whether it takes part in random ticks, maps to vanilla Properties.randomTicks, off by default
     //Placed on the base class because section counting is done in the Storage layer, which only knows about Block
     public virtual bool RandomTicks => false;

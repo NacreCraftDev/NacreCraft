@@ -67,6 +67,16 @@ public sealed class PersistentServerLevel : SimpleServerLevel, BlockGetter
     //EntityLookup, the visible entity section index entry point so the business layer can take entities by AABB range
     public EntityLookup EntityLookup => _entityManager.VisibleLookup;
 
+    //GetEntitiesOfClass entities in the area whose runtime type matches, maps to vanilla getEntitiesOfClass
+    public override IReadOnlyList<T> GetEntitiesOfClass<T>(AABB area, Predicate<T>? selector = null)
+    {
+        var result = new List<T>();
+        foreach (var entity in _entityManager.VisibleLookup.GetInRange(area.Min, area.Max))
+            if (entity is T typed && (selector is null || selector(typed)))
+                result.Add(typed);
+        return result;
+    }
+
     //EntityManager, the entity manager, for external lookup by Uuid and entity persistence
     public EntityManager EntityManager => _entityManager;
 

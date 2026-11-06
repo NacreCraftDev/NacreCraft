@@ -1,4 +1,4 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Linq;
 using NacreCraft.Logging;
 
@@ -82,7 +82,7 @@ public static class AssetsExtractor
     //TryExtractJar extracts entries with the assets/ and data/ prefixes from the jar into their respective target directories
     //assets/ goes stripped into assetsDir, keeping the assets/<ns>/... substructure
     //data/ goes stripped into dataDir, keeping the data/<ns>/... substructure; skipped when dataDir is null
-    //The root pack.mcmeta is copied next to assets/data in rootDir for FolderPackResources to read
+    //The root pack.mcmeta is copied next to assets/data in rootDir for PathPackResources to read
     //Falls back to assetsDir when rootDir is null, for backward compatibility
     //Skips irrelevant entries such as class/META-INF; returns false without throwing when the jar is missing or the path is invalid
     public static bool TryExtractJar(string jarPath, string assetsDir, string? dataDir, string? rootDir)
@@ -105,7 +105,7 @@ public static class AssetsExtractor
                 if (string.IsNullOrEmpty(entry.Name)) continue;
                 //Some jars (decompiled packages) prefix entries with resources/; strip it before matching pack.mcmeta/assets/data
                 var entryPath = NormalizeEntryPath(entry.FullName);
-                //The root pack.mcmeta is copied next to assets/data in rootDir for FolderPackResources to read
+                //The root pack.mcmeta is copied next to assets/data in rootDir for PathPackResources to read
                 //Falls back to assetsDir when rootDir is null, for backward compatibility
                 if (entryPath.Equals("pack.mcmeta", StringComparison.OrdinalIgnoreCase))
                 {
@@ -236,3 +236,4 @@ public static class AssetsExtractor
     private static bool IsDirNonEmpty(string path)
         => Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any();
 }
+

@@ -29,9 +29,10 @@ fn collect() -> String {
 #[cfg(not(windows))]
 fn collect() -> String {
     format!(
-        "OS: {}\nArchitecture: {}\n",
+        "OS: {}\nArchitecture: {}\nLaunch: {}\n",
         std::env::consts::OS,
-        std::env::consts::ARCH
+        std::env::consts::ARCH,
+        std::env::args().collect::<Vec<_>>().join(" ")
     )
 }
 
@@ -90,6 +91,7 @@ mod win {
         fn GetProcessDEPPolicy(process: *mut c_void, flags: *mut u32, permanent: *mut i32) -> i32;
         fn LoadLibraryW(name: *const u16) -> *mut c_void;
         fn GetProcAddress(module: *mut c_void, name: *const u8) -> *mut c_void;
+        fn GetCommandLineW() -> *const u16;
     }
 
     type GetFileVersionInfoSizeW = unsafe extern "system" fn(*const u16, *mut u32) -> u32;
@@ -396,6 +398,24 @@ mod win {
         )
     }
 
+    /// command_line reads the launch arguments as one line
+    ///
+    /// Without it a report cannot say which flags were in play, and a restarted run with a different set looks the same
+    fn command_line() -> String {
+        let raw = unsafe { GetCommandLineW() };
+        if raw.is_null() {
+            return "Launch: unknown".to_string();
+        }
+
+        let mut length = 0usize;
+        while unsafe { *raw.add(length) } != 0 {
+            length += 1;
+        }
+
+        let text = String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(raw, length) });
+        format!("Launch: {text}")
+    }
+
     pub fn collect() -> String {
         let mut lines = Vec::new();
 
@@ -418,6 +438,7 @@ mod win {
         lines.push(mitigations());
         lines.push(code_integrity());
         lines.push(native_layer());
+        lines.push(command_line());
 
         lines.join("\n")
     }

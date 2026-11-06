@@ -1,4 +1,4 @@
-using NacreCraft.Game.Data;
+using NacreCraft.Game.Data.WorldGen;
 using NacreCraft.Game.World.Level.LevelGen.Synth;
 using NacreCraft.Registry;
 

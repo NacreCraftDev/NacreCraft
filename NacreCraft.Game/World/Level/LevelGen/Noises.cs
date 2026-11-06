@@ -84,83 +84,13 @@ public static class Noises
 
     //Bootstrap registers the 64 built-in NoiseParameters into BuiltInRegistries.NOISE
     //Called by GameBootstrap to make sure every noise parameter is ready before RandomState instantiates
+    //The values live in NoiseData, this only wires the built-in registry to it
     public static void Bootstrap()
     {
         if (_bootstrapped) return;
         _bootstrapped = true;
-        Register(Temperature, -10, 1.5, 0, 1, 0, 0, 0);
-        Register(Vegetation, -8, 1, 1, 0, 0, 0, 0);
-        Register(Continentalness, -9, 1, 1, 2, 2, 2, 1, 1, 1, 1);
-        Register(Erosion, -9, 1, 1, 0, 1, 1);
-        Register(TemperatureLarge, -12, 1.5, 0, 1, 0, 0, 0);
-        Register(VegetationLarge, -10, 1, 1, 0, 0, 0, 0);
-        Register(ContinentalnessLarge, -11, 1, 1, 2, 2, 2, 1, 1, 1, 1);
-        Register(ErosionLarge, -11, 1, 1, 0, 1, 1);
-        Register(Ridge, -7, 1, 2, 1, 0, 0, 0);
-        Register(Shift, -3, 1, 1, 1, 0);
-        Register(TemperatureNether, -7, 1, 1);
-        Register(VegetationNether, -7, 1, 1);
-        Register(AquiferBarrier, -3, 1);
-        Register(AquiferFluidLevelFloodedness, -7, 1);
-        Register(AquiferLava, -1, 1);
-        Register(AquiferFluidLevelSpread, -5, 1);
-        Register(Pillar, -7, 1, 1);
-        Register(PillarRareness, -8, 1);
-        Register(PillarThickness, -8, 1);
-        Register(Spaghetti2D, -7, 1);
-        Register(Spaghetti2DElevation, -8, 1);
-        Register(Spaghetti2DModulator, -11, 1);
-        Register(Spaghetti2DThickness, -11, 1);
-        Register(Spaghetti3D1, -7, 1);
-        Register(Spaghetti3D2, -7, 1);
-        Register(Spaghetti3DRarity, -11, 1);
-        Register(Spaghetti3DThickness, -8, 1);
-        Register(SpaghettiRoughness, -5, 1);
-        Register(SpaghettiRoughnessModulator, -8, 1);
-        Register(CaveEntrance, -7, 0.4, 0.5, 1);
-        Register(CaveLayer, -8, 1);
-        Register(CaveCheese, -8, 0.5, 1, 2, 1, 2, 1, 0, 2, 0);
-        Register(OreVeininess, -8, 1);
-        Register(OreVeinA, -7, 1);
-        Register(OreVeinB, -7, 1);
-        Register(OreGap, -5, 1);
-        Register(Noodle, -8, 1);
-        Register(NoodleThickness, -8, 1);
-        Register(NoodleRidgeA, -7, 1);
-        Register(NoodleRidgeB, -7, 1);
-        Register(Jagged, -16, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
-        Register(Surface, -6, 1, 1, 1);
-        Register(SurfaceSecondary, -6, 1, 1, 0, 1);
-        Register(ClayBandsOffset, -8, 1);
-        Register(BadlandsPillar, -2, 1, 1, 1, 1);
-        Register(BadlandsPillarRoof, -8, 1);
-        Register(BadlandsSurface, -6, 1, 1, 1);
-        Register(IcebergPillar, -6, 1, 1, 1, 1);
-        Register(IcebergPillarRoof, -3, 1);
-        Register(IcebergSurface, -6, 1, 1, 1);
-        Register(SulfurCaveGradient, -5, 1, 0, 1);
-        Register(Swamp, -2, 1);
-        Register(Calcite, -9, 1, 1, 1, 1);
-        Register(Gravel, -8, 1, 1, 1, 1);
-        Register(PowderSnow, -6, 1, 1, 1, 1);
-        Register(PackedIce, -7, 1, 1, 1, 1);
-        Register(Ice, -4, 1, 1, 1, 1);
-        Register(SoulSandLayer, -8, 1, 1, 1, 1, 0, 0, 0, 0, 0.013333333333333334);
-        Register(GravelLayer, -8, 1, 1, 1, 1, 0, 0, 0, 0, 0.013333333333333334);
-        Register(Patch, -5, 1, 0, 0, 0, 0, 0.013333333333333334);
-        Register(Netherrack, -3, 1, 0, 0, 0.35);
-        Register(NetherWart, -3, 1, 0, 0, 0.9);
-        Register(NetherStateSelector, -4, 1);
-    }
-
-    //Register builds NoiseParameters and registers it into the NOISE registry, mapping to vanilla data pack loading
-    //Skipped when data-driven loading already loaded an entry of the same name from data/minecraft/worldgen/noise, letting the vanilla truth in JSON win
-    private static NoiseParameters Register(ResourceKey<NoiseParameters> key, int firstOctave, params double[] amplitudes)
-    {
-        var parameters = new NoiseParameters(firstOctave, amplitudes);
-        if (BuiltInRegistries.NOISE.ContainsKey(key)) return parameters;
-        Registry<NoiseParameters>.Register(BuiltInRegistries.NOISE, key, parameters);
-        return parameters;
+        NacreCraft.Game.Data.WorldGen.NoiseData.Bootstrap(
+            new NacreCraft.Game.Data.WorldGen.BuiltInBootstrapContext<NoiseParameters>(BuiltInRegistries.NOISE));
     }
 
     //Instantiate looks up NoiseParameters by ResourceKey and builds a NormalNoise, maps to vanilla instantiate

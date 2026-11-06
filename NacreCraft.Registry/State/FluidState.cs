@@ -38,6 +38,9 @@ public sealed class FluidState
     //The fluid tag system is not wired up yet, so it checks registry names; water has only the names water and flowing_water
     public bool IsWater => Type.Id.Path is "water" or "flowing_water";
 
+    //IsLava whether this fluid is lava, maps to vanilla fluidState.is(FluidTags.LAVA)
+    public bool IsLava => Type.Id.Path is "lava" or "flowing_lava";
+
     //OwnHeight the ratio of its own fluid surface, ignoring stacked fluid of the same kind above, maps to vanilla getOwnHeight
     public float OwnHeight => Type.GetOwnHeight(this);
 

@@ -295,6 +295,14 @@ public abstract class BlockBehaviour : NacreCraft.Registry.Block, IBlockUpdateBe
     //IsAir whether it is an air block, maps to vanilla BlockState.isAir, surface rules use it to detect empty columns
     public override bool IsAir => false;
 
+    //IsPathfindable the vanilla default: passable only when the collision shape is not full, water cells count as water
+    //maps to BlockBehaviour.isPathfindable
+    public override bool IsPathfindable(BlockState state, PathComputationType type) => type switch
+    {
+        PathComputationType.WATER => state.FluidState.IsWater,
+        _ => !IsCollisionShapeFullBlock(state, EmptyBlockGetter.Instance, BlockPos.Zero)
+    };
+
     //HasFluidState whether it has a fluid, the negation of vanilla getFluidState().isEmpty(), water/lava return true
     public virtual bool HasFluidState => false;
 

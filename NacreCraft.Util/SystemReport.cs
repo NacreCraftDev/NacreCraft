@@ -33,6 +33,7 @@ public sealed class SystemReport
         SetDetail("Code Integrity", DescribeCodeIntegrity);
         SetDetail("Native Layer", DescribeNativeLayer);
         SetDetail("Process", DescribeProcess);
+        SetDetail("Process Arguments", DescribeArguments);
         SetDetail("Memory", DescribeMemory);
         SetDetail("Memory (GC)", DescribeGcMemory);
         SetDetail("CPUs", Environment.ProcessorCount.ToString);
@@ -79,6 +80,29 @@ public sealed class SystemReport
         return $"Uptime: {uptime:F0}s, working set: {process.WorkingSet64 / BytesPerMebibyte} MiB, "
             + $"private: {process.PrivateMemorySize64 / BytesPerMebibyte} MiB, threads: {process.Threads.Count}, "
             + $"{(Environment.Is64BitProcess ? "64" : "32")}-bit";
+    }
+
+    //DescribeArguments the command line the process was started with
+    //A crash report without it cannot tell which flags were in play, and a restart with a different set is otherwise
+    //indistinguishable from the same run
+    private static string DescribeArguments()
+    {
+        var arguments = Environment.GetCommandLineArgs();
+        if (arguments.Length == 0)
+            return "<none>";
+
+        var builder = new StringBuilder();
+        foreach (var argument in arguments)
+        {
+            if (builder.Length > 0)
+                builder.Append(' ');
+            //Display only: quoting keeps an argument with spaces readable, it is not meant to be re-parsed
+            if (argument.Length > 0 && argument.Contains(' '))
+                builder.Append('"').Append(argument).Append('"');
+            else
+                builder.Append(argument);
+        }
+        return builder.ToString();
     }
 
     //DescribeMemory managed heap used and runtime available limit, maps to the vanilla Runtime memory note

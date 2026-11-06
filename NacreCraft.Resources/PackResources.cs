@@ -7,6 +7,9 @@ namespace NacreCraft.Resources;
 //Subclasses implement the concrete source (folder/zip/embedded resources)
 public abstract class PackResources : IDisposable
 {
+    public const string METADATA_EXTENSION = ".mcmeta";
+    public const string PACK_META = "pack.mcmeta";
+
     public string PackId { get; }
 
     protected PackResources(string packId)

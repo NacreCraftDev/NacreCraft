@@ -97,6 +97,13 @@ public abstract class Entity : ITrackedEntity, SyncedDataHolder, EntityAccess
     //Until the fluid check is wired up this lets all falls accumulate distance, matching vanilla on-land behavior
     public virtual bool IsInWater => false;
 
+    //CanStandOnFluid whether the entity can stand on that fluid's surface, maps to vanilla canStandOnFluid
+    //Mobs that walk on water override it; pathfinding uses it to start above the surface instead of at the feet
+    public virtual bool CanStandOnFluid(FluidState fluidState) => false;
+
+    //BlockPosition the block cell the entity position falls in, maps to vanilla blockPosition
+    public BlockPos BlockPosition() => new(Mth.Floor(Pos.X), Mth.Floor(Pos.Y), Mth.Floor(Pos.Z));
+
     //FallDistance fall distance accumulated before this tick, maps to vanilla fallDistance; cleared on landing or touching a reset surface
     public double FallDistance { get; private set; }
 
@@ -589,7 +596,7 @@ public abstract class Entity : ITrackedEntity, SyncedDataHolder, EntityAccess
 
     int EntityAccess.Id => EntityId;
 
-    BlockPos EntityAccess.BlockPosition() => new(Mth.Floor(Pos.X), Mth.Floor(Pos.Y), Mth.Floor(Pos.Z));
+    BlockPos EntityAccess.BlockPosition() => BlockPosition();
 
     AABB EntityAccess.GetBoundingBox() => BoundingBox;
 

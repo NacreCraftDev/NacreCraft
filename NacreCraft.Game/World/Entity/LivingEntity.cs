@@ -61,6 +61,16 @@ public abstract class LivingEntity : NacreCraft.Registry.Entity, IEquipmentHolde
     //HasItemInSlot whether the slot holds anything, maps to vanilla hasItemInSlot
     public bool HasItemInSlot(EquipmentSlot slot) => !Equipment.Get(slot).IsEmpty();
 
+    //GetEquipmentSlotForItem the slot a dispenser puts the item into, maps to vanilla getEquipmentSlotForItem
+    //Vanilla reads the equippable data component; that component is not ported, so armor cannot be recognized and everything goes to the main hand
+    public virtual EquipmentSlot GetEquipmentSlotForItem(ItemStack itemStack) => EquipmentSlot.MAINHAND;
+
+    //CanEquipWithDispenser whether a dispenser may equip this item onto the entity, maps to vanilla canEquipWithDispenser
+    //Degraded without the equippable component: any non-empty item counts as main hand gear and needs that slot to be empty
+    public virtual bool CanEquipWithDispenser(ItemStack itemStack)
+        => !itemStack.IsEmpty() && !IsDeadOrDying && !IsSpectator()
+           && GetItemBySlot(GetEquipmentSlotForItem(itemStack)).IsEmpty();
+
     //Effects the active potion effects, maps to vanilla LivingEntity's effect map
     public EntityEffects Effects { get; } = new();
 

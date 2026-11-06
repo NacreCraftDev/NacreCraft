@@ -84,6 +84,8 @@ All events live under `NacreCraft.ModApi.Wrapper`; after `using NacreCraft.ModAp
 | `ServerEvents.PlayerUseBlock`   | `PlayerUseBlockArgs`   | the use-item-on-block packet has been handled          | server | `ServerGamePacketListener::HandleUseItemOn` (CallSite) |
 | `ServerEvents.PlayerUseItem`    | `PlayerUseItemArgs`    | the use-item packet has been handled                  | server | `ServerGamePacketListener::HandleUseItem` (CallSite) |
 | `ServerEvents.PlayerInteractEntity` | `PlayerInteractEntityArgs` | the interact packet has been handled        | server | `ServerGamePacketListener::HandleInteract` (CallSite) |
+| `ServerEvents.PlayerPickItemFromBlock` | `PlayerPickItemFromBlockArgs` | the pick key was used on a block; the hotbar switch already happened | server | `ServerGamePacketListener::HandlePickItemFromBlock` (CallSite) |
+| `ServerEvents.PlayerPickItemFromEntity` | `PlayerPickItemFromEntityArgs` | the pick key was used on an entity; reports the request | server | `ServerGamePacketListener::HandlePickItemFromEntity` (CallSite) |
 | `NetworkEvents.PacketReceived`  | `PacketReceivedArgs`   | every inbound packet queued to a handler, including handshake and status phases | both   | `PacketProcessor::ScheduleIfPossible` and `HandleNow` (CallSite) |
 | `ClientEvents.Tick`             | `ClientTickArgs`       | every tick of the client main loop                        | client | `MinecraftClient::GameTick` (Mark)                       |
 | `ClientEvents.Join`             | `ClientJoinArgs`       | the login packet has been applied and the client entered the world | client | `ClientGamePacketListener::HandleLogin` (CallSite) |
@@ -300,6 +302,26 @@ Does not fire when the hand is empty; the kernel returns without doing anything 
 | `Secondary` | `bool`   | whether it was the secondary action       |
 
 The kernel currently only plays the swing animation here, so the event reflects the client's intent rather than a completed interaction.
+
+**`PlayerPickItemFromBlockArgs`**
+
+| Property      | Type       | Notes                                            |
+| ------------- | ---------- | ------------------------------------------------ |
+| `Player`      | `NcPlayer` | the player who used the pick key                 |
+| `Pos`         | `BlockPos` | the block that was picked                        |
+| `IncludeData` | `bool`     | whether the client also asked for block entity data |
+
+Fires after the kernel handled the packet, so the hotbar slot has already been switched — or, in creative with no matching stack, a new stack has been handed out. Air and blocks without a same-named item are still reported; the kernel simply returns early, and the event describes the request.
+
+**`PlayerPickItemFromEntityArgs`**
+
+| Property      | Type       | Notes                                    |
+| ------------- | ---------- | ---------------------------------------- |
+| `Player`      | `NcPlayer` | the player who used the pick key         |
+| `EntityId`    | `int`      | network id of the entity that was picked |
+| `IncludeData` | `bool`     | whether the client also asked for entity data |
+
+The kernel handler is empty today (no entity-to-item mapping yet), so this event is the only observable trace of the request.
 
 **`ClientJoinArgs`**
 
@@ -553,18 +575,22 @@ You do not need this section to write mods, but it may help when debugging.
 | `Internal.PlayerProbe.OnXxx(object, ...)`                | CallSite ×6 | player events, one method per hook point; after restoring the original call it publishes the event |
 | `Internal.LevelProbe.OnChunkXxxAssigned(object, object)` | CallSite ×3 | chunk events, hooked at the assignment sites of `ServerChunkCache`'s three callback properties; a wrapper delegate is layered on before handing control back to the kernel |
 | `Internal.BlockProbe.OnXxx(...)`                         | CallSite ×3 | block events; breaking and drops hook `ServerBlockUpdates`, state changes hook the interface method on `IBlockUpdateSink`; the break probe reads back the cancellation verdict |
-| `Internal.InteractionProbe.OnXxx(object, object)`        | CallSite ×3 | interaction events; each probe replays the original packet handler first, then publishes |
+| `Internal.InteractionProbe.OnXxx(object, object)`        | CallSite ×5 | interaction events; each probe replays the original packet handler first, then publishes |
 | `Internal.ClientProbe.OnXxx(object, object)`             | CallSite ×3 | client connection events; the login probe replays the original handler, the two disconnect probes cover the login phase and the configuration/play phases |
 
-`SignalProbe`'s signature takes only `string`, and the parameters of `CommandProbe`, `PlayerProbe`, and `LevelProbe` are declared as `object` — this is deliberate: during assembly `NacreCraft.Hook` resolves the replacement method's signature, and once a kernel type appears in it, resolving it pulls up the kernel assembly early and injection misses its window. Kernel types appear only inside method bodies, by which time the code is already running.
+`SignalProbe`'s signature takes only `string`, and the reference-typed parameters of the other probes are declared as `object`. That is a widening choice: the replacement is called with whatever the original call site pushes, and `object` accepts all of it while staying valid if a kernel signature later widens to a base type. Kernel types appear only inside method bodies, where a cast is safe.
+
+Injection timing is a separate matter. Rules built by `ncm` register the replacement assembly by path, and `NacreCraft.Hook` resolves the replacement method from that file's metadata (`RegisterReplacementPath`), so a kernel type inside a probe signature never loads that type's assembly and never closes its rewrite window.
 
 The only things that cannot be `object` in a signature are value-type parameters and return values: `object` is a reference on the stack while `float`/`bool` are values, and a mismatch is invalid IL. So `PlayerProbe.OnHurtPlayer` keeps `float` for the damage amount, and `OnRemovePlayer` and `OnHurtPlayer` keep `bool` return values.
 
-`BlockProbe` is an extension of this constraint: block position and state are the two value types `BlockPos`/`BlockState`, which can only be written into the signature as themselves. These two types come from `NacreCraft.Primitives` and `NacreCraft.Registry`, neither of which is on the injection list, so resolving them during assembly does not pull up the assemblies to be rewritten early.
+`BlockProbe` is the one place where kernel value types have to appear: `BlockPos` and `BlockState` are passed by value and `object` would not match the stack shape. They come from `NacreCraft.Primitives` and `NacreCraft.Registry`. This stays safe even after a rule starts targeting `NacreCraft.Registry`, because the replacement method is imported from metadata and the assembly itself is never loaded while rules are being applied — verified with a `Mark` rule on `NacreCraft.Registry.Entity::Save` while `BlockProbe` was already in the process: the log still shows the Registry rewrite.
+
+The order that keeps this true is in the loader, not in the probe: replacement assemblies are loaded first (`PreloadReplacers`), kernel targets are rewritten afterwards (`PreloadTargets`), and nothing in between may reflect over mod types. Resolving a replacement through reflection instead of the registered path would load the assemblies named in its signature, and that is the failure mode to avoid if the hook engine is ever reworked.
 
 ### 5.2 Hook point list
 
-ModApi's `ncmod.json` contains thirty rules, matching the table in 2.1 one-to-one. To change a hook point or add a rule, edit this file; after editing, rebuild (it is an embedded resource) and put the resulting dll back into `mods/` — the latter is already done automatically by `ncm build`'s deploy step, and missing it manifests as the rules not taking effect at all.
+ModApi's `ncmod.json` contains thirty-two rules, matching the table in 2.1 one-to-one. To change a hook point or add a rule, edit this file; after editing, rebuild (it is an embedded resource) and put the resulting dll back into `mods/` — the latter is already done automatically by `ncm build`'s deploy step, and missing it manifests as the rules not taking effect at all.
 
 The four lifecycle phases come from three hook shapes: `Starting` is a Mark on `DedicatedServer::InitServer` (the first statement of boot), `Started` and `Stopping` are Marks on `MinecraftServer::Run` and `DedicatedServer::Stop` entries, and `Stopped` needs no rule of its own — `ServerProbe.OnServerRun` wraps the single call to `Run`, publishes `Stopped` when it returns, and only then lets the captured server instance go.
 
@@ -594,13 +620,15 @@ The following are hook points whose locations are confirmed but that have not ye
 | Command execution | `CommandSourceStack::SendSuccess` / `SendFailure` (the response half, with many call sites) |
 | Network           | per-packet-type `ServerGamePacketListenerImpl::HandleXxx` (currently only a unified entry point) |
 
-Directions already done: level ticks became `ServerEvents.LevelTick`, saved data persistence became `ServerEvents.SavedDataSaving`, command execution became `ServerEvents.CommandExecuted`, blocks became `ServerEvents.BlockChanged` / `BlockBroken` / `ItemDropped`, the three player packet handlers became `PlayerUseBlock` / `PlayerUseItem` / `PlayerInteractEntity`, client connection phases became `ClientEvents.Join` / `Disconnect`, and the lifecycle is now four phases (`Starting` / `Started` / `Stopping` / `Stopped`).
+Directions already done: level ticks became `ServerEvents.LevelTick`, saved data persistence became `ServerEvents.SavedDataSaving`, command execution became `ServerEvents.CommandExecuted`, blocks became `ServerEvents.BlockChanged` / `BlockBroken` / `ItemDropped`, the five player packet handlers became `PlayerUseBlock` / `PlayerUseItem` / `PlayerInteractEntity` / `PlayerPickItemFromBlock` / `PlayerPickItemFromEntity`, client connection phases became `ClientEvents.Join` / `Disconnect`, and the lifecycle is now four phases (`Starting` / `Started` / `Stopping` / `Stopped`).
 
 Two infrastructure pieces landed with the wrapper purity policy: handler exceptions are isolated inside `NcEvent.Publish` (logged, never propagated into the kernel), and cancellable events exist as a mechanism (`INcCancellable` + probe-side verdict readback), first used by `ServerEvents.PlayerBlockBreak`.
 
 Hooking the block cell on `SetBlock` does not work: it has two default parameters, `notifyNeighbors` and `strict`, so compiled call sites take anywhere from 4 to 6 parameters, and since CallSite matches by "type + method name" without looking at the parameter list, one replacement method cannot handle all three stack shapes. Instead it hooks two places: state sync hooks `IBlockUpdateSink::BlockChanged` (the only interface call in `ServerLevel.SetBlock`, covering every change with client sync), and breaking and drops hook `ServerBlockUpdates`' own methods.
 
-The entities cell is troublesome because `Entity` is defined in `NacreCraft.Registry`, which is not on the injection list, so call sites that target it cannot be rewritten. `ClientLevel::AddEntity` is in the client assembly and is doable; a death event first requires resolving whether `Registry` can be rewritten.
+The entity cell used to be blocked because `Entity` lives in `NacreCraft.Registry`, which was not on the injection list. That is no longer true: the loader now collects every assembly sitting in the kernel directory, excluding only the boot layer, the two loaders, the logger and the hook engine, so `NacreCraft.Registry` is a normal rewrite target. Verified with a throwaway `Mark` rule on `NacreCraft.Registry.Entity::Save`: the log shows `Rewrote and preloaded assembly NacreCraft.Registry` and the rule counting as landed.
+
+Two bounds remain. A call site is only rewritten inside an assembly that some rule targets, so targeting a Registry type rewrites Registry but not Game — hooking the Game half needs a rule that names a Game type. And protected members cannot be replayed from a probe directly: `Entity::Die` would still restore the original call through reflection, the same way `PlayerList::RespawnPlayer` does.
 
 For the network cell, `HandleChat` has long existed and `NetworkEvents.PacketReceived` provides a unified entry point, so per-`HandleXxx` hooks are much less valuable; only scenarios needing fine-grained filtering by packet type are worth adding.
 

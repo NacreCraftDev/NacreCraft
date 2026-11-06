@@ -1,4 +1,4 @@
-using NacreCraft.Registry;
+﻿using NacreCraft.Registry;
 
 namespace NacreCraft.Resources;
 
@@ -7,12 +7,12 @@ namespace NacreCraft.Resources;
 //Built-in metadata covers the case where the game root has no pack.mcmeta, which is how vanilla describes its own pack
 public sealed class VanillaPackResources : PackResources
 {
-    private readonly FolderPackResources _delegate;
+    private readonly PathPackResources _delegate;
     private readonly PackMetadataSection _builtInMetadata;
 
     public VanillaPackResources(string rootPath, PackMetadataSection builtInMetadata) : base("vanilla")
     {
-        _delegate = new FolderPackResources("vanilla", rootPath);
+        _delegate = new PathPackResources("vanilla", rootPath);
         _builtInMetadata = builtInMetadata;
     }
 
@@ -36,3 +36,4 @@ public sealed class VanillaPackResources : PackResources
 
     public override void Dispose() => _delegate.Dispose();
 }
+

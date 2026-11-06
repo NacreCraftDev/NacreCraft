@@ -10,6 +10,12 @@ public readonly struct BlockState : IEquatable<BlockState>
     internal BlockState(int id) => Id = id;
 
     public Block Owner => BlockStateRegistry.Owner(Id);
+
+    //IsAir whether the block behind this state is air, maps to vanilla BlockState.isAir
+    public bool IsAir => Owner.IsAir;
+
+    //IsPathfindable forwards the movement mode to the block behavior, maps to vanilla BlockState.isPathfindable
+    public bool IsPathfindable(PathComputationType type) => Owner.IsPathfindable(this, type);
     public IReadOnlyCollection<PropertyBase> GetProperties() => BlockStateRegistry.GetProperties(Id);
     public bool IsSingletonState => BlockStateRegistry.IsSingletonState(Id);
 

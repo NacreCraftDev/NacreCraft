@@ -19,4 +19,10 @@ public static class CommonComponents
 
     //Narration separator, maps to vanilla NARRATION_SEPARATOR
     public static readonly Component NarrationSeparator = Component.Literal(". ");
+
+    //GUI_OK the standard confirm button label, maps to vanilla GUI_OK
+    public static readonly Component GUI_OK = Component.Translatable("gui.ok");
+
+    //GUI_BACK the standard back button label, maps to vanilla GUI_BACK
+    public static readonly Component GUI_BACK = Component.Translatable("gui.back");
 }

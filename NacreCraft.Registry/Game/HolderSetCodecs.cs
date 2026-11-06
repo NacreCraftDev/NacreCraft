@@ -32,6 +32,10 @@ public static class HolderSetCodecs
     public static readonly Codec<HolderSet<Structure>> StructureSet =
         new HolderSetCodec<Structure>(BuiltInRegistries.STRUCTURE);
 
+    //DialogSet dialog set codec used by dialog_list, supports #tags and id lists
+    public static readonly Codec<HolderSet<Dialog>> DialogSet =
+        new HolderSetCodec<Dialog>(BuiltInRegistries.DIALOG);
+
     //StructureSetRef single structure set reference codec used by the other_set field of placement exclusion zones
     public static readonly Codec<Holder<StructureSet>> StructureSetRef =
         new HolderRefCodec<StructureSet>(BuiltInRegistries.STRUCTURE_SET);

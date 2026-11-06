@@ -136,6 +136,7 @@ public static class BuiltInRegistries
     public static readonly Registry<MapCodec<GameTestInstance>> TEST_INSTANCE_TYPE = RegisterSimple<MapCodec<GameTestInstance>>(Registries.TEST_INSTANCE_TYPE);
     public static readonly Registry<MapCodec<SpawnCondition>> SPAWN_CONDITION_TYPE = RegisterSimple<MapCodec<SpawnCondition>>(Registries.SPAWN_CONDITION_TYPE);
     public static readonly Registry<MapCodec<Dialog>> DIALOG_TYPE = RegisterSimple<MapCodec<Dialog>>(Registries.DIALOG_TYPE);
+    public static readonly Registry<Dialog> DIALOG = RegisterSimple<Dialog>(Registries.DIALOG);
     public static readonly Registry<MapCodec<Action>> DIALOG_ACTION_TYPE = RegisterSimple<MapCodec<Action>>(Registries.DIALOG_ACTION_TYPE);
     public static readonly Registry<MapCodec<InputControl>> INPUT_CONTROL_TYPE = RegisterSimple<MapCodec<InputControl>>(Registries.INPUT_CONTROL_TYPE);
     public static readonly Registry<MapCodec<DialogBody>> DIALOG_BODY_TYPE = RegisterSimple<MapCodec<DialogBody>>(Registries.DIALOG_BODY_TYPE);

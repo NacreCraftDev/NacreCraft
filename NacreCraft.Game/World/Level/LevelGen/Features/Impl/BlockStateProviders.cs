@@ -236,6 +236,13 @@ public sealed class RuleBasedStateProvider : BlockStateProvider
 
     public override BlockStateProviderType Type => BlockStateProviderTypes.RuleBased;
 
+    //IfTrueThenProvide a provider with one rule and no fallback, maps to vanilla ifTrueThenProvide
+    public static RuleBasedStateProvider IfTrueThenProvide(BlockPredicate ifTrue, RegBlock thenProvide)
+        => IfTrueThenProvide(ifTrue, BlockStateProvider.Simple(thenProvide));
+
+    public static RuleBasedStateProvider IfTrueThenProvide(BlockPredicate ifTrue, BlockStateProvider thenProvide)
+        => new(null, new[] { new RuleBasedStateRule(ifTrue, thenProvide) });
+
     public override BlockState? GetOptionalState(WorldGenRegion level, RandomSource random, BlockPos pos)
     {
         foreach (var rule in Rules)

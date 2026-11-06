@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\NacreCraft.Util\NacreCraft.Util.csproj" />
     <ProjectReference Include="..\NacreCraft.Registry\NacreCraft.Registry.csproj" />
+    <ProjectReference Include="..\NacreCraft.Network\NacreCraft.Network.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -158,6 +158,11 @@ public static class GameBootstrap
             //Dialog input controls are registered by name for the input control dispatch codec
             NacreCraft.Game.Server.Dialog.InputControlTypes.Bootstrap(BuiltInRegistries.INPUT_CONTROL_TYPE);
             Mark("input-control-types");
+            //Dialog types and body types are registered by name for their dispatch codecs
+            NacreCraft.Game.Server.Dialog.DialogTypes.Bootstrap(BuiltInRegistries.DIALOG_TYPE);
+            Mark("dialog-types");
+            NacreCraft.Game.Server.Dialog.DialogBodyTypes.Bootstrap(BuiltInRegistries.DIALOG_BODY_TYPE);
+            Mark("dialog-body-types");
             //Slot sources are registered by name for the slot source dispatch codec
             NacreCraft.Game.World.Items.Slots.SlotSources.Bootstrap(BuiltInRegistries.SLOT_SOURCE_TYPE);
             Mark("slot-source-types");

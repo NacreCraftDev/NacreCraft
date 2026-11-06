@@ -104,6 +104,10 @@ static ICorProfilerInfo* g_profiler_info = nullptr;
 //It is taken from the same object during Initialize and released the same way
 static ICorProfilerInfo7* g_profiler_info7 = nullptr;
 
+//Set once Shutdown starts: the runtime can still deliver a JIT notification after that, and both interfaces are
+//released by then, so every callback that would use them has to look at this first
+static std::atomic<bool> g_shutting_down{false};
+
 //BuildProfilerEventMask decides what the runtime is asked to report
 //
 //A process has exactly one profiler, so there is one mask, and setting it twice would have the later call replace the
@@ -530,6 +534,10 @@ static bool ShouldCheckBody(ModuleID moduleId, mdMethodDef methodDef)
 //decides whether it was already handled.
 static void TryHookCompiledMethod(FunctionID functionId)
 {
+    //Shutdown releases the profiling interface, but the runtime can still report one last compilation after that
+    if (g_shutting_down.load() || g_profiler_info == nullptr)
+        return;
+
     //Before the managed throw entry is handed over a trip has nowhere to go
     if (ncn_stack_hook_ready() == 0)
         return;
@@ -634,6 +642,7 @@ public:
 
     HRESULT STDMETHODCALLTYPE Shutdown() override
     {
+        g_shutting_down.store(true);
         ncn_on_shutdown();
 
         if (g_profiler_info7 != nullptr)
@@ -688,6 +697,9 @@ public:
     HRESULT STDMETHODCALLTYPE GetReJITParameters(ModuleID moduleId, mdMethodDef methodId,
                                                  ICorProfilerFunctionControl* pFunctionControl) override
     {
+        if (g_shutting_down.load())
+            return E_FAIL;
+
         return ncn_on_get_rejit_parameters(static_cast<uint64_t>(moduleId), static_cast<uint32_t>(methodId),
                                            pFunctionControl) == 0
                    ? S_OK

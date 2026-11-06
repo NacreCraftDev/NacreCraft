@@ -77,6 +77,10 @@ public class DefaultDispenseItemBehavior : DispenseItemBehavior
         return one;
     }
 
+    //ConsumeOne charges one item for a reusable tool that vanilla would damage instead
+    //nc has no durability system, so flint and steel and shears are consumed one per successful use, matching the hand-use path
+    protected static void ConsumeOne(ItemStack stack) => stack.Shrink(1);
+
     //FacingOf reads the facing from the block state; block states use Registry.Enums.Direction
     protected static NacreCraft.Registry.Enums.Direction FacingOf(BlockState state)
         => state.GetValue(BlockStateProperties.FacingProperty);
@@ -116,10 +120,10 @@ public sealed class ProjectileDispenseBehavior : DefaultDispenseItemBehavior
 }
 
 //DispenseBehaviors built-in dispense behavior registration, maps to vanilla DispenseItemBehavior.bootStrap
-//Here only items that can actually fire are registered; potions, fireworks, boats, minecarts, spawn eggs and the like wait until the matching entity and component systems land
+//Here only items that can actually fire are registered; potions, fireworks, boats, minecarts, spawn eggs and the like wait until the matching entity, item and component systems land
 public static class DispenseBehaviors
 {
-    //Bootstrap attaches dispense behaviors to projectile items; must be called after the item registry is filled
+    //Bootstrap attaches dispense behaviors to projectile items and flint and steel; must be called after the item registry is filled
     public static void Bootstrap()
     {
         Blocks.DispenserBlock.RegisterProjectileBehavior((ProjectileItem)NCItems.ARROW);
@@ -127,5 +131,6 @@ public static class DispenseBehaviors
         Blocks.DispenserBlock.RegisterProjectileBehavior((ProjectileItem)NCItems.EGG);
         Blocks.DispenserBlock.RegisterProjectileBehavior((ProjectileItem)NCItems.ENDER_PEARL);
         Blocks.DispenserBlock.RegisterProjectileBehavior((ProjectileItem)NCItems.FIRE_CHARGE);
+        Blocks.DispenserBlock.RegisterBehavior(NCItems.FLINT_AND_STEEL, new FlintAndSteelDispenseItemBehavior());
     }
 }
