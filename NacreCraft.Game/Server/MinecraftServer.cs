@@ -119,6 +119,10 @@ public abstract class MinecraftServer
     public abstract CommandStorage CommandStorage { get; }
     //Stopwatches debug stopwatch collection
     public abstract Stopwatches Stopwatches { get; }
+    //Scoreboard in-memory scoreboard, maps to vanilla MinecraftServer.getScoreboard
+    //Vanilla persists it through the level's saved data; the server layer here only owns the instance so scoreboard commands and
+    //execute if score/store score have something to read and write. A virtual instance keeps existing server subclasses source-compatible
+    public virtual NacreCraft.Game.World.Scores.Scoreboard Scoreboard { get; } = new();
     //DebugPlayers fake player manager
     public abstract DebugPlayerManager DebugPlayers { get; }
     //Commands command manager

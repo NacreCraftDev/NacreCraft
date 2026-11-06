@@ -1,3 +1,5 @@
+using NacreCraft.Commands;
+using NacreCraft.Commands.Context;
 using NacreCraft.Registry;
 
 namespace NacreCraft.Game.Commands.Arguments;
@@ -14,6 +16,10 @@ public sealed class HeightmapTypeArgument : StringRepresentableArgument<Heightma
     }
 
     public static HeightmapTypeArgument Heightmap() => new();
+
+    //GetHeightmap gets the parsed heightmap type, maps to vanilla HeightmapTypeArgument.getHeightmap
+    public static Heightmap.Types GetHeightmap(CommandContext<CommandSourceStack> context, string name)
+        => context.GetArgument<Heightmap.Types>(name);
 
     private static string SerializedName(Heightmap.Types type) => type.ToString().ToLowerInvariant();
 

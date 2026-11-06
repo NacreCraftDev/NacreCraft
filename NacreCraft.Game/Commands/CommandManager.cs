@@ -107,6 +107,7 @@ public sealed class CommandManager
         RegisterDataPack();
         RegisterFunction();
         RegisterReturn();
+        RegisterExecute();
         RegisterLocate();
         RegisterLoot();
         RegisterPlace();
@@ -514,6 +515,10 @@ public sealed class CommandManager
     //RegisterReturn registers the vanilla return command tree
     private void RegisterReturn()
         => ReturnCommand.Register(_dispatcher);
+
+    //RegisterExecute registers the vanilla execute command tree
+    private void RegisterExecute()
+        => ExecuteCommand.Register(_dispatcher);
 
     //RegisterLocate registers the vanilla locate command tree
     private void RegisterLocate()

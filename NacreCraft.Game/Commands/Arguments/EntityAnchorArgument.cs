@@ -66,6 +66,11 @@ public sealed class EntityAnchorArgument : ArgumentType<EntityAnchorArgument.Anc
             : pos;
     }
 
+    //Apply resolves any entity's world coordinate for the anchor, maps to vanilla Anchor.apply(Entity)
+    //The eye position comes from the entity itself, so non-player mobs use their declared eye height
+    public static Vec3 Apply(Anchor anchor, NacreCraft.Registry.Entity entity)
+        => anchor == Anchor.Eyes ? entity.GetEyePosition() : entity.Pos;
+
     public Task<Suggestions> ListSuggestions<S>(CommandContext<S> context, SuggestionsBuilder builder)
     {
         foreach (var name in ByName.Keys)

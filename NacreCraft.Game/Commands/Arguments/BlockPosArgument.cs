@@ -29,6 +29,10 @@ public sealed class BlockPosArgument : ArgumentType<BlockCoordinates>
     public static readonly SimpleCommandExceptionType ErrorNotComplete =
         new(new TranslatableMessage("argument.pos3d.incomplete"));
 
+    //ErrorNotLoaded the target block position is outside loaded chunks, maps to vanilla ERROR_NOT_LOADED
+    public static readonly SimpleCommandExceptionType ErrorNotLoaded =
+        new(new TranslatableMessage("argument.pos.unloaded"));
+
     public static BlockPosArgument BlockPos() => new();
 
     public BlockCoordinates Parse(StringReader reader)
@@ -55,6 +59,16 @@ public sealed class BlockPosArgument : ArgumentType<BlockCoordinates>
     //GetBlockPos takes the parse result and resolves the absolute coordinate from the executor's position
     public static BlockPos GetBlockPos(CommandContext<CommandSourceStack> context, string name)
         => context.GetArgument<BlockCoordinates>(name).GetBlockPos((ServerCommandSource)context.GetSource());
+
+    //GetLoadedBlockPos resolves the position and requires its chunk to be loaded, maps to vanilla getLoadedBlockPos
+    public static BlockPos GetLoadedBlockPos(CommandContext<CommandSourceStack> context, string name)
+    {
+        var source = (ServerCommandSource)context.GetSource();
+        var pos = GetBlockPos(context, name);
+        if (source.Level is not { } level || level.GetChunk(new ChunkPos(pos.X >> 4, pos.Z >> 4)) is null)
+            throw ErrorNotLoaded.Create();
+        return pos;
+    }
 
     public IReadOnlyList<string> Examples => new[] { "0 0 0", "~ ~ ~", "~1 ~-2 ~3" };
 }

@@ -44,6 +44,16 @@ public readonly struct Vec3 : IEquatable<Vec3>
         _ => new Vec3(X, Y, value),
     };
 
+    //Align floors the components of the listed axes, maps to vanilla Vec3.align
+    //Used by /execute align to snap a position onto block corners
+    public Vec3 Align(ISet<Direction.Axis> axes)
+    {
+        var x = axes.Contains(Direction.Axis.X) ? Math.Floor(X) : X;
+        var y = axes.Contains(Direction.Axis.Y) ? Math.Floor(Y) : Y;
+        var z = axes.Contains(Direction.Axis.Z) ? Math.Floor(Z) : Z;
+        return new Vec3(x, y, z);
+    }
+
     public Vec3 Normalize()
     {
         var len = Length();
