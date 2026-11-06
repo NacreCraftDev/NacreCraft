@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using NacreCraft.Logging;
 
 namespace NacreCraft.Game.Server.JsonRpc;
@@ -14,7 +15,25 @@ public sealed class JsonRpcLogger
         var prefix = string.Format(CultureInfo.InvariantCulture, Prefix, clientInfo.ConnectionId);
         var line = args.Length == 0
             ? prefix + message
-            : prefix + string.Format(CultureInfo.InvariantCulture, message, args);
+            : prefix + FormatPlaceholders(message, args);
         NacreCraft.Logging.Log.Info(line);
+    }
+
+    //FormatPlaceholders turns the SLF4J "{}" placeholders into indexed .NET placeholders before formatting
+    private static string FormatPlaceholders(string message, object?[] args)
+    {
+        var builder = new StringBuilder(message.Length + 16);
+        var argumentIndex = 0;
+        for (var i = 0; i < message.Length; i++)
+        {
+            if (message[i] == '{' && i + 1 < message.Length && message[i + 1] == '}' && argumentIndex < args.Length)
+            {
+                builder.Append('{').Append(argumentIndex++).Append('}');
+                i++;
+                continue;
+            }
+            builder.Append(message[i]);
+        }
+        return string.Format(CultureInfo.InvariantCulture, builder.ToString(), args);
     }
 }

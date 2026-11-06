@@ -69,12 +69,6 @@ public sealed class MinecraftClient : IDisposable
 
     private volatile bool _running;
     private long _frameCount;
-    //Frame timing for the telemetry samplers: last frame timestamp, the rolling one-second FPS window, and the last frame duration
-    private long _lastFrameTimestamp;
-    private long _fpsWindowStartTimestamp;
-    private int _fpsWindowFrames;
-    private int _currentFps;
-    private long _lastFrameTimeNs;
     //_lastPlayerTickCount last world tick the local player physics ran on, so physics follows the 20 Hz world tick rather than the frame rate
     private long _lastPlayerTickCount;
     private readonly CancellationTokenSource _shutdownCts = new();
@@ -301,15 +295,6 @@ public sealed class MinecraftClient : IDisposable
     //FrameCount accumulated frame count, for diagnostics
     public long FrameCount => _frameCount;
 
-    //TelemetryOptInExtra mirrors the vanilla extra-telemetry switch; the settings screen does not expose it yet
-    public bool TelemetryOptInExtra { get; set; }
-
-    //GetFps frames per second over the last one-second window
-    public int GetFps() => _currentFps;
-
-    //GetFrameTimeNs duration of the previous client tick in nanoseconds
-    public long GetFrameTimeNs() => _lastFrameTimeNs;
-
     //SleepBudgetMillis per-frame sleep budget; tests set 0 to speed up, production uses the 16ms default
     //Only effective in Headless mode; window-driven mode controls frame rate via vsync
     public int SleepBudgetMillis
@@ -493,26 +478,7 @@ public sealed class MinecraftClient : IDisposable
         //Sky brightness currently has no client time source, constant noon; it will be computed from time once time sync is added
         _lightTexture?.Update(1.0f);
         UpdateCamera();
-        TrackFrameTiming();
         _frameCount++;
-    }
-
-    //TrackFrameTiming keeps the rolling FPS window and the last frame duration used by the telemetry samplers
-    private void TrackFrameTiming()
-    {
-        var now = Stopwatch.GetTimestamp();
-        if (_lastFrameTimestamp != 0)
-            _lastFrameTimeNs = (long)((now - _lastFrameTimestamp) * (1_000_000_000.0 / Stopwatch.Frequency));
-        _lastFrameTimestamp = now;
-
-        if (_fpsWindowStartTimestamp == 0) _fpsWindowStartTimestamp = now;
-        _fpsWindowFrames++;
-        var elapsed = now - _fpsWindowStartTimestamp;
-        if (elapsed < Stopwatch.Frequency) return;
-
-        _currentFps = (int)(_fpsWindowFrames * (double)Stopwatch.Frequency / elapsed);
-        _fpsWindowFrames = 0;
-        _fpsWindowStartTimestamp = now;
     }
 
     //TickLocalPlayer advances the local player physics once per world tick
