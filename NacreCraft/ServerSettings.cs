@@ -6,7 +6,8 @@ namespace NacreCraft;
 //Simplified version of vanilla net.minecraft.server.dedicated.Settings
 //Inherits Settings<ServerSettings> and aligns with vanilla's self type pattern via a generic self-reference
 //Keeps only core fields: port/world name/difficulty/max-players, etc.
-public sealed class ServerSettings : Settings<ServerSettings>
+//Open for inheritance so server.dedicated's DedicatedServerProperties can add the remaining vanilla keys in the same file
+public class ServerSettings : Settings<ServerSettings>
 {
     //Server listen port, default 25565
     public int ServerPort => GetInt("server-port", 25565);
@@ -110,6 +111,88 @@ public sealed class ServerSettings : Settings<ServerSettings>
     //The vanilla server is not localized; this is NC-specific, at the same level as nc-debug-commands, not mixed with vanilla config names
     public string NcLanguage => GetOrDefault("nc-language", "en_us");
 
+    //--- management server (JSON-RPC) settings, maps to the management-server-* DedicatedServerProperties fields ---
+
+    //ManagementServerEnabled whether the management server listens, maps to management-server-enabled
+    public bool ManagementServerEnabled => GetBool("management-server-enabled", false);
+
+    //ManagementServerSecret shared secret required by clients, 40 alphanumeric characters, maps to management-server-secret
+    public string ManagementServerSecret => GetOrDefault("management-server-secret", string.Empty);
+
+    //ManagementServerHost bind address, maps to management-server-host
+    public string ManagementServerHost => GetOrDefault("management-server-host", "localhost");
+
+    //ManagementServerPort listen port, maps to management-server-port
+    public int ManagementServerPort => GetInt("management-server-port", 25585);
+
+    //ManagementServerAllowedOrigins comma separated origin allowlist, maps to management-server-allowed-origins
+    public string ManagementServerAllowedOrigins => GetOrDefault("management-server-allowed-origins", string.Empty);
+
+    //ManagementServerTlsEnabled whether the listener uses TLS, maps to management-server-tls-enabled
+    public bool ManagementServerTlsEnabled => GetBool("management-server-tls-enabled", false);
+
+    //ManagementServerTlsKeystore keystore path used when TLS is enabled, maps to management-server-tls-keystore
+    public string ManagementServerTlsKeystore => GetOrDefault("management-server-tls-keystore", string.Empty);
+
+    //ManagementServerTlsKeystorePassword keystore password, maps to management-server-tls-keystore-password
+    public string ManagementServerTlsKeystorePassword => GetOrDefault("management-server-tls-keystore-password", string.Empty);
+
+    //--- settings exposed by the management RPC, maps to the remaining DedicatedServerProperties fields ---
+
+    //AutoSave whether the world saves on the autosave timer, maps to auto-save
+    public bool AutoSave => GetBool("auto-save", true);
+
+    //PauseWhenEmptySeconds seconds to wait before pausing when no players are online, maps to pause-when-empty-seconds
+    public int PauseWhenEmptySeconds => GetInt("pause-when-empty-seconds", 60);
+
+    //EnforceWhiteList whether the whitelist is enforced on login, maps to enforce-whitelist
+    public bool EnforceWhiteList => GetBool("enforce-whitelist", false);
+
+    //SpawnProtection spawn protection radius in blocks, maps to spawn-protection
+    public int SpawnProtection => GetInt("spawn-protection", 16);
+
+    //ForceGameMode whether joining players are forced into the default game mode, maps to force-gamemode
+    public bool ForceGameMode => GetBool("force-gamemode", false);
+
+    //AcceptsTransfers whether the server accepts transfer packets, maps to accepts-transfers
+    public bool AcceptsTransfers => GetBool("accepts-transfers", false);
+
+    //StatusHeartbeatInterval status heartbeat interval in seconds, maps to status-heartbeat-interval
+    public int StatusHeartbeatInterval => GetInt("status-heartbeat-interval", 30);
+
+    //HidesOnlinePlayers whether the player list is hidden from status responses, maps to hide-online-players
+    public bool HidesOnlinePlayers => GetBool("hide-online-players", false);
+
+    //RepliesToStatus whether the server answers status requests, maps to enable-status
+    public bool RepliesToStatus => GetBool("enable-status", true);
+
+    //EntityBroadcastRangePercentage entity broadcast range percentage, maps to entity-broadcast-range-percentage
+    public int EntityBroadcastRangePercentage => GetInt("entity-broadcast-range-percentage", 100);
+
+    //MaxTickTime maximum length of one server tick in milliseconds before the watchdog treats the server as crashed
+    //Maps to vanilla DedicatedServerProperties.maxTickTime / max-tick-time, default one minute
+    public long MaxTickTime => GetLong("max-tick-time", 60_000);
+
+    //SetMaxTickTime rewrites the watchdog threshold and writes it to disk
+    public void SetMaxTickTime(long millis) => SetLong("max-tick-time", millis);
+
+    public void SetAutoSave(bool value) => SetBool("auto-save", value);
+    public void SetPauseWhenEmptySeconds(int value) => SetInt("pause-when-empty-seconds", value);
+    public void SetEnforceWhiteList(bool value) => SetBool("enforce-whitelist", value);
+    public void SetSpawnProtection(int value) => SetInt("spawn-protection", value);
+    public void SetForceGameMode(bool value) => SetBool("force-gamemode", value);
+    public void SetAcceptsTransfers(bool value) => SetBool("accepts-transfers", value);
+    public void SetStatusHeartbeatInterval(int value) => SetInt("status-heartbeat-interval", value);
+    public void SetHidesOnlinePlayers(bool value) => SetBool("hide-online-players", value);
+    public void SetRepliesToStatus(bool value) => SetBool("enable-status", value);
+    public void SetEntityBroadcastRangePercentage(int value) => SetInt("entity-broadcast-range-percentage", value);
+    public void SetMaxPlayers(int value) => SetInt("max-players", value);
+    public void SetMotd(string value) => Set("motd", value);
+    public void SetAllowFlight(bool value) => SetBool("allow-flight", value);
+    public void SetViewDistance(int value) => SetInt("view-distance", value);
+    public void SetSimulationDistance(int value) => SetInt("simulation-distance", value);
+    public void SetOpPermissionLevel(int value) => SetInt("op-permission-level", value);
+
     //SetGamemode rewrites the default game mode and writes it to disk; used by the defaultgamemode command
     public void SetGamemode(string name) => Set("gamemode", name);
 
@@ -159,7 +242,8 @@ public sealed class ServerSettings : Settings<ServerSettings>
 
     //DefaultEntries supported config options and their default values
     //Shared between generating the default file and filling old files, so the two lists do not diverge and miss keys
-    private IEnumerable<(string Key, string Value)> DefaultEntries()
+    //Virtual so DedicatedServerProperties can append the vanilla keys it adds without duplicating this list
+    protected virtual IEnumerable<(string Key, string Value)> DefaultEntries()
     {
         yield return ("server-port", ServerPort.ToString());
         yield return ("max-players", MaxPlayers.ToString());
@@ -191,6 +275,25 @@ public sealed class ServerSettings : Settings<ServerSettings>
         yield return ("function-permission-level", FunctionPermissionLevel.ToString());
         yield return ("op-permission-level", OpPermissionLevel.ToString());
         yield return ("player-idle-timeout", PlayerIdleTimeout.ToString());
+        yield return ("auto-save", AutoSave ? "true" : "false");
+        yield return ("pause-when-empty-seconds", PauseWhenEmptySeconds.ToString());
+        yield return ("enforce-whitelist", EnforceWhiteList ? "true" : "false");
+        yield return ("spawn-protection", SpawnProtection.ToString());
+        yield return ("force-gamemode", ForceGameMode ? "true" : "false");
+        yield return ("accepts-transfers", AcceptsTransfers ? "true" : "false");
+        yield return ("status-heartbeat-interval", StatusHeartbeatInterval.ToString());
+        yield return ("hide-online-players", HidesOnlinePlayers ? "true" : "false");
+        yield return ("enable-status", RepliesToStatus ? "true" : "false");
+        yield return ("entity-broadcast-range-percentage", EntityBroadcastRangePercentage.ToString());
+        yield return ("max-tick-time", MaxTickTime.ToString());
+        yield return ("management-server-enabled", ManagementServerEnabled ? "true" : "false");
+        yield return ("management-server-secret", ManagementServerSecret);
+        yield return ("management-server-host", ManagementServerHost);
+        yield return ("management-server-port", ManagementServerPort.ToString());
+        yield return ("management-server-allowed-origins", ManagementServerAllowedOrigins);
+        yield return ("management-server-tls-enabled", ManagementServerTlsEnabled ? "true" : "false");
+        yield return ("management-server-tls-keystore", ManagementServerTlsKeystore);
+        yield return ("management-server-tls-keystore-password", ManagementServerTlsKeystorePassword);
         yield return ("nc-debug-commands", NcDebugCommands ? "true" : "false");
         yield return ("nc-language", NcLanguage);
     }

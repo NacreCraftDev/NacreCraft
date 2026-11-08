@@ -16,7 +16,8 @@ namespace NacreCraft.Game.Server;
 //PlayerList online player set management, maps to vanilla PlayerList
 //Manages the ServerPlayer lifecycle, providing the PlaceNewPlayer/RemovePlayer/Broadcast APIs
 //Rejects new players when full, maps to the vanilla max-players limit
-public sealed class PlayerList
+//Open for inheritance: the dedicated server installs DedicatedPlayerList to add the whitelist/ops and distance behaviour
+public class PlayerList
 {
     private readonly MinecraftServer _server;
     private readonly List<ServerPlayer> _players = new();
@@ -32,7 +33,14 @@ public sealed class PlayerList
         get { lock (_lock) return _players.Count; }
     }
 
-    public int MaxPlayers { get; }
+    //MaxPlayers the join limit, live-updatable so the max-players setting takes effect without a restart
+    public int MaxPlayers { get; set; }
+
+    //ViewDistance the view radius handed to joining players, maps to vanilla PlayerList.viewDistance
+    public int ViewDistance { get; protected set; }
+
+    //SimulationDistance the simulation radius advertised to clients, maps to vanilla PlayerList.simulationDistance
+    public int SimulationDistance { get; protected set; }
 
     //Server the owning server, for subsystems a player reaches through its player list
     public MinecraftServer Server => _server;
@@ -41,7 +49,48 @@ public sealed class PlayerList
     {
         _server = server;
         MaxPlayers = maxPlayers;
+        ViewDistance = Math.Clamp(server.Settings.ViewDistance, 2, 32);
+        SimulationDistance = Math.Clamp(server.Settings.SimulationDistance, 2, 32);
     }
+
+    //SetViewDistance updates the view radius of every online player and of players joining later
+    //Maps to vanilla PlayerList.setViewDistance, which writes the field and pushes SetChunkCacheRadius to the chunk sender
+    public virtual void SetViewDistance(int viewDistance)
+    {
+        var clamped = Math.Clamp(viewDistance, 2, 32);
+        if (clamped == ViewDistance) return;
+        ViewDistance = clamped;
+        foreach (var player in Players)
+        {
+            player.ViewDistanceChunks = ViewDistance;
+            var chunkX = (int)Math.Floor(player.Position.X / 16);
+            var chunkZ = (int)Math.Floor(player.Position.Z / 16);
+            player.ChunkSender?.UpdateCenter(chunkX, chunkZ, ViewDistance);
+            if (player.Level is PersistentServerLevel level)
+                level.ChunkSource.UpdatePlayerTickets(player, chunkX, chunkZ, ViewDistance);
+        }
+        Log.Info($"Player list view distance set to {ViewDistance}");
+    }
+
+    //SetSimulationDistance updates the simulation radius advertised to online players
+    //Maps to vanilla PlayerList.setSimulationDistance; the chunk source radius is updated by the caller through ApplySettings
+    public virtual void SetSimulationDistance(int simulationDistance)
+    {
+        var clamped = Math.Clamp(simulationDistance, 2, 32);
+        if (clamped == SimulationDistance) return;
+        SimulationDistance = clamped;
+        foreach (var player in Players)
+            player.Connection.Send(new ClientboundSetSimulationDistancePacket(SimulationDistance));
+        Log.Info($"Player list simulation distance set to {SimulationDistance}");
+    }
+
+    //IsWhiteListed whether a profile may join under the whitelist, maps to vanilla PlayerList.isWhiteListed
+    //The base rule only checks the whitelist flag and entry; the dedicated list adds the operator exemption
+    public virtual bool IsWhiteListed(GameProfile profile)
+        => !_server.IsWhiteListEnabled || _server.WhiteList.IsAllowed(profile);
+
+    //CanBypassPlayerLimit whether the profile may join a full server, maps to vanilla PlayerList.canBypassPlayerLimit
+    public virtual bool CanBypassPlayerLimit(GameProfile profile) => false;
 
     //PlaceNewPlayer creates a ServerPlayer, adds it to the player list and sends the Clientbound packet sequence needed to enter the world
     //Returns null when full; the caller should send a disconnect packet and disconnect
@@ -52,7 +101,8 @@ public sealed class PlayerList
         List<ServerPlayer> others;
         lock (_lock)
         {
-            if (_players.Count >= MaxPlayers)
+            //Operators with bypassesPlayerLimit may enter a full server, maps to vanilla canBypassPlayerLimit
+            if (_players.Count >= MaxPlayers && !CanBypassPlayerLimit(profile))
             {
                 Log.Warning($"Player join rejected, server is full {MaxPlayers} name={profile.Name}");
                 return null;
@@ -60,6 +110,8 @@ public sealed class PlayerList
             //The tab player list must announce existing players to the new player; take a snapshot first since the new player is not in the list yet
             others = new List<ServerPlayer>(_players);
             player = new ServerPlayer(profile, connection, _server.Overworld);
+            //The player keeps a server link for the subsystems that have no level-to-server path, maps to level.getServer() in vanilla
+            player.Server = _server;
             //The reverse reference on the player list; the item pickup sound must broadcast to the whole server, maps to the level/players the vanilla ServerPlayer gets
             player.OwnerList = this;
             //Applies the server default game type from settings.gamemode
@@ -68,8 +120,8 @@ public sealed class PlayerList
             player.PermissionLevel = _server.OpList.GetPermissionLevel(profile);
             //The player save takes precedence over defaults; position/facing/health/xp/inventory must be in place before the join packet is sent
             restored = _server.PlayerData.LoadInto(player);
-            //Entity tracking decides visibility by player view distance; take the server configuration
-            player.ViewDistanceChunks = _server.Settings.ViewDistance;
+            //Entity tracking decides visibility by player view distance; take the player list configuration
+            player.ViewDistanceChunks = ViewDistance;
             _players.Add(player);
         }
         //The player is an entity now, so it enters the level's entity manager; the level's lookups, collision and range
@@ -97,6 +149,10 @@ public sealed class PlayerList
             Component.Translatable("multiplayer.player.joined", Component.Literal(profile.Name))
                 .WithStyle(ChatFormatting.Yellow),
             false);
+        //The management notification subscribers hear about the join, maps to notificationManager.playerJoined
+        _server.Notifications?.PlayerJoined(player);
+        //A login is server activity; the rate limiter decides whether a notification goes out now
+        _server.ActivityMonitor?.ReportLoginActivity();
         return player;
     }
 
@@ -155,7 +211,7 @@ public sealed class PlayerList
     {
         var gameType = player.GameType;
         var connection = player.Connection;
-        var viewDistance = _server.Settings.ViewDistance;
+        var viewDistance = ViewDistance;
         try
         {
             //PlayerInfoUpdate self, with the same action set as the later broadcast
@@ -317,8 +373,8 @@ public sealed class PlayerList
             connection.Disconnect("banned");
             return false;
         }
-        //With the whitelist on, non-members are rejected; operators are exempt, maps to the isUsingWhitelist branch of vanilla
-        if (_server.IsWhiteListEnabled && !_server.OpList.IsOp(profile) && !_server.WhiteList.IsAllowed(profile))
+        //With the whitelist on, non-members are rejected; the dedicated list exempts operators, maps to the isWhiteListed check of vanilla
+        if (!IsWhiteListed(profile))
         {
             Log.Info($"Login rejected, not in whitelist name={profile.Name}");
             connection.Send(new ClientboundDisconnectPacket(
@@ -429,6 +485,8 @@ public sealed class PlayerList
                     .WithStyle(ChatFormatting.Yellow),
                 false);
             Log.Info($"Player removed {player.Profile.Name} online {PlayerCount}/{MaxPlayers}");
+            //The management notification subscribers hear about the leave, maps to notificationManager.playerLeft
+            _server.Notifications?.PlayerLeft(player);
         }
         return removed;
     }

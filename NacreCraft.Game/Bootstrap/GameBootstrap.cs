@@ -132,6 +132,9 @@ public static class GameBootstrap
             //Potions reference the effect table above, so they register right after it
             NacreCraft.Game.World.Effect.Potions.Bootstrap();
             Mark("potions");
+            //Consume effect types are referenced by the consumable/item components, register them before items decode
+            NacreCraft.Game.World.Items.ConsumeEffects.ConsumeEffectBootstrap.RegisterAll();
+            Mark("consume-effects");
             //Enchantment level values are the base every other enchantment effect builds on
             NacreCraft.Game.World.Items.Enchanting.LevelBasedValues.Bootstrap();
             Mark("enchantment-level-values");

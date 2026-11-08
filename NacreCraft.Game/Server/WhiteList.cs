@@ -30,6 +30,17 @@ public sealed class WhiteList
     //IsAllowed whether it is on the whitelist
     public bool IsAllowed(GameProfile profile) => Find(profile) is not null;
 
+    //Entries a snapshot of the whitelist records, used by the management RPC
+    public IReadOnlyList<WhiteListEntry> Entries => _byName.Values.ToList();
+
+    //Clear removes every record and persists the empty list
+    public void Clear()
+    {
+        _byId.Clear();
+        _byName.Clear();
+        Save();
+    }
+
     //Add writes to the list and persists it; returns whether an entry was added
     public bool Add(GameProfile profile)
     {
@@ -142,5 +153,5 @@ public sealed class WhiteList
     }
 
     //WhiteListEntry a single whitelist record
-    private sealed record WhiteListEntry(Guid Id, string Name);
+    public sealed record WhiteListEntry(Guid Id, string Name);
 }

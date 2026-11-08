@@ -1,5 +1,6 @@
 using NacreCraft.Codec;
 using NacreCraft.DataFixer.Util;
+using NacreCraft.Game.World.Food;
 using NacreCraft.Game.World.Items.Component;
 using NacreCraft.Game.World.Items.Component.Predicates;
 using NacreCraft.Network;
@@ -141,6 +142,12 @@ public static class DataComponents
         "villager_variant",
         new ObjectCodec<Holder<VillagerType>>(HolderSetCodecs.VillagerTypeRef),
         new ObjectStreamCodec<Holder<VillagerType>>(ByteBufCodecs.Holder(Registries.VILLAGER_TYPE)));
+
+    //FOOD food component: nutrition, saturation and whether the item can always be eaten
+    public static readonly DataComponentType<object> FOOD = Register(
+        "food",
+        new ObjectCodec<FoodProperties>(FoodProperties.Codec),
+        new ObjectStreamCodec<FoodProperties>(FoodProperties.StreamCodec));
 
     //Register registers a single component type into BuiltInRegistries.DATA_COMPONENT_TYPE
     private static DataComponentType<object> Register(

@@ -98,10 +98,11 @@ public static class ServerMain
         //    else. It is still ahead of the resource extraction and the world work, so the capture covers the whole boot
         if (useTrace) RuntimeTraceRecorder.Start(AppPaths.TracesDir);
 
-        //4.1 Load server.properties, generate defaults when absent
-        //    Port, max-players, difficulty, online mode, PVP, view distance and so on
+        //4.1 Load server.properties through the dedicated settings owner, generating defaults when absent
+        //    Port, max-players, difficulty, online mode, PVP, view distance, max-tick-time and the remaining vanilla keys
         //    Depends only on AppPaths and not on resources, pulled early so everything afterwards knows which language to speak
-        var settings = ServerSettings.LoadOrGenerate(AppPaths.ServerPropertiesPath);
+        var dedicatedSettings = DedicatedServerSettings.Create(AppPaths.ServerPropertiesPath);
+        var settings = dedicatedSettings.GetProperties();
         //Launch arguments win over the file for this run, so a port or a difficulty can be tried without editing server.properties
         settings.ApplyOverrides(options.Options);
 

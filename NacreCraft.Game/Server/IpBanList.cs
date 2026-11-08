@@ -23,11 +23,14 @@ public sealed class IpBanList : StoredJsonList<IpBanEntry>
     }
 
     //Add writes an IP ban and persists it; returns false when already on the list
-    public bool Add(string address, string source, string reason)
+    public bool Add(string address, string source, string reason) => Add(address, source, reason, BanList.Forever);
+
+    //Add with an explicit expiry string, maps to the vanilla IP ban entry expires field
+    public bool Add(string address, string source, string reason, string expires)
     {
         if (Find(address) is not null) return false;
         AddEntry(new IpBanEntry(address, DateTimeOffset.UtcNow.ToString("o"),
-            source, BanList.Forever, reason));
+            source, expires, reason));
         return true;
     }
 

@@ -47,7 +47,29 @@ public sealed record Schema<T>(Optional<Uri> Reference, IReadOnlyList<string> Ty
         return entry;
     }
 
+    //RegisterTypedSchema registers the component and keeps the typed schema so methods can reference it with its codec
+    public static TypedSchemaComponent<T> RegisterTypedSchema(string name, Schema<T> schema)
+    {
+        var entry = RegisterSchema(name, schema);
+        return new TypedSchemaComponent<T>(entry, schema);
+    }
+
     public static IReadOnlyList<SchemaComponent> GetSchemaRegistry() => SchemaComponents.All();
+}
+
+//TypedSchemaComponent a registered schema kept in its typed form, maps to vanilla SchemaComponent<T>
+//The document only needs the info half; the typed half lets an RPC method reference the component and still encode values
+public sealed class TypedSchemaComponent<T>(SchemaComponent component, Schema<T> schema)
+{
+    public SchemaComponent Component { get; } = component;
+
+    public SchemaInfo Info => Component.Schema;
+
+    //AsRef references this component, maps to vanilla asRef
+    public Schema<T> AsRef() => Schema<T>.OfRef(Component.Ref, schema.ValueCodec);
+
+    //AsArray an array of references, maps to vanilla asRef().asArray()
+    public Schema<IReadOnlyList<T>> AsArray() => AsRef().AsArray();
 }
 
 //SchemaComponents the process-wide schema registry, maps to vanilla Schema.SCHEMA_REGISTRY

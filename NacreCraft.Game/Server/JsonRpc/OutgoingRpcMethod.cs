@@ -148,11 +148,12 @@ public sealed class OutgoingRpcMethodBuilder<Params, Result>
 
     public OutgoingRpcMethod<Params, Result> Build()
     {
-        if (_resultSchema is null) throw new InvalidOperationException("No response defined");
         var attributes = new OutgoingRpcMethodAttributes(_discoverable, _allowPreServerInit);
         var paramInfo = Optional<ParamInfo>.Empty();
         if (_paramSchema is not null) paramInfo = Optional<ParamInfo>.Of(new ParamInfo(_paramName, _paramSchema.Info(), true));
-        var info = new MethodInfo(_description, paramInfo, Optional<ResultInfo>.Of(new ResultInfo(_resultName, _resultSchema.Info())));
+        var resultInfo = Optional<ResultInfo>.Empty();
+        if (_resultSchema is not null) resultInfo = Optional<ResultInfo>.Of(new ResultInfo(_resultName, _resultSchema.Info()));
+        var info = new MethodInfo(_description, paramInfo, resultInfo);
         return _factory(info, attributes, _paramSchema, _resultSchema);
     }
 
@@ -163,6 +164,19 @@ public sealed class OutgoingRpcMethodBuilder<Params, Result>
         NacreCraft.Registry.Registry<NacreCraft.Registry.OutgoingRpcMethod<object, object>>.Register(registry, key, method);
         return method;
     }
+
+    //RegisterForHolder registers and returns the holder, which is what the notification fields keep
+    public NacreCraft.Registry.Reference<NacreCraft.Registry.OutgoingRpcMethod<object, object>> RegisterForHolder(
+        NacreCraft.Registry.Registry<NacreCraft.Registry.OutgoingRpcMethod<object, object>> registry, string key)
+    {
+        var method = Build();
+        return NacreCraft.Registry.Registry<NacreCraft.Registry.OutgoingRpcMethod<object, object>>.RegisterForHolder(
+            registry, NacreCraft.Registry.Identifier.WithDefaultNamespace(key), method);
+    }
+
+    //Notification a notification with no parameters, maps to vanilla OutgoingRpcMethod.notification
+    public static OutgoingRpcMethodBuilder<object, object?> Notification()
+        => new((info, attributes, _, _) => new ParameterlessNotification(info, attributes));
 
     public static OutgoingRpcMethodBuilder<Params, object?> NotificationWithParams()
         => new((info, attributes, paramSchema, _) => new Notification<Params>(info, attributes,

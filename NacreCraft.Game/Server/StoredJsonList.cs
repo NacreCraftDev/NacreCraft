@@ -26,6 +26,13 @@ public abstract class StoredJsonList<TEntry> where TEntry : class
     //Entries a read-only view of entries, listed by the banlist command
     public IReadOnlyList<TEntry> Entries => _entries;
 
+    //Clear removes every record and persists the empty list
+    public void Clear()
+    {
+        _entries.Clear();
+        Save();
+    }
+
     //AddEntry appends a record and persists it
     protected void AddEntry(TEntry entry)
     {

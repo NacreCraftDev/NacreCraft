@@ -27,6 +27,10 @@ public abstract class Settings<T> where T : Settings<T>, new()
     protected int GetInt(string key, int defaultValue)
         => Properties.GetInt(key, defaultValue);
 
+    //GetLong looks up a long field, used by millisecond values such as max-tick-time
+    protected long GetLong(string key, long defaultValue)
+        => Properties.GetLong(key, defaultValue);
+
     //GetBool looks up a bool field
     protected bool GetBool(string key, bool defaultValue)
         => Properties.GetBool(key, defaultValue);
@@ -44,6 +48,9 @@ public abstract class Settings<T> where T : Settings<T>, new()
 
     //SetInt writes an int field
     protected void SetInt(string key, int value) => Properties.SetInt(key, value);
+
+    //SetLong writes a long field
+    protected void SetLong(string key, long value) => Properties.SetLong(key, value);
 
     //SetBool writes a bool field
     protected void SetBool(string key, bool value) => Properties.SetBool(key, value);

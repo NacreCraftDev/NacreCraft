@@ -17,6 +17,12 @@ public interface IRpcChannel
     void Close();
 }
 
+//IRpcConnectionSet iterates the live connections, implemented by the management server
+public interface IRpcConnectionSet
+{
+    void ForEachConnection(Action<Connection> action);
+}
+
 //IRpcConnectionListener receives connection lifecycle events, implemented by the management server
 public interface IRpcConnectionListener
 {
@@ -59,9 +65,13 @@ public sealed class Connection
         _listener?.OnConnected(this);
     }
 
+    //_closed 1 once Close ran; the transport and the management server may both close the connection
+    private int _closed;
+
     //Close logs the connection and notifies the listener, maps to vanilla channelInactive
     public void Close()
     {
+        if (Interlocked.Exchange(ref _closed, 1) != 0) return;
         _jsonRpcLogger.Log(_clientInfo, "Management connection closed for {}", _channel.RemoteAddress);
         FailAllPending(new ObjectDisposedException(nameof(Connection), "connection closed"));
         _listener?.OnDisconnected(this);

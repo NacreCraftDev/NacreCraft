@@ -1,4 +1,6 @@
+using NacreCraft.Game.World.Food;
 using NacreCraft.Game.World.Items;
+using NacreCraft.Nbt;
 using NacreCraft.Primitives;
 using NacreCraft.Registry;
 using NacreCraft.Registry.EntityAttribute;
@@ -72,27 +74,49 @@ public class Player : LivingEntity
     //XpTotal total accumulated experience points
     public int XpTotal { get; set; }
 
-    //FoodLevel hunger value, default 20
-    public int FoodLevel { get; set; } = 20;
+    //Food the hunger, saturation and exhaustion state, maps to vanilla Player.foodData
+    //A dedicated object now owns the drain, regeneration and starvation simulation instead of the fields living here
+    public FoodData Food { get; } = new();
 
-    //FoodSaturation food saturation, maps to the vanilla FoodData saturation field
-    //The FoodData drain loop is not ported, so this only moves when the saturation effect feeds the player
-    public float FoodSaturation { get; set; }
-
-    //FoodExhaustion accumulated exhaustion, maps to vanilla FoodData exhaustion
-    //The exhaustion to saturation/food conversion is not ported yet; the hunger effect still records its exhaustion here
-    public float FoodExhaustion { get; private set; }
-
-    //Eat applies food and saturation, maps to vanilla FoodData.eat
-    //Saturation is capped by the hunger level, matching the vanilla clamp
-    public void Eat(int food, float saturationModifier)
+    //FoodLevel hunger value, forwarded to FoodData; kept as a property for the client HUD and existing call sites
+    public int FoodLevel
     {
-        FoodLevel = Math.Min(20, FoodLevel + food);
-        FoodSaturation = Math.Min(FoodLevel, FoodSaturation + food * saturationModifier * 2.0f);
+        get => Food.GetFoodLevel();
+        set => Food.SetFoodLevel(value);
     }
 
+    //FoodSaturation saturation points, forwarded to FoodData
+    public float FoodSaturation
+    {
+        get => Food.GetSaturationLevel();
+        set => Food.SetSaturation(value);
+    }
+
+    //FoodExhaustion accumulated exhaustion, forwarded to FoodData
+    public float FoodExhaustion => Food.GetExhaustionLevel();
+
+    //Eat applies food and saturation, maps to vanilla FoodData.eat
+    public void Eat(int food, float saturationModifier) => Food.Eat(food, saturationModifier);
+
+    //Eat applies a food component, maps to vanilla Player.eat(FoodProperties)
+    public void Eat(FoodProperties foodProperties) => Food.Eat(foodProperties);
+
     //CauseFoodExhaustion adds exhaustion, maps to vanilla Player.causeFoodExhaustion
-    public void CauseFoodExhaustion(float amount) => FoodExhaustion += amount;
+    public void CauseFoodExhaustion(float amount) => Food.AddExhaustion(amount);
+
+    //AddAdditionalSaveData writes the hunger state alongside the living fields, maps to Player.addAdditionalSaveData
+    protected override void AddAdditionalSaveData(CompoundTag tag)
+    {
+        base.AddAdditionalSaveData(tag);
+        Food.AddAdditionalSaveData(tag);
+    }
+
+    //ReadAdditionalSaveData restores the hunger state, maps to Player.readAdditionalSaveData
+    protected override void ReadAdditionalSaveData(CompoundTag tag)
+    {
+        base.ReadAdditionalSaveData(tag);
+        Food.ReadAdditionalSaveData(tag);
+    }
 
     //AbsorptionHealth absorption health (golden apple etc.), default 0, used to render absorption hearts
     public float AbsorptionHealth { get; set; }
@@ -110,7 +134,11 @@ public class Player : LivingEntity
     public int GameMode { get; set; }
 
     //IsSpectator whether the player is in spectator mode, maps to vanilla Player.isSpectator
+    //IsSpectator whether the player is in spectator mode, derived from the game mode
     public override bool IsSpectator() => GameMode == NacreCraft.Game.World.Level.GameType.Spectator.Id;
+
+    //GetSoundSource player sounds play in the players category, maps to vanilla Player.getSoundSource
+    public override SoundSource GetSoundSource() => SoundSource.Players;
 
     //PreviewInventory hotbar preview data, hotbar 0-8, main inventory 9-35
     //Production fills the real inventory from network packets; this stays a client-side preview until then

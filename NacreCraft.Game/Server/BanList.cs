@@ -30,11 +30,14 @@ public sealed class BanList : StoredJsonList<BanEntry>
     }
 
     //Add writes a ban record and persists it; returns false when already on the list
-    public bool Add(GameProfile profile, string source, string reason)
+    public bool Add(GameProfile profile, string source, string reason) => Add(profile, source, reason, Forever);
+
+    //Add with an explicit expiry string, maps to the vanilla ban entry expires field
+    public bool Add(GameProfile profile, string source, string reason, string expires)
     {
         if (Find(profile) is not null) return false;
         AddEntry(new BanEntry(profile.Id, profile.Name, DateTimeOffset.UtcNow.ToString("o"),
-            source, Forever, reason));
+            source, expires, reason));
         return true;
     }
 

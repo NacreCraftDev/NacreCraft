@@ -5,6 +5,7 @@ using NacreCraft.Game.Util.Debug;
 using NacreCraft.Game.Server.Waypoints;
 using NacreCraft.Game.World.Effect;
 using NacreCraft.Game.World.Entity;
+using NacreCraft.Game.World.Food;
 using NacreCraft.Game.World.Inventory;
 using NacreCraft.Game.World.Items;
 using NacreCraft.Game.World.Level;
@@ -33,6 +34,11 @@ public sealed class ServerPlayer : Player
 {
     public GameProfile Profile { get; }
     public Connection Connection { get; }
+
+    //Server the owning server, assigned when the player enters the world
+    //Vanilla reaches it through level.getServer(); NC levels carry no server reference, so the player keeps the link the food and difficulty
+    //lookups need instead. Null for a detached player instance
+    public MinecraftServer? Server { get; internal set; }
 
     //Level the dimension this player is in, viewed as the concrete server level
     //The base holds it as a plain object because the registry layer cannot name the level types; this is the same storage
@@ -382,6 +388,23 @@ public sealed class ServerPlayer : Player
     //Teleports must go through its wait-for-client-ack flow; directly changing coordinates and sending packets would be pulled back by in-flight old position packets
     public ServerGamePacketListenerImpl? Listener { get; set; }
 
+    //TeleportTo moves the player and notifies the client, maps to vanilla ServerPlayer.teleportTo
+    //The listener flow is used when present; a detached player falls back to a direct position packet
+    protected override void TeleportTo(double x, double y, double z)
+    {
+        var target = new Vec3(x, y, z);
+        var relX = x - Position.X;
+        var relY = y - Position.Y;
+        var relZ = z - Position.Z;
+        SetPos(target, Yaw, Pitch);
+        if (Listener is { } listener)
+        {
+            listener.Teleport(target, Yaw, Pitch, relX, relY, relZ, Yaw, Pitch, 0);
+            return;
+        }
+        Connection.Send(new ClientboundPlayerPositionPacket(x, y, z, Yaw, Pitch, 0, 0));
+    }
+
     private long _keepAliveSentAt;
     private long _keepAliveId;
     private bool _keepAlivePending;
@@ -478,6 +501,11 @@ public sealed class ServerPlayer : Player
         TickCamera();
             //Mob effects decrement duration every tick; expired ones are removed automatically and synced to the client
         TickEffects();
+            //Hunger simulation: exhaustion drains saturation and food, high food regenerates health, an empty bar starves
+            //Maps to the foodData.tick call in the vanilla ServerPlayer.doTick body
+        Food.Tick(this);
+            //Peaceful slowly refills health, saturation and hunger, maps to ServerPlayer.tickRegeneration
+        TickPeacefulRegeneration();
             //Invulnerability frames decrement every tick, maps to invulnerableTime-- in vanilla LivingEntity.tick
         if (InvulnerableTime > 0) InvulnerableTime--;
             //A position change counts as active; the idle kick timer resets from it
@@ -503,6 +531,24 @@ public sealed class ServerPlayer : Player
             //A player's position is reported by the client, so there is no move of ours to hang the inside-block check on
             //and it runs from the tick instead; now that a player is an entity, the block gets the real entity, not just a box
         Level?.CheckInsideBlocks(this);
+    }
+
+    //TickPeacefulRegeneration refills health, saturation and hunger on peaceful, maps to ServerPlayer.tickRegeneration
+    //Every 20 ticks one health point and one saturation point return, every 10 ticks one hunger point returns while below full
+    private void TickPeacefulRegeneration()
+    {
+        if (Server is null) return;
+        var difficulty = Difficulty.ByName(Server.LevelData.DifficultyName) ?? Difficulty.Normal;
+        if (difficulty != Difficulty.Peaceful) return;
+        if (Level.GameRules?.GetBool(GameRules.NaturalHealthRegeneration) == false) return;
+        if (TickCount % 20 == 0)
+        {
+            if (Health < MaxHealth) Heal(1f);
+            if (Food.GetSaturationLevel() < FoodConstants.MaxSaturation)
+                Food.SetSaturation(Food.GetSaturationLevel() + 1f);
+        }
+        if (TickCount % 10 == 0 && Food.NeedsFood())
+            Food.SetFoodLevel(Food.GetFoodLevel() + 1);
     }
 
         //TickItemPickup checks drops underfoot and nearby and tries to pick them up

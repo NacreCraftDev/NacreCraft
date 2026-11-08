@@ -2,6 +2,12 @@
 
   <PropertyGroup>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!--Telemetry is compiled in both modes; without this switch the client hardcodes it off-->
+    <EnableTelemetry Condition="'$(EnableTelemetry)' == ''">false</EnableTelemetry>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(EnableTelemetry)' == 'true'">
+    <DefineConstants>$(DefineConstants);NC_TELEMETRY</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

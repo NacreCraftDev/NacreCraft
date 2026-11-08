@@ -34,6 +34,10 @@ public sealed class PropertiesConfig
     public int GetInt(string key, int defaultValue)
         => int.TryParse(GetOrDefault(key, string.Empty), NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : defaultValue;
 
+    //GetLong parses a long; returns defaultValue when absent or failed, used by max-tick-time and other millisecond values
+    public long GetLong(string key, long defaultValue)
+        => long.TryParse(GetOrDefault(key, string.Empty), NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : defaultValue;
+
     //GetBool parses a bool; returns defaultValue when absent or failed
     public bool GetBool(string key, bool defaultValue)
         => bool.TryParse(GetOrDefault(key, string.Empty), out var v) ? v : defaultValue;
@@ -65,6 +69,9 @@ public sealed class PropertiesConfig
 
     //SetInt writes an int field
     public void SetInt(string key, int value) => _values[key] = value.ToString(CultureInfo.InvariantCulture);
+
+    //SetLong writes a long field
+    public void SetLong(string key, long value) => _values[key] = value.ToString(CultureInfo.InvariantCulture);
 
     //SetBool writes a bool field
     public void SetBool(string key, bool value) => _values[key] = value ? "true" : "false";

@@ -71,6 +71,73 @@ public abstract class LivingEntity : NacreCraft.Registry.Entity, IEquipmentHolde
     public virtual bool HurtServer(NacreCraft.Storage.ServerLevel level, DamageSource source, float amount)
         => Hurt(amount, source);
 
+    //RandomTeleport moves the entity to a random safe spot near the requested position, maps to vanilla LivingEntity.randomTeleport
+    //The column is lowered until it lands on a non-air block, then the destination must pass the collision and liquid checks; a failed attempt returns to the old position
+    //The teleport itself goes through TeleportTo so a server player can sync the client; the particle event is omitted because entity event broadcasting is not wired here
+    public virtual bool RandomTeleport(double x, double y, double z, bool showParticles)
+    {
+        if (Level is not NacreCraft.Storage.ServerLevel level) return false;
+        var oldX = Pos.X;
+        var oldY = Pos.Y;
+        var oldZ = Pos.Z;
+        var targetY = y;
+        var pos = new BlockPos((int)Math.Floor(x), (int)Math.Floor(targetY), (int)Math.Floor(z));
+        var ok = false;
+        if (level.GetLoadedChunk(new NacreCraft.Primitives.ChunkPos(pos.X >> 4, pos.Z >> 4)) is not null)
+        {
+            var landed = false;
+            while (!landed && pos.Y > level.MinBuildHeight)
+            {
+                var below = new BlockPos(pos.X, pos.Y - 1, pos.Z);
+                if (level.GetBlockState(below) is { IsAir: false })
+                {
+                    landed = true;
+                }
+                else
+                {
+                    targetY -= 1;
+                    pos = below;
+                }
+            }
+            if (landed)
+            {
+                TeleportTo(x, targetY, z);
+                NacreCraft.Game.World.Phys.Collision.CollisionGetter collision =
+                    new NacreCraft.Game.World.Phys.Collision.LevelCollisionGetter(
+                        level, level.MinBuildHeight >> 4, (level.MaxBuildHeight - level.MinBuildHeight) >> 4);
+                if (collision.NoCollision(this, BoundingBox) && !ContainsAnyLiquid(level, BoundingBox)) ok = true;
+            }
+        }
+        if (!ok)
+        {
+            TeleportTo(oldX, oldY, oldZ);
+            return false;
+        }
+        //showParticles only controls the vanilla entity event 46, which has no broadcast path in this project yet
+        _ = showParticles;
+        return true;
+    }
+
+    //TeleportTo moves the entity to the given position and heading, maps to vanilla Entity.teleportTo
+    //The base implementation only writes the position; server players override it to run the wait-for-client-ack flow
+    protected virtual void TeleportTo(double x, double y, double z) => SetPos(new Vec3(x, y, z), YRot, XRot);
+
+    //ContainsAnyLiquid whether any fluid occupies the given box, maps to vanilla Level.containsAnyLiquid
+    private static bool ContainsAnyLiquid(NacreCraft.Storage.ServerLevel level, AABB box)
+    {
+        var minX = (int)Math.Floor(box.Min.X);
+        var minY = (int)Math.Floor(box.Min.Y);
+        var minZ = (int)Math.Floor(box.Min.Z);
+        var maxX = (int)Math.Floor(box.Max.X);
+        var maxY = (int)Math.Floor(box.Max.Y);
+        var maxZ = (int)Math.Floor(box.Max.Z);
+        for (var x = minX; x <= maxX; x++)
+        for (var y = minY; y <= maxY; y++)
+        for (var z = minZ; z <= maxZ; z++)
+            if (!level.GetFluidState(new BlockPos(x, y, z)).IsEmpty) return true;
+        return false;
+    }
+
     //Equipment the equipment slots, maps to vanilla LivingEntity.createEquipment
     //Mob and Player each held their own copy before the LivingEntity layer existed
     public EntityEquipment Equipment { get; } = new();

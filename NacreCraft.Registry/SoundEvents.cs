@@ -135,6 +135,12 @@ public static class SoundEvents
     //Silverfish hurt, played when the infested effect spawns a silverfish, maps to vanilla SILVERFISH_HURT
     public static readonly SoundEvent SilverfishHurt = Create("entity.silverfish.hurt");
 
+    //Chorus fruit teleport, played by the teleport_randomly consume effect, maps to vanilla CHORUS_FRUIT_TELEPORT
+    public static readonly SoundEvent ChorusFruitTeleport = Create("item.chorus_fruit.teleport");
+
+    //Fox teleport, the fox branch of the teleport_randomly consume effect, maps to vanilla FOX_TELEPORT
+    public static readonly SoundEvent FoxTeleport = Create("entity.fox.teleport");
+
     //Create builds an event under the default namespace from the vanilla sound path
     private static SoundEvent Create(string path) => new(Identifier.WithDefaultNamespace(path));
 }

@@ -6,6 +6,7 @@ using NacreCraft.DataFixer;
 using NacreCraft.Game.Commands;
 using NacreCraft.Game.DFU;
 using NacreCraft.Game.Network;
+using NacreCraft.Game.Server.Notifications;
 using NacreCraft.Game.Server.Rcon;
 using NacreCraft.Game.Server.Rcon.Thread;
 using NacreCraft.Game.Server.Progress;
@@ -35,6 +36,9 @@ using NacreCraft.Util.Random;
 using NacreCraft.Util.Thread;
 //The registry and level definitions each have a DimensionType, the former is a marker interface, this fixes the reference to the real Game-layer type
 using GameDimensionType = NacreCraft.Game.World.Level.LevelGen.Dimension.DimensionType;
+//Fully qualified aliases: importing the whole jsonrpc namespace would make Connection ambiguous with the network Connection
+using ManagementServerType = NacreCraft.Game.Server.JsonRpc.ManagementServer;
+using JsonRpcFactory = NacreCraft.Game.Server.JsonRpc.JsonRpc;
 
 namespace NacreCraft.Game.Server;
 
@@ -114,6 +118,14 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
     private RconThread? _rconThread;
     //_queryThreadGs4 the GS4 query thread, non-null only with enable-query on and a valid port
     private QueryThreadGs4? _queryThreadGs4;
+    //_notifications the notification bus the management server and its subscribers listen on, maps to vanilla notificationManager
+    private readonly NotificationManager _notifications;
+    //_activityMonitor rate-limits the "server activity" notification, maps to vanilla activityMonitor
+    private readonly ServerActivityMonitor _activityMonitor;
+    //_watchdog kills the process when a tick exceeds max-tick-time, maps to vanilla serverWatchdog
+    private ServerWatchdog? _watchdog;
+    //_jsonRpc the management server listener, non-null only with management-server-enabled on, maps to vanilla jsonRpcServer
+    private ManagementServerType? _jsonRpc;
     //_levelLoadListener reports level loading progress, maps to vanilla MinecraftServer.levelLoadListener
     private readonly LevelLoadListener _levelLoadListener = LoggingLevelLoadListener.ForDedicatedServer();
 
@@ -336,6 +348,27 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
     //Taken from white-list in server.properties at construction and changed later by the whitelist on/off command
     public override bool IsWhiteListEnabled { get; set; }
 
+    //MaxTickLength the watchdog threshold, taken from max-tick-time, maps to vanilla DedicatedServer.getMaxTickLength
+    public override long MaxTickLength => _settings.MaxTickTime;
+
+    //Notifications the notification bus, maps to vanilla notificationManager
+    public override NotificationManager Notifications => _notifications;
+
+    //ActivityMonitor the rate-limited activity notifier, maps to vanilla activityMonitor
+    public override ServerActivityMonitor ActivityMonitor => _activityMonitor;
+
+    //ApplySettings propagates a rewritten server.properties value to the running subsystems
+    //Maps to the MutableValue listeners of vanilla DedicatedServer; the NC settings object mutates in place, so this is called after each write
+    public override void ApplySettings()
+    {
+        _playerList.MaxPlayers = Math.Max(1, _settings.MaxPlayers);
+        _playerList.SetViewDistance(_settings.ViewDistance);
+        _playerList.SetSimulationDistance(_settings.SimulationDistance);
+        //The chunk source radius decides which chunks tick; while the client-facing value only changes the packet
+        foreach (var level in _levels.Values)
+            level.ChunkSource.SimulationDistance = Math.Clamp(_settings.SimulationDistance, 3, 32);
+    }
+
     //GameRules the game rule save, read and written by the /gamerule command
     public override GameRuleMap GameRules { get; }
 
@@ -405,7 +438,11 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
             chunkGenerator, random, worldSeed ?? 0);
         _levels[LevelKeys.OVERWORLD] = _overworld;
         RegisterLevel(LevelKeys.OVERWORLD, _overworld);
-        _playerList = new PlayerList(this, settings.MaxPlayers);
+        //The notification bus is installed before the player list so a join during startup can already notify, maps to vanilla MinecraftServer construction
+        _notifications = new NotificationManager();
+        _notifications.SetServer(this);
+        _activityMonitor = new ServerActivityMonitor(_notifications, _settings.PauseWhenEmptySeconds);
+        _playerList = new DedicatedPlayerList(this, settings.MaxPlayers);
         _debugSubscribers = new ServerDebugSubscribers(this);
         //The tick time chart samples every TpsDebugDimensions entry, maps to vanilla DedicatedServer's RemoteSampleLogger
         _tickTimeLogger = new RemoteSampleLogger(
@@ -564,6 +601,13 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
         InitMark("spawn-search");
         StartNetwork();
         InitMark("network");
+        //The watchdog guards the loop from here on, maps to the ServerWatchdog thread started in vanilla initServer
+        _watchdog = new ServerWatchdog(this);
+        _watchdog.Start();
+        //The management listener starts before the world is declared ready, so an RPC client can already poll the startup state
+        //When disabled the factory returns null and nothing is created
+        _jsonRpc = JsonRpcFactory.Create(_settings, _notifications);
+        InitMark("watchdog+management");
         //The function library is loaded by data pack, maps to the function library reload section of vanilla reloadableServerResources.loadResources
         //Once attached to the resource listener list, /reload carries the function library along
         _rsr?.AttachFunctionLibrary(Functions.Library);
@@ -617,6 +661,8 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
         InitMark("initial-chunks");
         //The 3x3 strong load around the spawn only exists because PrepareSpawnTask adds a PLAYER_SPAWN ticket on player login, see PrepareSpawnChunks
         Log.Info($"Done ({StartWatch.Elapsed.TotalSeconds.ToString("0.000", CultureInfo.InvariantCulture)}s)! NacreCraft server ready");
+        //The management subscribers learn the startup finished, maps to notificationManager.serverStarted right before runServer starts ticking
+        _notifications.ServerStarted();
     }
 
     //SearchInitialSpawn new world spawn search, maps to vanilla MinecraftServer.setInitialSpawn
@@ -921,6 +967,8 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
     //5. periodic autosave
     protected override void Tick()
     {
+        //Rate-limited server activity notification, maps to the activityMonitor tick at the top of vanilla tickServer
+        _activityMonitor.Tick();
         //Rebuild the debug subscription sets before any level syncs this frame, maps to the debugSubscribers section of vanilla tickChildren
         _debugSubscribers.Tick();
         //Each level then pushes the values its subscribers asked for, maps to the debugSynchronizers tick inside vanilla ServerLevel.tick
@@ -1084,6 +1132,9 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
                     }
                     _autoSaveTask = Task.WhenAll(writes);
                     Log.Info($"Autosave triggered at tick {TickCount}, {total} chunks handed to background write");
+                    //The subscriber pair brackets the synchronous part of the save; the background chunk writes finish after
+                    //the completion notification, which matches the async write model NC uses instead of vanilla's synchronous flush
+                    _notifications.ServerSaveStarted();
                 }
                 catch (Exception e)
                 {
@@ -1099,6 +1150,7 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
             _dataStorage.ScheduleSave();
             //Online player data is written too, maps to saveAllPlayerData in vanilla saveEverything
             SaveAllPlayerData();
+            if (_autoSaveTask is not null) _notifications.ServerSaveCompleted();
         }
         TickStageProfiler.Record(TickStage.AutoSave, stageStart);
         //Refresh whether tick time sampling is wanted for the next frame, maps to vanilla endMetricsRecordingTick
@@ -1138,6 +1190,8 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
     //It also goes through the world gate: the command may come from the GUI thread and taking a snapshot concurrently with the main loop stores half-finished state
     public override void SaveAllNow()
     {
+        //A manual save emits the same started/completed pair as the autosave, maps to notificationManager saveStarted/saveCompleted
+        _notifications.ServerSaveStarted();
         SaveLevelData();
         _dataStorage.ScheduleSave();
         SaveAllPlayerData();
@@ -1146,6 +1200,7 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
             foreach (var level in _levels.Values)
                 level.SaveAllChunksAsync().GetAwaiter().GetResult();
         }
+        _notifications.ServerSaveCompleted();
     }
 
     //KickIdlePlayers kicks players idle for more than the given minutes, maps to the idle timeout branch of vanilla MinecraftServer.tickChildren
@@ -1165,6 +1220,12 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
     public override void Stop()
     {
         _acceptor?.Stop();
+        //The watchdog must stop before the flush, otherwise a slow shutdown save would be reported as a hung tick
+        _watchdog?.Stop();
+        //The management listener closes before saving so no RPC call sees a half-flushed world
+        _jsonRpc?.Stop(true);
+        //Subscribers hear about the shutdown before the world is saved, maps to notificationManager.serverShuttingDown at the start of vanilla stopServer
+        _notifications.ServerShuttingDown();
         //First stop the RCON and query threads, maps to the two stops at the start of vanilla stopServer
         //The threads may be blocked on a synchronous command wait, the join+interrupt in Stop releases them
         _rconThread?.Stop();
@@ -1226,6 +1287,9 @@ public sealed class DedicatedServer : MinecraftServer, ServerHandshakeContext, S
     public void Dispose()
     {
         if (_disposed) return;
+        //A Dispose without a prior Stop still has to release the watchdog loop and the management listener
+        _watchdog?.Stop();
+        _jsonRpc?.Stop(false);
         _statistics?.Dispose();
         _acceptor?.Dispose();
         _dataStorage.Dispose();

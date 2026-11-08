@@ -233,6 +233,30 @@ public abstract class MinecraftServer
     //TickCount accumulated Tick count, for diagnostics
     public long TickCount => _tickCount;
 
+    //NextTickTimeMillis the target start time of the next tick in the tick clock
+    //Exposed so the watchdog can measure how far behind the main loop is, maps to vanilla getNextTickTime
+    public long NextTickTimeMillis => Volatile.Read(ref _nextTickTimeMillis);
+
+    //TickClockMillis the monotonic tick clock, the same timeline NextTickTimeMillis lives on
+    public long TickClockMillis => _tickClock.ElapsedMilliseconds;
+
+    //MaxTickLength the longest a single tick may take before the watchdog treats the server as crashed, in milliseconds
+    //Maps to vanilla getMaxTickLength; the dedicated server overrides it from max-tick-time
+    public virtual long MaxTickLength => 60_000;
+
+    //Notifications the notification bus, null until a subclass installs one
+    //Maps to vanilla MinecraftServer.notificationManager, which only the dedicated server provides
+    public virtual Notifications.NotificationManager? Notifications => null;
+
+    //ActivityMonitor rate-limits the activity notification, null when notifications are not installed
+    public virtual Notifications.ServerActivityMonitor? ActivityMonitor => null;
+
+    //ApplySettings propagates a settings change to running subsystems, called after a setting is rewritten
+    //Vanilla uses MutableValue listeners; NC calls this hook from the settings write paths instead
+    public virtual void ApplySettings()
+    {
+    }
+
     //ServerThread the main loop thread, for diagnostics
     public Thread ServerThread => _serverThread;
 

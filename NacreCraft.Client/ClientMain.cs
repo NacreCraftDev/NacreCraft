@@ -5,6 +5,8 @@ using NacreCraft.Game.Bootstrap;
 using NacreCraft.Client;
 using NacreCraft.Client.Language;
 using NacreCraft.Client.Profiling;
+using NacreCraft.Client.Telemetry;
+using NacreCraft.Client.Telemetry.Events;
 using NacreCraft.Game.World.Items;
 using NacreCraft.Game.World.Level.LevelGen;
 using NacreCraft.Game.World.Level.LevelGen.Dimension;
@@ -80,6 +82,8 @@ public static class ClientMain
         //The role segment in the crash report file name; the handler shared with the kernel uses it to tell client from server
         CrashHandler.Role = "client";
         Log.Info("NacreCraft client starting");
+        GameLoadTimesEvent.Instance.BeginStep(TelemetryProperty.LoadTimeTotalTimeMs);
+        GameLoadTimesEvent.Instance.BeginStep(TelemetryProperty.LoadTimePreWindowMs);
 
         //1. Create GameOptions and subscribe to the kernel's unhandled-argument event
         //   Must subscribe before NacreCraftKernel.Initialize to receive the event
@@ -228,6 +232,9 @@ public static class ClientMain
         // minecraft.Run blocks the current thread until minecraft.Stop is called
         using var minecraft = new MinecraftClient(gameConfig, gpuApp, rsr: rsr, resourceManager: resourceManager,
             language: clientLanguage, packRepository: packRepository);
+        GameLoadTimesEvent.Instance.EndStep(TelemetryProperty.LoadTimePreWindowMs);
+        GameLoadTimesEvent.Instance.EndStep(TelemetryProperty.LoadTimeTotalTimeMs);
+        GameLoadTimesEvent.Instance.Send(minecraft.TelemetryManager.OutsideSessionSender);
 
         //Register Ctrl+C to trigger a graceful shutdown
         //Replaces the kernel's early handler, which only prints ServerStop and exits

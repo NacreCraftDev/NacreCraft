@@ -164,6 +164,10 @@ public abstract class Entity : ITrackedEntity, SyncedDataHolder, EntityAccess
     //Level placeholder reference to the entity's world, to be replaced with a strong type once the Level subsystem is ready
     public object? Level { get; set; }
 
+    //GetSoundSource the sound category this entity's sounds belong to, maps to vanilla Entity.getSoundSource
+    //Neutral by default; the player overrides it with PLAYERS
+    public virtual SoundSource GetSoundSource() => SoundSource.Neutral;
+
     //CollisionShapes collision shape query within the test area, injected by the level; when not injected there is no collision and only position advances
     //Vanilla has three pieces here: entity collision, world border and block collision on the level; the level supplies all of them at once
     public Func<AABB, IReadOnlyList<VoxelShape>>? CollisionShapes { get; set; }

@@ -34,11 +34,28 @@ public sealed class OpList
     //IsOp whether it is on the list
     public bool IsOp(GameProfile profile) => Find(profile) is not null;
 
+    //CanBypassPlayerLimit whether the operator may join a full server, maps to vanilla OpList.canBypassPlayerLimit
+    public bool CanBypassPlayerLimit(GameProfile profile) => Find(profile)?.BypassesPlayerLimit ?? false;
+
+    //Entries a snapshot of the operator records, used by the management RPC
+    public IReadOnlyList<OpEntry> Entries => _byName.Values.ToList();
+
+    //Clear removes every record and persists the empty list
+    public void Clear()
+    {
+        _byId.Clear();
+        _byName.Clear();
+        Save();
+    }
+
     //Add writes or updates the list and persists it; returns whether an entry was added
-    public bool Add(GameProfile profile, int level)
+    public bool Add(GameProfile profile, int level) => Add(profile, level, false);
+
+    //Add with the bypass flag, maps to the vanilla op entry fields
+    public bool Add(GameProfile profile, int level, bool bypassesPlayerLimit)
     {
         var added = Find(profile) is null;
-        var entry = new OpEntry(profile.Id, profile.Name, Math.Clamp(level, 0, 4), false);
+        var entry = new OpEntry(profile.Id, profile.Name, Math.Clamp(level, 0, 4), bypassesPlayerLimit);
         Index(entry);
         Save();
         return added;
@@ -151,5 +168,5 @@ public sealed class OpList
     }
 
     //OpEntry a single operator record
-    private sealed record OpEntry(Guid Id, string Name, int Level, bool BypassesPlayerLimit);
+    public sealed record OpEntry(Guid Id, string Name, int Level, bool BypassesPlayerLimit);
 }

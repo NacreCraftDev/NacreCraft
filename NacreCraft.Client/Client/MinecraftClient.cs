@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using NacreCraft.Client.Level;
 using NacreCraft.Client.Player;
 using NacreCraft.Client.Language;
+using NacreCraft.Client.Telemetry;
+using NacreCraft.Game.World.Level;
 using NacreCraft.Client.Render;
 using NacreCraft.Client.Render.Atlas;
 using NacreCraft.Client.Render.Entity;
@@ -69,6 +71,15 @@ public sealed class MinecraftClient : IDisposable
 
     private volatile bool _running;
     private long _frameCount;
+    //Frame timing for the telemetry samplers: last frame timestamp, rolling one-second FPS window, last frame duration
+    private long _lastFrameTimestamp;
+    private long _fpsWindowStartTimestamp;
+    private int _fpsWindowFrames;
+    private int _currentFps;
+    private long _lastFrameTimeNs;
+    //Telemetry manager compiled in both modes; TelemetryBuild.Enabled hardcodes the sender off by default
+    private readonly ClientTelemetryManager _telemetryManager;
+    private WorldSessionTelemetryManager? _worldTelemetry;
     //_lastPlayerTickCount last world tick the local player physics ran on, so physics follows the 20 Hz world tick rather than the frame rate
     private long _lastPlayerTickCount;
     private readonly CancellationTokenSource _shutdownCts = new();
@@ -154,8 +165,10 @@ public sealed class MinecraftClient : IDisposable
         if (connection is not null) Player.Connection = connection;
         _rsr = rsr;
         _resourceManager = resourceManager;
-        _language = language;
-        _packRepository = packRepository;
+            _language = language;
+            _packRepository = packRepository;
+            _telemetryManager = new ClientTelemetryManager(AppContext.BaseDirectory,
+                () => true, () => TelemetryOptInExtra);
         //With a GpuApp, create a ScreenManager to own the window control tree
         _screens = gpuApp is not null ? new ScreenManager(this, gpuApp.Window) : null;
         if (gpuApp is not null && _screens is not null)
@@ -268,6 +281,10 @@ public sealed class MinecraftClient : IDisposable
                 //The player starts sending movement packets only once the play connection exists
                 Player.Connection = conn;
                 Player.ResetAck();
+                //A new connection starts a new world telemetry session; the old one is closed first
+                _worldTelemetry?.OnDisconnect();
+                _worldTelemetry = _telemetryManager.CreateWorldSessionManager(false, null, null, Guid.NewGuid());
+                _worldTelemetry.OnPlayerInfoReceived(GameType.ById(Player.GameMode) ?? GameType.Survival, false);
                 if (conn.Listener is ClientGamePacketListenerImpl listener)
                 {
                     //The container screen is switched in a network callback; the network layer does not know the GUI layer, and the row count is decided by the menu type
@@ -294,6 +311,18 @@ public sealed class MinecraftClient : IDisposable
 
     //FrameCount accumulated frame count, for diagnostics
     public long FrameCount => _frameCount;
+
+    //TelemetryManager device-level telemetry, disabled at compile time in the default build
+    public ClientTelemetryManager TelemetryManager => _telemetryManager;
+
+    //TelemetryOptInExtra extra telemetry switch, mirrors the vanilla option; no settings UI yet
+    public bool TelemetryOptInExtra { get; set; }
+
+    //GetFps frames per second over the last one-second window
+    public int GetFps() => _currentFps;
+
+    //GetFrameTimeNs duration of the previous client tick in nanoseconds
+    public long GetFrameTimeNs() => _lastFrameTimeNs;
 
     //SleepBudgetMillis per-frame sleep budget; tests set 0 to speed up, production uses the 16ms default
     //Only effective in Headless mode; window-driven mode controls frame rate via vsync
@@ -478,7 +507,27 @@ public sealed class MinecraftClient : IDisposable
         //Sky brightness currently has no client time source, constant noon; it will be computed from time once time sync is added
         _lightTexture?.Update(1.0f);
         UpdateCamera();
+        TrackFrameTiming();
+        _worldTelemetry?.Tick();
         _frameCount++;
+    }
+
+    //TrackFrameTiming keeps the rolling FPS window and the last frame duration used by the telemetry samplers
+    private void TrackFrameTiming()
+    {
+        var now = Stopwatch.GetTimestamp();
+        if (_lastFrameTimestamp != 0)
+            _lastFrameTimeNs = (long)((now - _lastFrameTimestamp) * (1_000_000_000.0 / Stopwatch.Frequency));
+        _lastFrameTimestamp = now;
+
+        if (_fpsWindowStartTimestamp == 0) _fpsWindowStartTimestamp = now;
+        _fpsWindowFrames++;
+        var elapsed = now - _fpsWindowStartTimestamp;
+        if (elapsed < Stopwatch.Frequency) return;
+
+        _currentFps = (int)(_fpsWindowFrames * (double)Stopwatch.Frequency / elapsed);
+        _fpsWindowFrames = 0;
+        _fpsWindowStartTimestamp = now;
     }
 
     //TickLocalPlayer advances the local player physics once per world tick
@@ -552,8 +601,11 @@ public sealed class MinecraftClient : IDisposable
             _gpuApp.RawMouseUp -= _screens.HandleRawMouseUp;
             _gpuApp.RawMouseMove -= _screens.HandleRawMouseMove;
         }
-        _shutdownCts.Dispose();
-        _worldRenderer?.Dispose();
+            _worldTelemetry?.OnDisconnect();
+            _worldTelemetry = null;
+            _telemetryManager.Dispose();
+            _shutdownCts.Dispose();
+            _worldRenderer?.Dispose();
         _worldDispatcher?.Dispose();
         _connection?.Dispose();
         _gpuApp?.Dispose();
