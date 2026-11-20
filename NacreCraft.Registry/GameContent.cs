@@ -9,6 +9,13 @@ namespace NacreCraft.Registry;
 //DecoratedPotPattern decorated pot pattern, a single asset id, maps to the data driven shard pattern table
 public sealed record DecoratedPotPattern(Identifier AssetId);
 
+//EquipmentAsset equipment asset marker, maps to net.minecraft.world.item.equipment.EquipmentAsset
+//Vanilla keeps it empty: an equipment asset id only names a client model/texture group, the data lives in the asset pack
+public sealed class EquipmentAsset
+{
+    public override string ToString() => "EquipmentAsset";
+}
+
 //JukeboxSong jukebox song, maps to net.minecraft.world.item.JukeboxSong
 //The sound event is kept by registry id instead of a resolved reference: the sound event table is filled by code and a
 //song must still decode when the entry it names is not registered yet

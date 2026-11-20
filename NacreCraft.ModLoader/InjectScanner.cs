@@ -7,12 +7,22 @@ namespace NacreCraft.ModLoader;
 //This follows the same path as the manifest, so annotation rules and manifest rules are indistinguishable at the assembly stage
 internal static class InjectScanner
 {
-    //InjectAttributeName: the type full name used to recognize the annotation
-    //Compared by string rather than resolving the type; resolving would require NacreCraft.ModApi to be present, which falls back to loading
-    private const string InjectAttributeName = "NacreCraft.ModApi.Extension.InjectAttribute";
+    //InjectAttributeNames: the type full names recognized as the Inject annotation
+    //Compared by string rather than resolving the type; resolving would fall back to loading an assembly
+    //The ModLoader spelling is the contract home, the ModApi spelling the legacy home; both stay recognized
+    //until the annotation migration completes
+    private static readonly string[] InjectAttributeNames =
+    [
+        "NacreCraft.ModLoader.Api.Extension.InjectAttribute",
+        "NacreCraft.ModApi.Extension.InjectAttribute",
+    ];
 
-    //MixinAttributeName: the type full name used to recognize the mixin annotation
-    private const string MixinAttributeName = "NacreCraft.ModApi.Extension.MixinAttribute";
+    //MixinAttributeNames: the type full names recognized as the Mixin annotation
+    private static readonly string[] MixinAttributeNames =
+    [
+        "NacreCraft.ModLoader.Api.Extension.MixinAttribute",
+        "NacreCraft.ModApi.Extension.MixinAttribute",
+    ];
 
     //SystemTypeName: the type name of System.Type
     //The System.Type reference in the metadata and GetSystemType must return the same value, otherwise the decoder cannot recognize typeof arguments
@@ -75,7 +85,7 @@ internal static class InjectScanner
         List<string> undecodable)
     {
         var attribute = reader.GetCustomAttribute(handle);
-        if (AttributeTypeName(reader, attribute) != MixinAttributeName)
+        if (!MixinAttributeNames.Contains(AttributeTypeName(reader, attribute)))
             return null;
 
         CustomAttributeValue<string> value;
@@ -128,7 +138,7 @@ internal static class InjectScanner
         List<string> undecodable)
     {
         var attribute = reader.GetCustomAttribute(handle);
-        if (AttributeTypeName(reader, attribute) != InjectAttributeName)
+        if (!InjectAttributeNames.Contains(AttributeTypeName(reader, attribute)))
             return null;
 
         CustomAttributeValue<string> value;

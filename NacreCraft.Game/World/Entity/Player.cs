@@ -1,3 +1,4 @@
+using NacreCraft.Game.Network.Protocol.Game;
 using NacreCraft.Game.World.Food;
 using NacreCraft.Game.World.Items;
 using NacreCraft.Nbt;
@@ -104,6 +105,15 @@ public class Player : LivingEntity
     //CauseFoodExhaustion adds exhaustion, maps to vanilla Player.causeFoodExhaustion
     public void CauseFoodExhaustion(float amount) => Food.AddExhaustion(amount);
 
+    //GetItemInHand the stack in the given hand, maps to vanilla getItemInHand
+    //The hand maps to the main-hand/offhand equipment slots
+    public ItemStack GetItemInHand(InteractionHand hand)
+        => hand == InteractionHand.MainHand ? MainHandItem : OffhandItem;
+
+    //SetItemInHand writes the stack in the given hand, maps to vanilla setItemInHand
+    public void SetItemInHand(InteractionHand hand, ItemStack stack)
+        => SetItemSlot(hand == InteractionHand.MainHand ? EquipmentSlot.MAINHAND : EquipmentSlot.OFFHAND, stack);
+
     //AddAdditionalSaveData writes the hunger state alongside the living fields, maps to Player.addAdditionalSaveData
     protected override void AddAdditionalSaveData(CompoundTag tag)
     {
@@ -144,8 +154,23 @@ public class Player : LivingEntity
     //Production fills the real inventory from network packets; this stays a client-side preview until then
     public PreviewInventory PreviewInventory { get; } = new();
 
+    //Inventory the real 36-slot inventory plus the equipment view, maps to vanilla Player.inventory
+    public Inventory Inventory { get; }
+
+    //Abilities flight/build flags and speeds, maps to vanilla Player.abilities
+    public Abilities Abilities { get; } = new();
+
+    //Equipment overrides the living entity equipment so the main hand stays the selected hotbar slot, maps to vanilla createEquipment
+    private PlayerEquipment? _equipment;
+    public override EntityEquipment Equipment => _equipment ??= new PlayerEquipment(this);
+
+    //HasInfiniteMaterials whether the player has creative flight/build abilities, maps to vanilla hasInfiniteMaterials
+    public bool HasInfiniteMaterials() => GameMode == NacreCraft.Game.World.Level.GameType.Creative.Id;
+
     public Player()
     {
+        //The inventory and the equipment view share the same main-hand slot
+        Inventory = new Inventory(this, Equipment);
         //The player attribute map is taken by type, maps to vanilla Player.createAttributes
         SetAttributes(new AttributeMap(DefaultAttributes.GetSupplier(EntityTypes.PLAYER) ?? AttributeSupplier.Empty));
         //The player stands slightly above the origin by default

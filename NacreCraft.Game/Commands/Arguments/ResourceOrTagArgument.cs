@@ -8,7 +8,7 @@ namespace NacreCraft.Game.Commands.Arguments;
 
 //ResourceOrTagArgument registry element or tag, maps to vanilla net.minecraft.commands.arguments.ResourceOrTagArgument
 //A # prefix selects a tag set, otherwise a single holder is resolved from the registry
-public sealed class ResourceOrTagArgument<T> : ArgumentType<ResourceOrTagArgument<T>.Result> where T : class
+public sealed class ResourceOrTagArgument<T> : ArgumentType<ResourceOrTagArgument<T>.Result>, IRegistryKeyedArgument where T : class
 {
     public static readonly Dynamic2CommandExceptionType ErrorUnknownElement =
         new((value, registry) => new TranslatableMessage("argument.resource.not_found", value, registry));
@@ -16,6 +16,8 @@ public sealed class ResourceOrTagArgument<T> : ArgumentType<ResourceOrTagArgumen
     private readonly Registry<T> _registry;
 
     public ResourceOrTagArgument(Registry<T> registry) => _registry = registry;
+
+    public Identifier RegistryIdentifier => _registry.Key.Identifier;
 
     public Result Parse(StringReader reader)
     {

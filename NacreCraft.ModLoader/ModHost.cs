@@ -16,7 +16,7 @@ public static class ModHost
     {
         Name = RuntimeModId,
         DisplayName = ".NET Runtime",
-        Version = Environment.Version.ToString(3),
+        Version = System.Environment.Version.ToString(3),
         Description = ".NET is a cross-platform runtime for cloud, mobile, desktop, and IoT apps.",
         License = "MIT",
         Contact = new ModContact { Homepage = "https://github.com/dotnet/runtime" },
@@ -34,12 +34,28 @@ public static class ModHost
     //ModsFolder: the mods directory, an empty string when unbound
     public static string ModsFolder { get; private set; } = string.Empty;
 
-    //Bind: registers at the end of bootstrap
-    public static void Bind(ModManager manager, string modsFolder)
+    //Environment: the side this process bootstrapped as
+    public static ModEnvironment Environment { get; private set; } = ModEnvironment.Both;
+
+    //IsDevelopmentEnvironment: whether the launch carried --debug, the same spelling the launcher declares
+    public static bool IsDevelopmentEnvironment { get; private set; }
+
+    //Bind: registers right after the dependency solve, before any mod entrypoint runs,
+    //so NcLoader answers during preLaunch and main instead of only after the whole load
+    public static void Bind(ModManager manager, string modsFolder, ModEnvironment environment, bool development)
     {
         Manager = manager;
         ModsFolder = modsFolder;
+        Environment = environment;
+        IsDevelopmentEnvironment = development;
     }
+
+    //Containers: the mod-facing read-only container views; the fake runtime entry is host UI sugar and stays out of here
+    public static IReadOnlyList<NacreCraft.ModLoader.Api.IModContainer> Containers
+        => Manager?.GetContainers() ?? Array.Empty<NacreCraft.ModLoader.Api.IModContainer>();
+
+    //FindContainer: one mod-facing container view, null when the id is not tracked
+    public static NacreCraft.ModLoader.Api.IModContainer? FindContainer(string name) => Manager?.GetContainer(name);
 
     //LoadedMods: mods that finished loading
     public static IReadOnlyList<ModInfo> LoadedMods => Merge(Manager?.GetLoadedMods());

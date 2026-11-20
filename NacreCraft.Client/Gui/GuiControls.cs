@@ -225,18 +225,60 @@ public sealed class GuiPanel : GuiContainer
 public sealed class GuiTextBox : GuiControl
 {
     private readonly StringBuilder _text = new();
-    private int _caretIndex;
-    //_selectionAnchor selection anchor; -1 or equal to _caretIndex means no selection
-    //Selection range min(anchor,caret)..max(anchor,caret)
-    private int _selectionAnchor = -1;
+    //_editing owns caret/selection/clipboard editing; the renderer reads its positions through the properties below
+    private readonly NacreCraft.Client.Gui.Font.TextFieldHelper _editing;
+    //_cursorVisible blinking caret state, reset on every edit or caret move
     private bool _cursorVisible = true;
     private double _blinkAccumulator;
     private bool _isFocused;
     private bool _isDragging;
+
+    public GuiTextBox()
+    {
+        _editing = new NacreCraft.Client.Gui.Font.TextFieldHelper(
+            () => _text.ToString(),
+            SetTextFromEditing,
+            () => ClipboardText,
+            text => ClipboardText = text,
+            _ => true);
+    }
+
+    //_caretIndex caret position, backed by TextFieldHelper
+    private int _caretIndex
+    {
+        get => _editing.GetCursorPos();
+        set => _editing.SetCursorPos(value, true);
+    }
+
+    //_selectionAnchor selection anchor; -1 or equal to the caret means no selection
+    private int _selectionAnchor
+    {
+        get => _editing.IsSelecting() ? _editing.GetSelectionPos() : -1;
+        set
+        {
+            if (value < 0) _editing.SetSelectionPos(_editing.GetCursorPos());
+            else _editing.SetSelectionPos(value);
+        }
+    }
+
+    private void SetTextFromEditing(string value)
+    {
+        _text.Clear();
+        _text.Append(value);
+        MarkDirty();
+        TextChanged?.Invoke(this, EventArgs.Empty);
+    }
     //_charX[i] X coordinate before the i-th character; with caret=i the caret is drawn at _charX[i]
     private readonly List<int> _charX = new();
     //Clipboard in-memory clipboard shared across TextBox instances
     private static string _clipboard = string.Empty;
+
+    //ClipboardText process-wide clipboard text, shared with TextFieldHelper until the window clipboard is wired
+    internal static string ClipboardText
+    {
+        get => _clipboard;
+        set => _clipboard = value;
+    }
 
     private const int TextPaddingX = 4;
     private const int TextPaddingY = 4;
@@ -273,26 +315,20 @@ public sealed class GuiTextBox : GuiControl
 
     private void ClearSelection() => _selectionAnchor = -1;
 
-    //DeleteSelection deletes the selection text, moves the caret to the selection start and clears the selection
+    //DeleteSelection deletes the selection text and moves the caret to the selection start
     private void DeleteSelection()
     {
         if (!HasSelection) return;
-        _text.Remove(SelectionStart, SelectionEnd - SelectionStart);
-        _caretIndex = SelectionStart;
-        ClearSelection();
+        _editing.RemoveCharsFromCursor(0);
         MarkDirty();
-        TextChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    //InsertText inserts text at the caret; with a selection it deletes first, moves the caret and clears the selection
+    //InsertText inserts text at the caret through TextFieldHelper, replacing any selection
     private void InsertText(string text)
     {
-        if (HasSelection) DeleteSelection();
-        _text.Insert(_caretIndex, text);
-        _caretIndex += text.Length;
-        ClearSelection();
+        if (text.Length == 0) return;
+        _editing.InsertText(text);
         MarkDirty();
-        TextChanged?.Invoke(this, EventArgs.Empty);
     }
 
     protected internal override void OnGotFocus()
@@ -377,7 +413,7 @@ public sealed class GuiTextBox : GuiControl
     protected internal override bool ConsumesArrowKey(int key)
         => key is GuiKeys.Left or GuiKeys.Right or GuiKeys.Home or GuiKeys.End;
 
-    //OnKeyDown handles editing keys Left/Right/Home/End/BackSpace/Delete/Ctrl+C/V/X/A
+    //OnKeyDown handles editing keys Left/Right/Home/End/BackSpace/Delete/Ctrl+C/V/X/A through TextFieldHelper
     protected internal override void OnKeyDown(KeyEventArgs e)
     {
         var ctrl = (e.Modifiers & KeyModifiers.Control) != 0;
@@ -385,58 +421,39 @@ public sealed class GuiTextBox : GuiControl
         switch (e.Key)
         {
             case GuiKeys.Left:
-                MoveCaret(_caretIndex - 1, shift);
+                _editing.MoveByChars(-1, shift);
                 break;
             case GuiKeys.Right:
-                MoveCaret(_caretIndex + 1, shift);
+                _editing.MoveByChars(1, shift);
                 break;
             case GuiKeys.Home:
-                MoveCaret(0, shift);
+                _editing.SetCursorToStart(shift);
                 break;
             case GuiKeys.End:
-                MoveCaret(_text.Length, shift);
+                _editing.SetCursorToEnd(shift);
                 break;
             case GuiKeys.BackSpace:
-                if (HasSelection) DeleteSelection();
-                else if (_caretIndex > 0)
-                {
-                    _text.Remove(_caretIndex - 1, 1);
-                    _caretIndex--;
-                    MarkDirty();
-                    TextChanged?.Invoke(this, EventArgs.Empty);
-                }
+                _editing.RemoveCharsFromCursor(-1);
                 break;
             case GuiKeys.Delete:
-                if (HasSelection) DeleteSelection();
-                else if (_caretIndex < _text.Length)
-                {
-                    _text.Remove(_caretIndex, 1);
-                    MarkDirty();
-                    TextChanged?.Invoke(this, EventArgs.Empty);
-                }
+                _editing.RemoveCharsFromCursor(1);
                 break;
             case GuiKeys.C:
-                if (ctrl && HasSelection) _clipboard = SelectedText;
+                if (ctrl) _editing.Copy();
                 break;
             case GuiKeys.X:
-                if (ctrl && HasSelection)
-                {
-                    _clipboard = SelectedText;
-                    DeleteSelection();
-                }
+                if (ctrl) _editing.Cut();
                 break;
             case GuiKeys.V:
-                if (ctrl && _clipboard.Length > 0) InsertText(_clipboard);
+                if (ctrl) _editing.Paste();
                 break;
             case GuiKeys.A:
-                if (ctrl)
-                {
-                    _selectionAnchor = 0;
-                    _caretIndex = _text.Length;
-                    MarkDirty();
-                }
+                if (ctrl) _editing.SelectAll();
                 break;
         }
+        _cursorVisible = true;
+        _blinkAccumulator = 0;
+        MarkDirty();
         base.OnKeyDown(e);
     }
 
@@ -446,7 +463,7 @@ public sealed class GuiTextBox : GuiControl
         newIndex = Math.Clamp(newIndex, 0, _text.Length);
         if (shift)
         {
-            if (_selectionAnchor == -1) _selectionAnchor = _caretIndex;
+            if (!_editing.IsSelecting()) _selectionAnchor = _caretIndex;
         }
         else ClearSelection();
         _caretIndex = newIndex;

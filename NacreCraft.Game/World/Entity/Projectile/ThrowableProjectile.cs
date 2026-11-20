@@ -50,6 +50,14 @@ public abstract class ThrowableItemProjectile : ThrowableProjectile
     protected ThrowableItemProjectile(EntityType<object> type) : base(type)
         => SyncedData.Define(DataItemIndex, EntityDataSerializers.ItemStackId, ItemStack.Empty);
 
+    protected ThrowableItemProjectile(EntityType<object> type, ItemStack item) : this(type) => Item = item;
+
+    protected ThrowableItemProjectile(EntityType<object> type, LivingEntity owner, ItemStack item) : this(type, item)
+    {
+        SetOwner(owner);
+        SetPos(owner.GetEyePosition());
+    }
+
     //Item the item stack carried by the throwable, only one is kept for display
     public ItemStack Item
     {

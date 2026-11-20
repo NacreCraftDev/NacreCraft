@@ -11,7 +11,8 @@ public interface IEquipmentHolder
 }
 
 //EntityEquipment equipment slot container, the eight slots are indexed by EquipmentSlot id
-public sealed class EntityEquipment
+//PlayerEquipment overrides the main-hand routing so the hotbar slot and the equipment view stay in sync
+public class EntityEquipment
 {
     private readonly ItemStack[] _slots = new ItemStack[8];
 
@@ -21,8 +22,24 @@ public sealed class EntityEquipment
     }
 
     //Get returns the slot item, empty slots give an empty stack
-    public ItemStack Get(EquipmentSlot slot) => _slots[(int)slot];
+    public virtual ItemStack Get(EquipmentSlot slot) => _slots[(int)slot];
 
     //Set writes the slot
-    public void Set(EquipmentSlot slot, ItemStack stack) => _slots[(int)slot] = stack;
+    public virtual void Set(EquipmentSlot slot, ItemStack stack) => _slots[(int)slot] = stack;
+
+    //IsEmpty whether every slot is empty, maps to vanilla isEmpty
+    public virtual bool IsEmpty()
+    {
+        foreach (var stack in _slots)
+        {
+            if (!stack.IsEmpty()) return false;
+        }
+        return true;
+    }
+
+    //Clear empties every slot, maps to vanilla clear
+    public virtual void Clear()
+    {
+        for (var i = 0; i < _slots.Length; i++) _slots[i] = ItemStack.Empty;
+    }
 }

@@ -50,6 +50,21 @@ public interface VertexConsumer
         AddVertex(transformed.X, transformed.Y, 0f);
     }
 
+    //AddVertex with a 3D pose, maps to vanilla addVertex(Matrix4fc, float, float, float)
+    void AddVertex(Matrix4x4 pose, float x, float y, float z)
+    {
+        var transformed = Vector3.Transform(new Vector3(x, y, z), pose);
+        AddVertex(transformed.X, transformed.Y, transformed.Z);
+    }
+
+    //SetNormal with a 3D pose, maps to vanilla setNormal(Matrix4fc, float, float, float)
+    void SetNormal(Matrix4x4 pose, float x, float y, float z)
+    {
+        var normal = Vector3.TransformNormal(new Vector3(x, y, z), pose);
+        if (normal.LengthSquared() > 1e-12f) normal = Vector3.Normalize(normal);
+        SetNormal(normal.X, normal.Y, normal.Z);
+    }
+
     //AddVertex with every attribute at once, maps to the vanilla convenience overload
     void AddVertex(float x, float y, float z, int color, float u, float v, int overlay, int light, float nx, float ny, float nz)
     {

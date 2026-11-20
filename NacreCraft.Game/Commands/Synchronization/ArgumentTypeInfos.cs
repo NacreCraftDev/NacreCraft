@@ -277,6 +277,45 @@ public sealed class PlaceholderArgumentInfo : ArgumentTypeInfo
         => throw new NotSupportedException("placeholder argument types do not support deserialization");
 }
 
+//ScoreHolderArgumentInfo score holder argument, writes the single/multiple flag, maps to vanilla ScoreHolderArgument.Info
+public sealed class ScoreHolderArgumentInfo : ArgumentTypeInfo
+{
+    public static readonly ScoreHolderArgumentInfo Instance = new();
+
+    public override Type ArgumentClrType => typeof(ScoreHolderArgument);
+
+    public override Template Unpack(object argumentType)
+        => argumentType is ScoreHolderArgument
+            ? new ArgumentTemplate(this, argumentType)
+            : throw new InvalidOperationException($"not a score holder argument: {argumentType.GetType().Name}");
+
+    public override void SerializeToNetwork(Template template, FriendlyByteBuf buf)
+        => buf.WriteByte((byte)(((ScoreHolderArgument)((ArgumentTemplate)template).Value).Multiple ? 1 : 0));
+
+    public override Template DeserializeFromNetwork(FriendlyByteBuf buf)
+        => new ArgumentTemplate(this, new ScoreHolderArgument((buf.ReadByte() & 1) != 0));
+}
+
+//RegistryKeyArgumentInfo resource_or_tag/resource_or_tag_key argument, writes the registry id
+//The client restores a plain string argument bound to that registry because the element CLR type is not on the wire
+public sealed class RegistryKeyArgumentInfo : ArgumentTypeInfo
+{
+    public static readonly RegistryKeyArgumentInfo Instance = new();
+
+    public override Type ArgumentClrType => typeof(IRegistryKeyedArgument);
+
+    public override Template Unpack(object argumentType)
+        => argumentType is IRegistryKeyedArgument
+            ? new ArgumentTemplate(this, argumentType)
+            : throw new InvalidOperationException($"not a registry keyed argument: {argumentType.GetType().Name}");
+
+    public override void SerializeToNetwork(Template template, FriendlyByteBuf buf)
+        => buf.WriteIdentifier(((IRegistryKeyedArgument)((ArgumentTemplate)template).Value).RegistryIdentifier);
+
+    public override Template DeserializeFromNetwork(FriendlyByteBuf buf)
+        => new ArgumentTemplate(this, new UnresolvedRegistryArgument(buf.ReadIdentifier()));
+}
+
 //TimeArgumentInfo time argument descriptor, writes the allowed minimum tick count
 public sealed class TimeArgumentInfo : ArgumentTypeInfo
 {
@@ -394,47 +433,47 @@ public static class ArgumentTypeInfos
         Register("block_predicate", new SingletonArgumentInfo(typeof(BlockPredicateArgument), BlockPredicateArgument.BlockPredicate)); //13
         Register("item_stack", new SingletonArgumentInfo(typeof(ItemArgument), ItemArgument.Item)); //14
         Register("item_predicate", new SingletonArgumentInfo(typeof(ItemPredicateArgument), ItemPredicateArgument.ItemPredicate)); //15
-        Register("team_color", new PlaceholderArgumentInfo());                              //16
-        Register("hex_color", new PlaceholderArgumentInfo());                               //17
+        Register("team_color", new SingletonArgumentInfo(typeof(TeamColorArgument), TeamColorArgument.TeamColorArg)); //16
+        Register("hex_color", new SingletonArgumentInfo(typeof(HexColorArgument), HexColorArgument.HexColor)); //17
         Register("component", new SingletonArgumentInfo(typeof(ComponentArgument), () => ComponentArgument.TextComponent())); //18
-        Register("style", new PlaceholderArgumentInfo());                                   //19
+        Register("style", new SingletonArgumentInfo(typeof(StyleArgument), StyleArgument.StyleArg)); //19
         Register("message", new SingletonArgumentInfo(typeof(MessageArgument), () => MessageArgument.Message())); //20
         Register("nbt_compound_tag", new SingletonArgumentInfo(typeof(CompoundTagArgument), CompoundTagArgument.CompoundTag)); //21
         Register("nbt_tag", new SingletonArgumentInfo(typeof(NbtTagArgument), NbtTagArgument.NbtTag));   //22
         Register("nbt_path", new SingletonArgumentInfo(typeof(NbtPathArgument), NbtPathArgument.NbtPathArg)); //23
-        Register("objective", new PlaceholderArgumentInfo());                               //24
-        Register("objective_criteria", new PlaceholderArgumentInfo());                      //25
-        Register("operation", new PlaceholderArgumentInfo());                               //26
+        Register("objective", new SingletonArgumentInfo(typeof(ObjectiveArgument), ObjectiveArgument.Objective)); //24
+        Register("objective_criteria", new SingletonArgumentInfo(typeof(ObjectiveCriteriaArgument), ObjectiveCriteriaArgument.Criteria)); //25
+        Register("operation", new SingletonArgumentInfo(typeof(OperationArgument), OperationArgument.ScoreboardOperation)); //26
         Register("particle", new SingletonArgumentInfo(typeof(ParticleArgument), ParticleArgument.Particle)); //27
         Register("angle", new PlaceholderArgumentInfo());                                   //28
         Register("rotation", new SingletonArgumentInfo(typeof(RotationArgument), RotationArgument.Rotation)); //29
-        Register("scoreboard_slot", new PlaceholderArgumentInfo());                         //30
-        Register("score_holder", new PlaceholderArgumentInfo());                            //31
+        Register("scoreboard_slot", new SingletonArgumentInfo(typeof(ScoreboardSlotArgument), ScoreboardSlotArgument.DisplaySlotArgument)); //30
+        Register("score_holder", ScoreHolderArgumentInfo.Instance); //31
         Register("swizzle", new SingletonArgumentInfo(typeof(SwizzleArgument), () => SwizzleArgument.Swizzle())); //32
-        Register("team", new PlaceholderArgumentInfo());                                    //33
+        Register("team", new SingletonArgumentInfo(typeof(TeamArgument), TeamArgument.Team)); //33
         Register("item_slot", new SingletonArgumentInfo(typeof(SlotArgument), SlotArgument.Slot));    //34
         Register("item_slots", new PlaceholderArgumentInfo());                              //35
         Register("resource_location", new SingletonArgumentInfo(typeof(IdentifierArgument), IdentifierArgument.Id)); //36
         Register("function", new SingletonArgumentInfo(typeof(FunctionArgument), FunctionArgument.Functions)); //37
         Register("entity_anchor", new SingletonArgumentInfo(typeof(EntityAnchorArgument), EntityAnchorArgument.EntityAnchor)); //38
-        Register("int_range", new PlaceholderArgumentInfo());                               //39
-        Register("float_range", new PlaceholderArgumentInfo());                             //40
+        Register("int_range", new SingletonArgumentInfo(typeof(RangeArgument<MinMaxBounds.Ints>.Ints), () => new RangeArgument<MinMaxBounds.Ints>.Ints())); //39
+        Register("float_range", new SingletonArgumentInfo(typeof(RangeArgument<MinMaxBounds.Doubles>.Floats), () => new RangeArgument<MinMaxBounds.Doubles>.Floats())); //40
         Register("dimension", new SingletonArgumentInfo(typeof(DimensionArgument), DimensionArgument.Dimension)); //41
         Register("gamemode", new SingletonArgumentInfo(typeof(GameModeArgument), GameModeArgument.GameMode)); //42
         Register("time", TimeArgumentInfo.Instance);                                           //43
-        Register("resource_or_tag", new PlaceholderArgumentInfo());                         //44
-        Register("resource_or_tag_key", new PlaceholderArgumentInfo());                     //45
+        var resourceTagInfo = new RegistryKeyArgumentInfo(); Register("resource_or_tag", resourceTagInfo); RegisterClass(typeof(ResourceOrTagArgument<Biome>), resourceTagInfo); RegisterClass(typeof(ResourceOrTagArgument<PoiType>), resourceTagInfo); //44
+        var resourceTagKeyInfo = new RegistryKeyArgumentInfo(); Register("resource_or_tag_key", resourceTagKeyInfo); RegisterClass(typeof(ResourceOrTagKeyArgument<Structure>), resourceTagKeyInfo); //45
         Register("resource", ResourceArgumentInfo.Instance);                                   //46
         Register("resource_key", ResourceKeyArgumentInfo.Instance);                             //47
         Register("resource_selector", new PlaceholderArgumentInfo());                       //48
-        Register("template_mirror", new PlaceholderArgumentInfo());                         //49
-        Register("template_rotation", new PlaceholderArgumentInfo());                       //50
-        Register("heightmap", new PlaceholderArgumentInfo());                               //51
+        Register("template_mirror", new SingletonArgumentInfo(typeof(TemplateMirrorArgument), TemplateMirrorArgument.TemplateMirror)); //49
+        Register("template_rotation", new SingletonArgumentInfo(typeof(TemplateRotationArgument), TemplateRotationArgument.TemplateRotation)); //50
+        Register("heightmap", new SingletonArgumentInfo(typeof(HeightmapTypeArgument), HeightmapTypeArgument.Heightmap)); //51
         Register("loot_table", new PlaceholderArgumentInfo());                              //52
         Register("loot_predicate", new PlaceholderArgumentInfo());                          //53
         Register("loot_modifier", new PlaceholderArgumentInfo());                           //54
         Register("dialog", new PlaceholderArgumentInfo());                                  //55
-        Register("uuid", new PlaceholderArgumentInfo());                                    //56
+        Register("uuid", new SingletonArgumentInfo(typeof(UuidArgument), UuidArgument.Uuid)); //56
     }
 
     //Unpack looks up the descriptor by argument type instance; returns null when unregistered
@@ -446,4 +485,8 @@ public static class ArgumentTypeInfos
         Registry<object>.Register(BuiltInRegistries.COMMAND_ARGUMENT_TYPE, Identifier.Parse(id), info);
         ByClass[info.ArgumentClrType] = info;
     }
+
+    //RegisterClass maps an additional CLR argument type to an already registered descriptor
+    private static void RegisterClass(Type argumentClrType, ArgumentTypeInfo info)
+        => ByClass[argumentClrType] = info;
 }

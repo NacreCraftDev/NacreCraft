@@ -14,6 +14,7 @@ using NacreCraft.Client.Blaze3d.Framegraph;
 using NacreCraft.Client.Blaze3d.Preprocessor;
 using NacreCraft.Client.Blaze3d.Util;
 using NacreCraft.Client.Render.Model;
+using NacreCraft.Client.Render.Rendertype;
 using NacreCraft.Client.Render.Texture;
 using NacreCraft.Client.Render.Texture.Atlas;
 using NacreCraft.Client.Render.Item;
@@ -43,8 +44,11 @@ public abstract class EntityRenderer
     //Model entity model, provided by subclasses
     public abstract EntityModel Model { get; }
 
-    //Pipeline render pipeline defaults to Model.Pipeline; subclasses may override
+    //Pipeline legacy pipeline, kept for callers that still read it; RenderType is what the dispatcher batches on now
     public virtual RenderPipeline Pipeline => Model.Pipeline;
+
+    //RenderType the render type this renderer's vertices are batched under
+    public virtual RenderType RenderType(EntityRenderState state) => RenderTypes.EntityCutout(RenderTypes.BlockAtlasLocation);
 
     //ShadowRadius shadow radius; 0 means no shadow
     public virtual float ShadowRadius => 0f;

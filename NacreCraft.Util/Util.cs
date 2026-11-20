@@ -15,6 +15,32 @@ public static class Util
         return input => cache.GetOrAdd(input, fn);
     }
 
+    //OffsetByCodepoints moves a UTF-16 index by whole codepoints, maps to vanilla Util.offsetByCodepoints
+    public static int OffsetByCodepoints(string text, int position, int count)
+    {
+        var length = text.Length;
+        if (count >= 0)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                if (position >= length) break;
+                position += char.IsHighSurrogate(text[position]) && position + 1 < length
+                    && char.IsLowSurrogate(text[position + 1]) ? 2 : 1;
+            }
+        }
+        else
+        {
+            for (var i = count; i < 0; i++)
+            {
+                if (position <= 0) break;
+                position -= position >= 2 && char.IsLowSurrogate(text[position - 1])
+                    && char.IsHighSurrogate(text[position - 2]) ? 2 : 1;
+            }
+        }
+
+        return position;
+    }
+
     //MaxAllowedExecutorThreads how many worker threads the parallel executors may use, maps to vanilla Util.maxAllowedExecutorThreads
     public static int MaxAllowedExecutorThreads()
         => Mth.Clamp(Environment.ProcessorCount - 1, 1, GetMaxThreads());

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using NacreCraft.Network.Protocol.Login;
 using NacreCraft.Logging;
 
@@ -7,7 +7,7 @@ namespace NacreCraft.Game.Server;
 //OpList operator list, maps to vanilla net.minecraft.server.players.ServerOpList
 //Persisted to ops.json with fields aligned with vanilla uuid/name/level/bypassesPlayerLimit
 //Name matching as a fallback: in offline mode the uuid is derived from the name, so a list with only the name still hits
-public sealed class OpList
+public class OpList
 {
     private readonly string _path;
     private readonly Dictionary<Guid, OpEntry> _byId = new();

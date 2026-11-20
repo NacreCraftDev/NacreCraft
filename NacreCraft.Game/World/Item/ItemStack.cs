@@ -79,6 +79,31 @@ public sealed class ItemStack : ItemInstance, DataComponentHolder
     //Shrink reduces the count, clamped at 0, maps to vanilla shrink
     public void Shrink(int amount) => _count = Math.Max(0, _count - amount);
 
+    //Grow increases the count, clamped at 0, maps to vanilla grow
+    public void Grow(int amount) => _count = Math.Max(0, _count + amount);
+
+    //CopyAndClear copies the stack and empties this one, maps to vanilla copyAndClear
+    public ItemStack CopyAndClear()
+    {
+        var copy = Copy();
+        _count = 0;
+        return copy;
+    }
+
+    //PopTime pickup animation ticks, maps to vanilla getPopTime/setPopTime
+    public int PopTime { get; private set; }
+
+    public void SetPopTime(int popTime) => PopTime = popTime;
+
+    //IsDamaged whether the stack has taken durability damage, maps to vanilla isDamaged
+    public bool IsDamaged() => Get<object>(DataComponents.DAMAGE) is int damage && damage > 0;
+
+    //IsEnchanted whether the stack carries enchantments, maps to vanilla isEnchanted
+    public bool IsEnchanted() => !IsEmpty() && Get<object>(DataComponents.ENCHANTMENTS) is not null;
+
+    //Has whether the stack has the component, maps to vanilla has
+    public bool Has(DataComponentType<object> type) => Get<object>(type) is not null;
+
     //Split takes amount into a new stack and reduces this one, maps to vanilla split
     public ItemStack Split(int amount)
     {

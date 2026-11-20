@@ -36,6 +36,30 @@ public sealed class ItemAttributeModifiers : IEquatable<ItemAttributeModifiers>
 
     public override string ToString() => $"ItemAttributeModifiers[{Modifiers.Count} entries]";
 
+    //CreateBuilder starts an empty modifier list, maps to vanilla ItemAttributeModifiers.builder()
+    public static Builder CreateBuilder() => new();
+
+    //Builder accumulates modifier entries; armor materials build their defense through it
+    public sealed class Builder
+    {
+        private readonly List<Entry> _modifiers = new();
+
+        //Add appends one entry with the default tooltip display, maps to vanilla Builder.add
+        public Builder Add(Holder<NacreCraft.Registry.EntityAttribute.Attribute> attribute,
+            AttributeModifier modifier, EquipmentSlotGroup slotGroup)
+        {
+            _modifiers.Add(new Entry(attribute, modifier, slotGroup, Display.DefaultValue));
+            return this;
+        }
+
+        //Add appends an entry active in every slot
+        public Builder Add(Holder<NacreCraft.Registry.EntityAttribute.Attribute> attribute,
+            AttributeModifier modifier) => Add(attribute, modifier, EquipmentSlotGroup.Any);
+
+        //Build creates the immutable list
+        public ItemAttributeModifiers Build() => new(_modifiers.ToArray());
+    }
+
     //Entry attribute modifier entry: attribute reference plus modifier plus active slots plus display
     public sealed record Entry(
         Holder<NacreCraft.Registry.EntityAttribute.Attribute> Attribute,

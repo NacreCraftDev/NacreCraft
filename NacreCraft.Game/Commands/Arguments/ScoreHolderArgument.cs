@@ -15,6 +15,8 @@ public sealed class ScoreHolderArgument : ArgumentType<ScoreHolderArgument.Resul
 
     public ScoreHolderArgument(bool multiple) => _multiple = multiple;
 
+    public bool Multiple => _multiple;
+
     public static ScoreHolderArgument ScoreHolder() => new(false);
 
     public static ScoreHolderArgument ScoreHolders() => new(true);

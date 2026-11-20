@@ -89,6 +89,11 @@ public abstract class BakedGlyph
 {
     public abstract IGlyphInfo Info { get; }
 
+    //CreateGlyph builds a world-space text renderable for this glyph, maps to vanilla BakedGlyph.createGlyph
+    //The GUI path still uses Render(IGuiRenderContext, ...); world text uses this method
+    public virtual TextRenderable.Styled? CreateGlyph(float x, float y, int color, int shadowColor,
+        NacreCraft.Network.Chat.Style style, float boldOffset, float shadowOffset) => null;
+
     //Render submits the glyph to the render context; options carry render params like x/y/color/shadowColor/bold/italic
     //maps to vanilla BakedSheetGlyph.renderChar with the full italic/bold/shadow logic
     public abstract void Render(IGuiRenderContext context, in GlyphRenderOptions options);

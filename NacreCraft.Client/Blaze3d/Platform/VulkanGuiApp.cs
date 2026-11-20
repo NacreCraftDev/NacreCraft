@@ -44,11 +44,17 @@ public sealed class VulkanGuiApp : VulkanAppBase
     private GuiRenderer _guiRenderer = null!;
     private GuiRenderContext _renderContext = null!;
     private GuiResourceManager _resourceManager = null!;
+    //_textureManager backs RenderTypes' texture lookups; created once the device exists and kept across resizes
+    private NacreCraft.Client.Render.Texture.TextureManager? _textureManager;
+    //_overlayTexture the 16x16 entity hurt/damage overlay sampled as Sampler1
+    private NacreCraft.Client.Render.Texture.OverlayTexture? _overlayTexture;
     //_guiPipeline the precompiled RenderPipelines.GUI, precompiled so the first frame does not stutter
     private CompiledRenderPipeline _guiPipeline = null!;
     private FontAtlas? _fontAtlas;
     //F7 GlyphFont dynamic bake path GlyphStitcher+GlyphFont replacing FontAtlas
     private GlyphStitcher? _glyphStitcher;
+    //_fontManager owns the loaded font sets and creates the GlyphFont the GUI draws with
+    private FontManager? _fontManager;
     private GlyphFont? _font;
     //P0 GuiSpriteManager caches GuiSprites by identifier, lazily loading PNG+.mcmeta
     //On swapchain recreation ClearCache invalidates old TextureSetups
@@ -105,6 +111,8 @@ public sealed class VulkanGuiApp : VulkanAppBase
     private GpuTexture? _depthImage;
     private GpuTextureView? _depthView;
     private GpuBuffer? _worldViewProjBuffer;
+    //_worldIdentityTransforms the DynamicTransforms block for the live world path, which bakes the transform into vertices
+    private GpuBuffer? _worldIdentityTransforms;
     private GpuTexture? _blockAtlasImage;
     private GpuTexture? _lightmapImage;
     private GpuTextureView? _worldBlockAtlasView;
@@ -140,6 +148,9 @@ public sealed class VulkanGuiApp : VulkanAppBase
     //Device exposes the GpuDevice for the Game layer to create GpuBufferPool and other GPU resources on SwapchainRecreated
     //_device is ready when SwapchainRecreated fires; access before construction returns a null-forgiving instance
     public GpuDevice Device => _device;
+
+    //RenderState the per-frame render snapshot the world/GUI renderers read, maps to vanilla GameRenderState
+    public NacreCraft.Client.Render.State.GameRenderState RenderState { get; } = new();
 
     //GuiWindow created externally and passed in, letting test code pre-arrange widgets
     public GuiWindow Window { get; }
@@ -283,13 +294,23 @@ public sealed class VulkanGuiApp : VulkanAppBase
         var w = (int)_swapchainExtent.Width;
         var h = (int)_swapchainExtent.Height;
         Window.UpdateSurfaceSize(w, h);
+        //RenderSystem owns the dynamic transform rings and the projection UBO; the app owns the device, so teardown
+        //calls DetachRenderer instead of ShutdownRenderer
+        RenderSystem.InitRenderThread();
+        RenderSystem.InitRenderer(_device);
+        _overlayTexture = new NacreCraft.Client.Render.Texture.OverlayTexture();
+        _textureManager = _clientResources is not null ? new NacreCraft.Client.Render.Texture.TextureManager(_clientResources) : null;
+        if (_textureManager is not null)
+            NacreCraft.Client.Render.Rendertype.RenderType.CurrentContext =
+                new NacreCraft.Client.Render.Rendertype.RenderType.RenderTypeContext(_textureManager, _overlayTexture.GetTextureView(), null);
         _fontAtlas = FontAtlas.FromSystemFont();
         _resourceManager = new GuiResourceManager(_device, w, h, _fontAtlas, _logger);
         _renderState = new GuiRenderState();
         _guiRenderer = new GuiRenderer();
         //F7 creates the Font dynamic bake path GlyphStitcher, wiring into GuiResourceManager to register the atlas
         _glyphStitcher = new GlyphStitcher(_device, _resourceManager);
-        _font = CreateFontFromAssets();
+        _fontManager = _clientResources is not null ? new FontManager(_clientResources, _glyphStitcher) : null;
+        _font = _fontManager?.CreateFont(FontManager.DefaultFont);
         //P0 creates GuiSpriteManager and injects it into GuiRenderContext so DrawSprite dispatches by .mcmeta
         //The GUI atlas is stitched once per pack set, maps to vanilla AtlasIds.GUI
         _guiAtlas ??= GuiAtlas.Build(_clientResources, _device, _logger);
@@ -341,8 +362,18 @@ public sealed class VulkanGuiApp : VulkanAppBase
         _depthImage.Upload(ReadOnlySpan<byte>.Empty);
         _depthView = _device.CreateTextureView(_depthImage);
 
-        //set 0 MATRICES_PROJECTION, bound by the name "Matrices"
+        //set 0 MATRICES_PROJECTION: DynamicTransforms + Projection, the vanilla scene UBO pair
+        //The live world path bakes the whole transform into the vertices, so DynamicTransforms stays identity and Projection
+        //carries the combined view-projection until per-draw transforms are wired
         _worldViewProjBuffer = _device.CreateBuffer(null, GpuBuffer.UsageUniform | GpuBuffer.UsageMapWrite, 64);
+        _worldIdentityTransforms = _device.CreateBuffer(null, GpuBuffer.UsageUniform | GpuBuffer.UsageMapWrite, GuiResourceManager.DynamicTransformsUboSize);
+        var worldIdentityBytes = Std140Builder.OnStack(GuiResourceManager.DynamicTransformsUboSize)
+            .PutMat4f(Matrix4x4.Identity)
+            .PutVec4(Vector4.One)
+            .PutVec3(Vector3.Zero)
+            .PutMat4f(Matrix4x4.Identity)
+            .Get();
+        _worldIdentityTransforms.Upload<byte>(worldIdentityBytes);
 
         //set 1 SAMPLER0_SAMPLER1 atlas + lightmap, bound by the names "Sampler0"/"Sampler1"
         //Placeholder textures share a linear sampler; injected textures bring their own nearest sampler
@@ -392,6 +423,13 @@ public sealed class VulkanGuiApp : VulkanAppBase
         _worldBlockAtlasSampler = blockAtlasSampler;
         _worldLightmapView = _device.CreateTextureView(lightmapImage);
         _worldLightmapSampler = lightmapSampler;
+        if (_textureManager is not null)
+        {
+            _textureManager.Register(NacreCraft.Client.Render.Rendertype.RenderTypes.BlockAtlasLocation,
+                new NacreCraft.Client.Render.Texture.GpuTextureBackedTexture(blockAtlasImage, _worldBlockAtlasView, blockAtlasSampler));
+            NacreCraft.Client.Render.Rendertype.RenderType.CurrentContext =
+                new NacreCraft.Client.Render.Rendertype.RenderType.RenderTypeContext(_textureManager, _overlayTexture?.GetTextureView(), _worldLightmapView);
+        }
     }
 
     //DisposeWorldResources releases the resources created by CreateWorldResources
@@ -401,6 +439,7 @@ public sealed class VulkanGuiApp : VulkanAppBase
         _depthView?.Dispose();
         _depthImage?.Dispose();
         _worldViewProjBuffer?.Dispose();
+        _worldIdentityTransforms?.Dispose();
         _worldBlockAtlasView?.Dispose();
         _worldLightmapView?.Dispose();
         _blockAtlasImage?.Dispose();
@@ -416,44 +455,6 @@ public sealed class VulkanGuiApp : VulkanAppBase
         _blockAtlasImage = null;
         _lightmapImage = null;
         _worldSampler = null;
-    }
-
-    //CreateFontFromAssets builds the GlyphFont from the assets font config
-    //Returns null when the assets directory or the font json is missing, so DrawText falls back to FontAtlas
-    private GlyphFont? CreateFontFromAssets()
-    {
-        if (_clientResources is null)
-        {
-            _logger.Warning("no client resource manager; GlyphFont initialization falls back to FontAtlas");
-            return null;
-        }
-        var accessor = new ResourceFontAccessor(_clientResources);
-        //Vanilla loads minecraft:default as the game font (Minecraft.DEFAULT_FONT); alt is only the SGA variant
-        //used by the enchanting table language
-        var fontId = "minecraft:default";
-        var parts = fontId.Split(':', 2);
-        var (namespaceId, fontPath) = parts.Length <= 1 ? ("minecraft", fontId) : (parts[0], parts[1]);
-        var fontConfigPath = $"{namespaceId}:font/{fontPath}.json";
-        var stream = accessor.OpenResource(fontConfigPath);
-        if (stream is null)
-        {
-            _logger.Warning($"font config does not exist {fontConfigPath}; GlyphFont initialization falls back to FontAtlas");
-            return null;
-        }
-        List<IGlyphProvider.Conditional> providers;
-        using (stream)
-        {
-            providers = FontProviderDefinitionLoader.Load(stream, accessor);
-        }
-        var fontSet = new FontSet();
-        fontSet.Reload(providers, new HashSet<FontOption>());
-        //A provider chain that came out empty or inactive leaves every codepoint on the missing glyph, which looks
-        //like a working text layout with wrong shapes, so the chain summary is logged
-        foreach (var provider in fontSet.ActiveProviders)
-            Log.Debug($"font {fontId} provider glyphs={provider.GetSupportedGlyphs().Count}");
-        Log.Debug($"font {fontId} providers={providers.Count} active={fontSet.ActiveProviders.Count}");
-        //7/9 are the vanilla ascent/descent the font bakes glyphs against
-        return new GlyphFont(fontSet, _glyphStitcher!, 7, 9);
     }
 
     //PrecompileGuiPipelines compiles the whole GUI pipeline series up front to avoid first-use stutter
@@ -482,6 +483,32 @@ public sealed class VulkanGuiApp : VulkanAppBase
         _blurSampler = _device.CreateSampler(AddressMode.ClampToEdge, AddressMode.ClampToEdge, FilterMode.Linear, FilterMode.Linear, 1, null);
         _blurUniformBuffer = _device.CreateBuffer(null, GpuBuffer.UsageUniform | GpuBuffer.UsageMapWrite, 16);
         _device.PrecompilePipeline(RenderPipelines.BLUR);
+        //Diagnostic only: NC_PRECHECK_PIPELINES=1 compiles every static render type pipeline so missing GLSL or a
+        //layout mismatch shows up in the log instead of at the first draw
+        if (Environment.GetEnvironmentVariable("NC_PRECHECK_PIPELINES") == "1")
+            PrecheckRenderTypePipelines();
+    }
+
+    private void PrecheckRenderTypePipelines()
+    {
+        //Touch RenderTypes so its static initialisation registers the render type pipeline family
+        _ = NacreCraft.Client.Render.Rendertype.RenderTypes.LINES;
+        var compiled = 0;
+        var failed = 0;
+        foreach (var pipeline in RenderPipelines.GetStaticPipelines())
+        {
+            try
+            {
+                _device.PrecompilePipeline(pipeline);
+                compiled++;
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                Log.Warning($"Pipeline precheck failed {pipeline.Location}: {ex.Message}");
+            }
+        }
+        Log.Info($"Pipeline precheck finished: compiled={compiled} failed={failed}");
     }
 
     //DisposeBlurResources releases everything CreateBlurResources created
@@ -609,9 +636,12 @@ public sealed class VulkanGuiApp : VulkanAppBase
             Window.UpdateSurfaceSize(w, h);
             _resourceManager = new GuiResourceManager(_device, w, h, _fontAtlas, _logger);
             //F7 rebuilds GlyphStitcher+Font; the new GuiResourceManager needs the atlas re-registered
+            _fontManager?.Dispose();
+            _fontManager = null;
             _glyphStitcher?.Dispose();
             _glyphStitcher = new GlyphStitcher(_device, _resourceManager);
-            _font = CreateFontFromAssets();
+            _fontManager = _clientResources is not null ? new FontManager(_clientResources, _glyphStitcher) : null;
+            _font = _fontManager?.CreateFont(FontManager.DefaultFont);
             //P0 rebuilds GuiSpriteManager; old textureIds are invalidated and the cache is cleared so DrawSprite reloads
             _spriteManager = new GuiSpriteManager(_clientResources, _resourceManager, _guiAtlas);
             _renderContext = new GuiRenderContext(_renderState, w, h, Window.GuiScale,
@@ -909,7 +939,8 @@ public sealed class VulkanGuiApp : VulkanAppBase
     private void BindGuiGlobals(NacreCraft.Client.Blaze3d.Systems.RenderPass pass)
     {
         pass.SetUniform("Globals", _resourceManager.GlobalsBuffer);
-        pass.SetUniform("Matrices", _resourceManager.ProjectionBuffer);
+        pass.SetUniform("DynamicTransforms", _resourceManager.DynamicTransformsBuffer);
+        pass.SetUniform("Projection", _resourceManager.ProjectionBuffer);
     }
 
     //RenderSinglePass single render pass without blur splitting, rendering everything to the scene target
@@ -950,7 +981,8 @@ public sealed class VulkanGuiApp : VulkanAppBase
     //BindWorldGlobals writes the terrain uniforms for the pipeline layout just bound
     private void BindWorldGlobals(NacreCraft.Client.Blaze3d.Systems.RenderPass pass)
     {
-        pass.SetUniform("Matrices", _worldViewProjBuffer!);
+        pass.SetUniform("DynamicTransforms", _worldIdentityTransforms!);
+        pass.SetUniform("Projection", _worldViewProjBuffer!);
         pass.BindTexture("Sampler0", _worldBlockAtlasView!, _worldBlockAtlasSampler!);
         pass.BindTexture("Sampler1", _worldLightmapView!, _worldLightmapSampler!);
     }
@@ -1015,6 +1047,11 @@ public sealed class VulkanGuiApp : VulkanAppBase
     //Injected atlas/lightmap are released here because the Game layer handed ownership over
     protected override void OnCleanupPipelineResources()
     {
+        NacreCraft.Client.Render.Rendertype.RenderType.CurrentContext = null;
+        _textureManager?.Dispose();
+        _textureManager = null;
+        _overlayTexture?.Dispose();
+        _overlayTexture = null;
         _resourceManager.Dispose();
         _guiRenderer.Dispose();
         DisposeBlurResources();
@@ -1023,6 +1060,8 @@ public sealed class VulkanGuiApp : VulkanAppBase
         _itemAtlas = null;
         _itemPipRenderer = null;
         _itemAtlasTextureId = 0;
+        _fontManager?.Dispose();
+        _fontManager = null;
         _glyphStitcher?.Dispose();
         _glyphStitcher = null;
         //The GUI atlas holds a device texture, so it goes with the device rather than with the swapchain
@@ -1044,6 +1083,8 @@ public sealed class VulkanGuiApp : VulkanAppBase
     public override void Dispose()
     {
         if (_disposed) return;
+        //RenderSystem only borrows the device, so it lets go before the base class destroys it
+        RenderSystem.DetachRenderer();
         base.Dispose();
         Window.Dispose();
         _disposed = true;

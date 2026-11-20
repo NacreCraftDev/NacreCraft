@@ -1,231 +1,224 @@
 using System.Diagnostics;
 using System.Reflection;
-using System.Runtime.Loader;
 
 namespace NacreCraft.ModLoader;
 
-//ModManager loading flow: static scan, dependency resolution, topological sort, prepare, initialize
+//ModManager loading flow: prepare every solved mod, then run the loader-owned phases in dependency order
+//The scan phase is gone: ModDependencies.Solve already produced the mod set, the order and the dependency graph
 public sealed partial class ModManager
 {
-    //LoadAllModsAsync: scans and loads all mods in the mods directory
-    //The scan phase loads no assemblies; loading begins only at the initialization phase
-    public async Task<LoadResult> LoadAllModsAsync(ModEnvironment environment)
+    //LoadAllModsAsync: prepares every solved mod, then invokes preLaunch for all and main for all
+    //No assembly is loaded during the scan; the mod set arrives solved and environment-filtered
+    internal async Task<LoadResult> LoadAllModsAsync(SolvedMods solved, ModEnvironment environment)
     {
         if (string.IsNullOrEmpty(_modsFolderPath))
             throw new InvalidOperationException("Init was not called to specify the mods directory");
 
         var result = new LoadResult();
+        result.Skipped.AddRange(solved.EnvSkipped);
+        result.Skipped.AddRange(solved.SolverSkipped);
 
-        UpdateProgress("Scanning", 0, 0, string.Empty);
-        var scan = ScanMods(environment);
-        result.Errors.AddRange(scan.Errors);
-        result.Skipped.AddRange(scan.Skipped);
-        foreach (var mod in scan.Mods)
-            _mods[mod.Name] = mod;
+        foreach (var scanned in solved.Mods)
+            _mods[scanned.Manifest.Id] = CreateModInfo(scanned);
 
-        if (result.Errors.Count > 0)
+        foreach (var (name, deps) in solved.Graph)
         {
-            result.Success = false;
-            return result;
+            _dependencyGraph[name] = deps.ToList();
+            _mods[name].Dependencies = deps.ToList();
+        }
+        _loadOrder.AddRange(solved.Mods.Select(mod => mod.Manifest.Id));
+
+        var ordered = solved.Mods.Select(mod => _mods[mod.Manifest.Id]).ToList();
+
+        //S5: load every mod assembly and resolve its entrypoint bindings before any mod code runs
+        //After this step every mod can see every other mod's types, which is what makes cross-mod references safe
+        UpdateProgress("Preparing", 0, ordered.Count, string.Empty);
+        for (var index = 0; index < ordered.Count; index++)
+        {
+            var mod = ordered[index];
+            UpdateProgress("Preparing", index, ordered.Count, mod.Name);
+            if (!PrepareMod(mod, result))
+            {
+                mod.Status = ModStatus.Error;
+                OnModLoadComplete?.Invoke(Context(mod, index, ordered.Count), ModStatus.Error);
+            }
         }
 
-        UpdateProgress("ResolvingDeps", 0, _mods.Count, string.Empty);
-        ValidateDependencyVersions(result);
-        BuildDependencyGraph();
+        //S6: every mod's preLaunch runs before any mod's main; a mod failing one phase does not stop the others
+        await InvokePhaseAsync(ModPhases.PreLaunch, ordered, result);
+        await InvokePhaseAsync(ModPhases.Main, ordered, result);
 
-        var sorted = TopologicalSort();
-        if (sorted is null)
+        //Mods that never failed reach Running here; Scanned covers hook-only mods with no
+        //loader phases, Initializing covers mods whose phases all ran
+        for (var index = 0; index < ordered.Count; index++)
         {
-            result.Errors.Add("mod dependencies contain a cycle");
-            result.Success = false;
-            return result;
+            var mod = ordered[index];
+            if (mod.Status is not (ModStatus.Scanned or ModStatus.Initializing))
+                continue;
+            mod.Status = ModStatus.Running;
+            result.Loaded.Add(mod.Name);
+            ModLoaded?.Invoke(mod.ToPublic());
+            OnModLoadComplete?.Invoke(Context(mod, index, ordered.Count), ModStatus.Running);
         }
-
-        UpdateProgress("Initializing", 0, sorted.Count, string.Empty);
-        _loadOrder.Clear();
-        _loadOrder.AddRange(sorted.Select(m => m.Name));
-        await InitializeModsAsync(sorted, result);
 
         result.Success = result.Errors.Count == 0;
-        UpdateProgress("Done", sorted.Count, sorted.Count, result.Success ? "OK" : "PartialFail");
+        UpdateProgress("Done", ordered.Count, ordered.Count, result.Success ? "OK" : "PartialFail");
         return result;
     }
 
-    //ScanMods: statically reads mod declarations and picks the mods to load on the current side
-    //Reads only metadata tables and embedded resources without loading assemblies, so mods with a mismatched side are not pulled into the process
-    private ScanResult ScanMods(ModEnvironment environment)
+    //CreateModInfo: the internal record of one solved mod; the manifest was validated at scan time
+    private static InternalModInfo CreateModInfo(ScannedMod scanned) => new()
     {
-        var result = new ScanResult();
-        foreach (var scanned in ModScanner.ScanAll(_modsFolderPath))
-        {
-            if (!scanned.Manifest.Environment.Matches(environment))
-            {
-                result.Skipped.Add(scanned.Manifest.Id);
-                continue;
-            }
+        Name = scanned.Manifest.Id,
+        AssemblyPath = scanned.AssemblyPath,
+        AssemblyName = scanned.AssemblyName,
+        EmbeddedResources = scanned.EmbeddedResources.ToList(),
+        ReferencedAssemblies = scanned.ReferencedAssemblies.ToList(),
+        AnnotatedHooks = scanned.AnnotatedHooks.ToList(),
+        Manifest = scanned.Manifest,
+        Status = ModStatus.Scanned,
+    };
 
-            if (scanned.Manifest.Entry.Length == 0)
-            {
-                result.Errors.Add($"mod {scanned.Manifest.Id} does not declare an entry class");
-                continue;
-            }
-
-            result.Mods.Add(new InternalModInfo
-            {
-                Name = scanned.Manifest.Id,
-                AssemblyPath = scanned.AssemblyPath,
-                AssemblyName = scanned.AssemblyName,
-                EmbeddedResources = scanned.EmbeddedResources.ToList(),
-                ReferencedAssemblies = scanned.ReferencedAssemblies.ToList(),
-                AnnotatedHooks = scanned.AnnotatedHooks.ToList(),
-                Manifest = scanned.Manifest,
-                Status = ModStatus.Scanned,
-            });
-        }
-        return result;
-    }
-
-    //ValidateDependencyVersions: checks the dependency versions declared in the manifest
-    //Bootstrap already filtered once with the same rules; this runs again for hosts that use ModManager on its own
-    //A version mismatch only skips the declaring mod, the rest load as usual
-    private void ValidateDependencyVersions(LoadResult result)
+    //PrepareMod: loads the assembly and resolves the entrypoint bindings for every phase
+    //No mod code runs here; instances are created when their phase is invoked
+    private static bool PrepareMod(InternalModInfo mod, LoadResult result)
     {
-        var manifests = new List<ModManifest>();
-        foreach (var mod in _mods.Values)
+        if (mod.Prepared)
+            return true;
+
+        try
         {
-            if (mod.Manifest is not null)
-                manifests.Add(mod.Manifest);
-        }
+            var assembly = ModAssemblies.Load(mod.AssemblyName, mod.AssemblyPath);
 
-        var skipped = new HashSet<string>(StringComparer.Ordinal);
-        var errors = new List<string>();
-        ModDependencies.Filter(manifests, skipped, errors);
-        if (skipped.Count == 0)
-            return;
-
-        foreach (var name in skipped)
-        {
-            if (_mods.TryGetValue(name, out var mod))
-                mod.Status = ModStatus.Skipped;
-            result.Skipped.Add(name);
-        }
-        result.Errors.AddRange(errors);
-    }
-
-    //BuildDependencyGraph: builds the dependency graph from assembly references
-    //Dependencies between mods form AssemblyRef naturally from compile-time references and need no extra declaration
-    private void BuildDependencyGraph()
-    {
-        var byAssembly = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var mod in _mods.Values)
-        {
-            if (mod.AssemblyName.Length > 0)
-                byAssembly[mod.AssemblyName] = mod.Name;
-        }
-
-        foreach (var mod in _mods.Values)
-        {
-            mod.Dependencies = mod.ReferencedAssemblies
-                .Where(byAssembly.ContainsKey)
-                .Select(name => byAssembly[name])
-                .Where(name => name != mod.Name)
-                .Distinct()
-                .ToList();
-            _dependencyGraph[mod.Name] = mod.Dependencies;
-        }
-    }
-
-    //TopologicalSort: orders dependencies first, returns null if there is a cycle
-    private List<InternalModInfo>? TopologicalSort()
-    {
-        var sorted = new List<InternalModInfo>();
-        var visiting = new HashSet<string>();
-        var done = new HashSet<string>();
-
-        bool Visit(string name)
-        {
-            if (done.Contains(name)) return true;
-            if (!visiting.Add(name)) return false;
-            if (_dependencyGraph.TryGetValue(name, out var deps))
+            //The manifest is always set at creation; the null check is a formality the compiler needs
+            var manifest = mod.Manifest ?? new ModManifest();
+            foreach (var (phase, typeNames) in manifest.Entrypoints)
             {
-                foreach (var dep in deps)
+                var contract = ModPhases.ContractOf(phase);
+                if (contract is null)
                 {
-                    if (_mods.ContainsKey(dep) && !Visit(dep))
+                    //The scanner only hands over known phases; this line exists so a future phase slip fails loudly here
+                    result.Errors.Add($"mod {mod.Name} entrypoint phase {phase} is unknown");
+                    return false;
+                }
+
+                foreach (var typeName in typeNames)
+                {
+                    var type = assembly.GetType(typeName, throwOnError: false);
+                    if (type is null)
+                    {
+                        result.Errors.Add($"mod {mod.Name} entrypoint type {typeName} not found");
                         return false;
+                    }
+
+                    if (!contract.IsAssignableFrom(type))
+                    {
+                        result.Errors.Add($"mod {mod.Name} entrypoint {typeName} does not implement {contract.Name}");
+                        return false;
+                    }
+
+                    if (type.GetConstructor(BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null) is null)
+                    {
+                        result.Errors.Add($"mod {mod.Name} entrypoint {typeName} lacks a public parameterless constructor");
+                        return false;
+                    }
+
+                    mod.Entrypoints.Add(new EntrypointBinding { Phase = phase, Type = type });
                 }
             }
-            visiting.Remove(name);
-            done.Add(name);
-            if (_mods.TryGetValue(name, out var mod))
-                sorted.Add(mod);
+
+            //Exit stays a duck method on main-phase entrypoint types, void or Task, no parameters
+            foreach (var binding in mod.Entrypoints)
+            {
+                if (binding.Phase != ModPhases.Main)
+                    continue;
+                binding.ExitMethod = binding.Type.GetMethod("Exit", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
+            }
+
+            //The UI shows the first main entrypoint as the mod's representative type
+            mod.EntryType = mod.Entrypoints.FirstOrDefault(binding => binding.Phase == ModPhases.Main)?.Type;
+            mod.Prepared = true;
             return true;
         }
-
-        foreach (var name in _mods.Keys)
+        catch (Exception ex)
         {
-            if (!done.Contains(name) && !Visit(name))
-                return null;
+            result.Errors.Add($"mod {mod.Name} load failed {ex.Message}");
+            return false;
         }
-
-        return sorted;
     }
 
-    //InitializeModsAsync: runs the load control and initializes each mod in turn
-    private async Task InitializeModsAsync(List<InternalModInfo> sorted, LoadResult result)
+    //InvokePhaseAsync: runs one phase over the ordered mods; the load control runs once per mod,
+    //before the mod's first binding of the first phase that reaches it
+    private async Task InvokePhaseAsync(string phase, List<InternalModInfo> ordered, LoadResult result)
     {
-        var pending = sorted.Where(m => m.Status == ModStatus.Scanned).ToList();
-        var completed = 0;
-
-        foreach (var mod in pending)
+        for (var index = 0; index < ordered.Count; index++)
         {
-            UpdateProgress("Initializing", completed, pending.Count, mod.Name);
-
-            var context = new ModLoadContext
-            {
-                Name = mod.Name,
-                AssemblyPath = mod.AssemblyPath,
-                Dependencies = mod.Dependencies,
-                Completed = completed,
-                Total = pending.Count,
-            };
-
-            var action = ModLoadAction.Continue;
-            if (OnBeforeModLoad is not null)
-            {
-                try
-                {
-                    action = await OnBeforeModLoad(context);
-                }
-                catch (Exception ex)
-                {
-                    OnError?.Invoke($"pre-load callback of mod {mod.Name} threw", ex);
-                    action = ModLoadAction.Skip;
-                }
-            }
-
-            if (action == ModLoadAction.Skip)
-            {
-                mod.Status = ModStatus.Skipped;
-                result.Skipped.Add(mod.Name);
-                OnModLoadComplete?.Invoke(context, ModStatus.Skipped);
-                completed++;
+            var mod = ordered[index];
+            //Initializing means a previous phase already ran; the mod still gets its remaining phases
+            if (mod.Status is not (ModStatus.Scanned or ModStatus.Initializing))
                 continue;
-            }
 
-            if (action == ModLoadAction.Interrupt)
-            {
-                await HandleInterruptAsync(mod, context, result);
-                completed++;
+            var bindings = mod.Entrypoints.Where(binding => binding.Phase == phase).ToList();
+            if (bindings.Count == 0)
                 continue;
+
+            UpdateProgress("Initializing", index, ordered.Count, mod.Name);
+            mod.Status = ModStatus.Initializing;
+
+            var context = Context(mod, index, ordered.Count);
+            if (!mod.LoadControlDone)
+            {
+                mod.LoadControlDone = true;
+                var action = ModLoadAction.Continue;
+                if (OnBeforeModLoad is not null)
+                {
+                    try
+                    {
+                        action = await OnBeforeModLoad(context);
+                    }
+                    catch (Exception ex)
+                    {
+                        OnError?.Invoke($"pre-load callback of mod {mod.Name} threw", ex);
+                        action = ModLoadAction.Skip;
+                    }
+                }
+
+                if (action == ModLoadAction.Skip)
+                {
+                    mod.Status = ModStatus.Skipped;
+                    result.Skipped.Add(mod.Name);
+                    OnModLoadComplete?.Invoke(context, ModStatus.Skipped);
+                    continue;
+                }
+
+                if (action == ModLoadAction.Interrupt)
+                {
+                    if (!await HandleInterruptAsync(mod, context, result))
+                        continue;
+                    //The takeover chose the default flow, so the phase bindings run after all
+                    mod.Status = ModStatus.Initializing;
+                }
             }
 
-            await InitializeModAsync(mod, context, result);
-            completed++;
+            try
+            {
+                foreach (var binding in bindings)
+                    InvokeBinding(mod, binding);
+            }
+            catch (Exception ex)
+            {
+                mod.Status = ModStatus.Error;
+                result.Errors.Add($"mod {mod.Name} {phase} failed {ex.Message}");
+                OnError?.Invoke($"mod {mod.Name} {phase} failed", ex);
+                ModFailed?.Invoke(mod.ToPublic(), ex);
+                OnModLoadComplete?.Invoke(context, ModStatus.Error);
+            }
         }
     }
 
-    //HandleInterruptAsync: the host takes over loading; the result decides whether to mark failed, mark loaded, stop midway, or fall back to the default flow
-    private async Task HandleInterruptAsync(InternalModInfo mod, ModLoadContext context, LoadResult result)
+    //HandleInterruptAsync: the host takes over loading; the result decides whether to mark failed, mark loaded,
+    //stop midway, or fall back to the default flow; true means the caller continues with its bindings
+    private async Task<bool> HandleInterruptAsync(InternalModInfo mod, ModLoadContext context, LoadResult result)
     {
         InterruptResult? interruptResult = null;
         if (OnModInterrupted is not null)
@@ -247,7 +240,7 @@ public sealed partial class ModManager
             result.Errors.Add($"mod {mod.Name} takeover failed {interruptResult.Error}");
             ModFailed?.Invoke(mod.ToPublic(), new InvalidOperationException(interruptResult.Error));
             OnModLoadComplete?.Invoke(context, ModStatus.Error);
-            return;
+            return false;
         }
 
         if (interruptResult is not null && interruptResult.MarkAsLoaded)
@@ -256,7 +249,7 @@ public sealed partial class ModManager
             result.Loaded.Add(mod.Name);
             ModLoaded?.Invoke(mod.ToPublic());
             OnModLoadComplete?.Invoke(context, ModStatus.Running);
-            return;
+            return false;
         }
 
         if (interruptResult is not null && !interruptResult.ContinueOriginalLogic)
@@ -264,90 +257,73 @@ public sealed partial class ModManager
             mod.Status = ModStatus.Interrupted;
             result.Interrupted.Add(mod.Name);
             OnModLoadComplete?.Invoke(context, ModStatus.Interrupted);
-            return;
-        }
-
-        await InitializeModAsync(mod, context, result);
-    }
-
-    //InitializeModAsync: injects services and calls Init
-    private async Task InitializeModAsync(InternalModInfo mod, ModLoadContext context, LoadResult result)
-    {
-        await mod.InitLock.WaitAsync();
-        try
-        {
-            if (mod.Status != ModStatus.Scanned)
-                return;
-
-            if (!PrepareMod(mod, result))
-            {
-                mod.Status = ModStatus.Error;
-                OnModLoadComplete?.Invoke(context, ModStatus.Error);
-                return;
-            }
-
-            mod.Status = ModStatus.Initializing;
-            InjectServices(mod.Instance);
-            var startedAt = Stopwatch.GetTimestamp();
-            if (mod.InitMethod!.Invoke(mod.Instance, null) is Task task)
-                await task;
-            mod.LoadMilliseconds = Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
-
-            mod.Status = ModStatus.Running;
-            result.Loaded.Add(mod.Name);
-            ModLoaded?.Invoke(mod.ToPublic());
-            OnModLoadComplete?.Invoke(context, ModStatus.Running);
-        }
-        catch (Exception ex)
-        {
-            mod.Status = ModStatus.Error;
-            result.Errors.Add($"mod {mod.Name} initialization failed {ex.Message}");
-            OnError?.Invoke($"mod {mod.Name} initialization failed", ex);
-            ModFailed?.Invoke(mod.ToPublic(), ex);
-            OnModLoadComplete?.Invoke(context, ModStatus.Error);
-        }
-        finally
-        {
-            mod.InitLock.Release();
-        }
-    }
-
-    //PrepareMod: loads the assembly and resolves the entry class
-    //Reuses the assembly already in Default; loading a second copy under the same name breaks type equality
-    private static bool PrepareMod(InternalModInfo mod, LoadResult result)
-    {
-        if (mod.EntryType is not null)
-            return true;
-
-        try
-        {
-            var assembly = ModAssemblies.Load(mod.AssemblyName, mod.AssemblyPath);
-
-            var entryName = mod.Manifest?.Entry ?? string.Empty;
-            var entryType = assembly.GetType(entryName, throwOnError: false);
-            if (entryType is null)
-            {
-                result.Errors.Add($"mod {mod.Name} entry class {entryName} not found");
-                return false;
-            }
-
-            var init = entryType.GetMethod("Init", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
-            if (init is null || init.ReturnType != typeof(Task))
-            {
-                result.Errors.Add($"mod {mod.Name} entry class lacks public Task Init()");
-                return false;
-            }
-
-            mod.EntryType = entryType;
-            mod.Instance = Activator.CreateInstance(entryType);
-            mod.InitMethod = init;
-            mod.ExitMethod = entryType.GetMethod("Exit", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            result.Errors.Add($"mod {mod.Name} load failed {ex.Message}");
             return false;
         }
+
+        return true;
     }
+
+    //InvokeBinding: creates the instance on first use, injects host services, calls the phase method
+    private void InvokeBinding(InternalModInfo mod, EntrypointBinding binding)
+    {
+        EnsureStarted(mod, binding);
+
+        var startedAt = Stopwatch.GetTimestamp();
+        binding.Method!.Invoke(binding.Instance, null);
+        mod.LoadMilliseconds = (mod.LoadMilliseconds ?? 0) + Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
+    }
+
+    //EnsureStarted: the entrypoint instance and its resolved phase method, created once per binding
+    private void EnsureStarted(InternalModInfo mod, EntrypointBinding binding)
+    {
+        if (binding.Instance is not null)
+            return;
+
+        binding.Instance = Activator.CreateInstance(binding.Type);
+        InjectServices(binding.Instance);
+        //The UI shows the first main instance as the mod's representative object
+        if (binding.Phase == ModPhases.Main && mod.Instance is null)
+            mod.Instance = binding.Instance;
+
+        binding.Method = ModPhases.ResolveMethod(binding.Type, binding.Phase);
+        if (binding.Method is null)
+            throw new MissingMethodException(binding.Type.FullName, ModPhases.MethodNameOf(binding.Phase));
+    }
+
+    //InvokeEntrypoints: one externally driven phase (client or server) over the running mods in load order
+    //A failure here reports as a runtime error; the mod stays loaded
+    internal void InvokeEntrypoints<T>(string phase) where T : class
+    {
+        foreach (var name in _loadOrder)
+        {
+            if (!_mods.TryGetValue(name, out var mod) || mod.Status != ModStatus.Running)
+                continue;
+
+            foreach (var binding in mod.Entrypoints)
+            {
+                if (binding.Phase != phase || !typeof(T).IsAssignableFrom(binding.Type))
+                    continue;
+
+                try
+                {
+                    EnsureStarted(mod, binding);
+                    binding.Method!.Invoke(binding.Instance, null);
+                }
+                catch (Exception ex)
+                {
+                    OnError?.Invoke($"mod {mod.Name} {phase} entrypoint {binding.Type.Name} failed", ex);
+                }
+            }
+        }
+    }
+
+    //Context: the load-control callback context of one mod at one point of the flow
+    private ModLoadContext Context(InternalModInfo mod, int completed, int total) => new()
+    {
+        Name = mod.Name,
+        AssemblyPath = mod.AssemblyPath,
+        Dependencies = mod.Dependencies,
+        Completed = completed,
+        Total = total,
+    };
 }

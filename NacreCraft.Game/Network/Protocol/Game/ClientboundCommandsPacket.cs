@@ -28,6 +28,9 @@ public sealed record ClientboundCommandsPacket(CommandNode<CommandSourceStack> R
 
     private static readonly Predicate<CommandSourceStack> AlwaysTrue = _ => true;
 
+    //WarnedTypes unregistered argument types that already produced a fallback warning
+    private static readonly HashSet<Type> WarnedTypes = new();
+
     private sealed class CommandsCodec : StreamCodec<FriendlyByteBuf, ClientboundCommandsPacket>
     {
         public ClientboundCommandsPacket Decode(FriendlyByteBuf buf)
@@ -111,11 +114,22 @@ public sealed record ClientboundCommandsPacket(CommandNode<CommandSourceStack> R
         if (argument != null)
         {
             var argumentType = argument.GetArgumentTypeObject();
-            var info = ArgumentTypeInfos.Unpack(argumentType)
-                ?? throw new InvalidOperationException($"Unregistered argument type: {argumentType.GetType().Name}");
+            var info = ArgumentTypeInfos.Unpack(argumentType);
             buf.WriteString(argument.Name);
-            buf.WriteVarInt(BuiltInRegistries.COMMAND_ARGUMENT_TYPE.GetIdOrThrow(info));
-            info.SerializeToNetwork(info.Unpack(argumentType), buf);
+            if (info is null)
+            {
+                //Never let one unsupported argument type suppress the whole command list: fall back to a quotable string node
+                if (WarnedTypes.Add(argumentType.GetType()))
+                    NacreCraft.Logging.Log.Warning(
+                        $"Unregistered command argument type {argumentType.GetType().FullName}; synchronizing it as string");
+                buf.WriteVarInt(BuiltInRegistries.COMMAND_ARGUMENT_TYPE.GetIdOrThrow(StringArgumentSerializer.Instance));
+                buf.WriteVarInt(1);
+            }
+            else
+            {
+                buf.WriteVarInt(BuiltInRegistries.COMMAND_ARGUMENT_TYPE.GetIdOrThrow(info));
+                info.SerializeToNetwork(info.Unpack(argumentType), buf);
+            }
             //The provider name decides whether the client asks the server or builds the list locally
             if ((flags & FlagCustomSuggestions) != 0)
                 buf.WriteIdentifier(SuggestionProviders.GetName(argument.CustomSuggestions!));

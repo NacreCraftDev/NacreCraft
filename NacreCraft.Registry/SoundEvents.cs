@@ -37,6 +37,12 @@ public static class SoundEvents
     //PlayerBurp player finished eating
     public static readonly SoundEvent PlayerBurp = Create("entity.player.burp");
 
+    //Consumable sounds used by the consumable component and default food/drink presets
+    public static readonly SoundEvent GenericEat = Create("entity.generic.eat");
+    public static readonly SoundEvent GenericDrink = Create("entity.generic.drink");
+    public static readonly SoundEvent HoneyDrink = Create("item.honey_bottle.drink");
+    public static readonly SoundEvent OminousBottleDispose = Create("item.ominous_bottle.dispose");
+
     //ItemPickup item picked up
     public static readonly SoundEvent ItemPickup = Create("entity.item.pickup");
 
@@ -140,6 +146,21 @@ public static class SoundEvents
 
     //Fox teleport, the fox branch of the teleport_randomly consume effect, maps to vanilla FOX_TELEPORT
     public static readonly SoundEvent FoxTeleport = Create("entity.fox.teleport");
+
+    //Armor equip sounds, one per material, maps to the vanilla ARMOR_EQUIP_* events
+    public static readonly SoundEvent ArmorEquipGeneric = Create("item.armor.equip_generic");
+    public static readonly SoundEvent ArmorEquipLeather = Create("item.armor.equip_leather");
+    public static readonly SoundEvent ArmorEquipCopper = Create("item.armor.equip_copper");
+    public static readonly SoundEvent ArmorEquipChain = Create("item.armor.equip_chain");
+    public static readonly SoundEvent ArmorEquipIron = Create("item.armor.equip_iron");
+    public static readonly SoundEvent ArmorEquipGold = Create("item.armor.equip_gold");
+    public static readonly SoundEvent ArmorEquipDiamond = Create("item.armor.equip_diamond");
+    public static readonly SoundEvent ArmorEquipTurtle = Create("item.armor.equip_turtle");
+    public static readonly SoundEvent ArmorEquipNetherite = Create("item.armor.equip_netherite");
+    public static readonly SoundEvent ArmorEquipWolf = Create("item.armor.equip_wolf");
+
+    //Shears snip, the default shearing sound of the equippable component, maps to vanilla SHEARS_SNIP
+    public static readonly SoundEvent ShearsSnip = Create("entity.shears.snip");
 
     //Create builds an event under the default namespace from the vanilla sound path
     private static SoundEvent Create(string path) => new(Identifier.WithDefaultNamespace(path));

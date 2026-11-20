@@ -92,6 +92,15 @@ public sealed class ServerPlayer : Player
     //LastActiveMillis the last active moment, the baseline for the idle kick timer
     public long LastActiveMillis { get; private set; } = Environment.TickCount64;
 
+    //IsSleeping whether the player is in a bed; bed interaction is not ported yet, so the flag is set by whoever adds it
+    public bool IsSleeping { get; set; }
+
+    //SleepTimer ticks spent in bed, used to decide deep sleep
+    public int SleepTimer { get; set; }
+
+    //IsSleepingLongEnough whether the player slept long enough to skip the night, maps to vanilla isSleepingLongEnough
+    public bool IsSleepingLongEnough => IsSleeping && SleepTimer >= 100;
+
     //RespawnPos personal respawn point, maps to the player respawn position set by the vanilla spawnpoint command; empty falls back to the world spawn
     public Vec3? RespawnPos { get; set; }
 

@@ -9,6 +9,18 @@ public static class HolderSetCodecs
     //BlockSet block set codec used by a carver's replaceable field, bound to BuiltInRegistries.BLOCK
     public static readonly Codec<HolderSet<Block>> BlockSet = new HolderSetCodec<Block>(BuiltInRegistries.BLOCK);
 
+    //DamageTypeSet damage type set codec used by DamageResistant, supports #tags and id lists
+    public static readonly Codec<HolderSet<DamageType>> DamageTypeSet =
+        new HolderSetCodec<DamageType>(BuiltInRegistries.DAMAGE_TYPE);
+
+    //InstrumentRef single instrument reference used by InstrumentComponent
+    public static readonly Codec<Holder<Instrument>> InstrumentRef =
+        new HolderRefCodec<Instrument>(BuiltInRegistries.INSTRUMENT);
+
+    //MapDecorationTypeRef single map decoration type used by MapDecorations
+    public static readonly Codec<Holder<MapDecorationType>> MapDecorationTypeRef =
+        new HolderRefCodec<MapDecorationType>(BuiltInRegistries.MAP_DECORATION_TYPE);
+
     //ConfiguredCarverSet configured carver set codec used by a biome's carvers field
     public static readonly Codec<HolderSet<ConfiguredWorldCarver>> ConfiguredCarverSet =
         new HolderSetCodec<ConfiguredWorldCarver>(BuiltInRegistries.CONFIGURED_CARVER);

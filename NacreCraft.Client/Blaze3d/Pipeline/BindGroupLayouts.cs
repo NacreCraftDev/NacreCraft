@@ -34,8 +34,9 @@ using NacreCraft.Client.Model.Geom;
 using NacreCraft.Client.Resources.Metadata.Gui;
 namespace NacreCraft.Client.Blaze3d.Pipeline;
 
-//BindGroupLayouts bind group layout presets, maps to vanilla BindGroupLayouts
-//Declares shared BindGroupLayouts like GLOBALS/MATRICES_PROJECTION/SAMPLER0 for RenderPipelines to reuse
+//BindGroupLayouts bind group layout presets, maps to vanilla net.minecraft.client.renderer.BindGroupLayouts
+//The scene layouts follow the vanilla names exactly: DynamicTransforms and Projection are separate blocks because that is
+//what the vanilla shaders declare, and render passes bind them by name
 public static class BindGroupLayouts
 {
     //GLOBALS global uniform block holding GameTime/ScreenSize etc.
@@ -43,14 +44,25 @@ public static class BindGroupLayouts
         .AddUniform("Globals", UniformType.UniformBuffer)
         .Build();
 
-    //MATRICES_PROJECTION projection matrix uniform block
-    public static readonly BindGroupLayout MATRICES_PROJECTION = BindGroupLayout.Create()
-        .AddUniform("Matrices", UniformType.UniformBuffer)
+    //DYNAMIC_TRANSFORMS per-draw transform block, maps to vanilla DYNAMIC_TRANSFORMS
+    public static readonly BindGroupLayout DYNAMIC_TRANSFORMS = BindGroupLayout.Create()
+        .AddUniform("DynamicTransforms", UniformType.UniformBuffer)
         .Build();
 
-    //PROJECTION holds only the projection matrix, for standalone-matrix cases like chunk rendering
+    //PROJECTION projection matrix block, maps to vanilla PROJECTION
     public static readonly BindGroupLayout PROJECTION = BindGroupLayout.Create()
-        .AddUniform("Proj", UniformType.UniformBuffer)
+        .AddUniform("Projection", UniformType.UniformBuffer)
+        .Build();
+
+    //MATRICES_PROJECTION vanilla scene matrices: dynamic transforms + projection, maps to vanilla MATRICES_PROJECTION
+    public static readonly BindGroupLayout MATRICES_PROJECTION = BindGroupLayout.Create()
+        .AddUniform("DynamicTransforms", UniformType.UniformBuffer)
+        .AddUniform("Projection", UniformType.UniformBuffer)
+        .Build();
+
+    //CHUNK_SECTION per-section chunk uniforms, maps to vanilla CHUNK_SECTION
+    public static readonly BindGroupLayout CHUNK_SECTION = BindGroupLayout.Create()
+        .AddUniform("ChunkSection", UniformType.UniformBuffer)
         .Build();
 
     //FOG fog parameters uniform block
@@ -86,6 +98,21 @@ public static class BindGroupLayouts
     //SAMPLER0 single texture sampler
     public static readonly BindGroupLayout SAMPLER0 = BindGroupLayout.Create()
         .AddSampler("Sampler0")
+        .Build();
+
+    //SAMPLER1 single secondary sampler, maps to vanilla SAMPLER1
+    public static readonly BindGroupLayout SAMPLER1 = BindGroupLayout.Create()
+        .AddSampler("Sampler1")
+        .Build();
+
+    //SAMPLER2 single lightmap/tertiary sampler, maps to vanilla SAMPLER2
+    public static readonly BindGroupLayout SAMPLER2 = BindGroupLayout.Create()
+        .AddSampler("Sampler2")
+        .Build();
+
+    //DISSOLVE_MASK_SAMPLER dissolve mask texture, maps to vanilla DISSOLVE_MASK_SAMPLER
+    public static readonly BindGroupLayout DISSOLVE_MASK_SAMPLER = BindGroupLayout.Create()
+        .AddSampler("DissolveMaskSampler")
         .Build();
 
     //SAMPLER0_SAMPLER1 two texture samplers

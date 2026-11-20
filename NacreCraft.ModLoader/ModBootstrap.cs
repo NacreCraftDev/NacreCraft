@@ -5,25 +5,35 @@ namespace NacreCraft.ModLoader;
 
 //ModBootstrap: mod bootstrap entry point
 //Must be hooked at the very start of every executable entry; kernel assemblies resolve on demand, and once they come in there is no chance to rewrite
+//The pipeline is: single static scan, manifest v2 validation, dependency solve, rule assembly and preload, then prepare
+//every mod and invoke the loader-owned phases; the mod set freezes once that is done
 public static class ModBootstrap
 {
-    //Run: statically scans the mods directory, assembles injection rules, then initializes mods in dependency order
+    //Run: statically scans the mods directory, solves dependencies, assembles injection rules, then initializes mods
     //When modsFolder is null it uses mods under the program root
     public static ModBootstrapResult Run(ModEnvironment environment, string? modsFolder = null)
     {
         var folder = modsFolder ?? Path.Combine(AppPaths.BaseDirectory, "mods");
-        var scanned = ModScanner.ScanAll(folder)
-            .Where(m => m.Manifest.Environment.Matches(environment))
-            .ToList();
 
-        //Mods with a version mismatch must be dropped here; their injection rules likewise must not enter the rule table
-        scanned = ApplyDependencyVersions(scanned);
+        //S1/S2: one scan pass produces the metadata and validates the manifest v2 contract;
+        //the scan never loads an assembly, so a rejected mod never reaches the process
+        var problems = new List<string>();
+        var warnings = new List<string>();
+        var scanned = ModScanner.ScanAll(folder, problems, warnings);
+        LogNew(problems, 0);
+        LogNew(warnings, 0);
+
+        //S3: the dependency solve; a missing dependency, an unmet version and a breaks hit each skip
+        //the declaring mod with a named line, and the loader's own version answers to nc-loader
+        var scannedCount = problems.Count;
+        var solved = ModDependencies.Solve(scanned, environment, problems);
+        LogNew(problems, scannedCount);
 
         //Embedded dependency resolution must precede assembly; assembly resolves replacement classes, and at that moment the dependencies they reference must be available
-        ModLibs.Register(scanned);
+        ModLibs.Register(solved.Mods);
 
         var kernelNames = CollectKernelAssemblies();
-        var hooks = ModHooks.Build(scanned, kernelNames, environment);
+        var hooks = ModHooks.Build(solved.Mods, kernelNames, environment);
 
         //ReJIT can only be switched on at process start, and that restart belongs to the native layer's own guard: by the
         //time this runs the profiler is either attached or it never will be, so nothing is started from here
@@ -43,7 +53,7 @@ public static class ModBootstrap
 
         //Problems from every phase are collected as they are reported, so the window at the end and the log say the same
         //thing; a rule that never landed is exactly what the developer needs in front of them
-        var problems = new List<string>();
+        var reportIndex = problems.Count;
 
         //Problems accumulated during assembly and preloading are reported together here
         foreach (var error in hooks.Errors)
@@ -63,11 +73,13 @@ public static class ModBootstrap
 
         if (hooks.TargetAssemblies.Count == 0 && hooks.RuntimeTargets.Count == 0)
         {
-            Log.Info($"Mod scan finished: {scanned.Count} found, no injection rules");
+            Log.Info($"Mod scan finished: {scanned.Count} found, {solved.EnvSkipped.Count} environment skipped, " +
+                     $"{solved.SolverSkipped.Count} dependency skipped, no injection rules");
         }
         else
         {
-            Log.Info($"Mod scan finished: {scanned.Count} found, injection targets {string.Join(",", hooks.TargetAssemblies)}" +
+            Log.Info($"Mod scan finished: {scanned.Count} found, {solved.EnvSkipped.Count} environment skipped, " +
+                     $"{solved.SolverSkipped.Count} dependency skipped, injection targets {string.Join(",", hooks.TargetAssemblies)}" +
                      $" runtime {string.Join(",", hooks.RuntimeTargets)}");
         }
 
@@ -83,7 +95,13 @@ public static class ModBootstrap
             Log.Warning(line);
         };
         manager.Init(folder);
-        var load = manager.LoadAllModsAsync(environment).GetAwaiter().GetResult();
+
+        //The host access point registers before any mod code runs, so NcLoader answers during preLaunch and main
+        //instead of only after the whole load, which is what the v1 binding order gave
+        ModHost.Bind(manager, folder, environment, DebugModeRequested());
+
+        //S5/S6: prepare every mod assembly, then run preLaunch for all mods and main for all mods, in dependency order
+        var load = manager.LoadAllModsAsync(solved, environment).GetAwaiter().GetResult();
 
         foreach (var error in load.Errors)
         {
@@ -118,9 +136,6 @@ public static class ModBootstrap
         }
         Log.Info($"Mod injection outcomes: {landed} of {hooks.Rules.Count} rules landed");
 
-        //Registers with the host components; UI code that is not in the loading flow reads data from ModHost
-        ModHost.Bind(manager, folder);
-
         //The problems are handed back instead of drawn here: the window needs the language table, which belongs to the
         //kernel, and loading any kernel assembly at this point would close the injection window for the rest of the mods
         return new ModBootstrapResult
@@ -132,27 +147,19 @@ public static class ModBootstrap
         };
     }
 
+    //LogNew: logs the lines appended to a shared problem list since a previous checkpoint
+    private static void LogNew(List<string> lines, int from)
+    {
+        for (var index = from; index < lines.Count; index++)
+            Log.Warning(lines[index]);
+    }
+
     //DebugModeRequested reports the --debug flag, the same spelling the launcher declares as a kernel flag
     //Read off the command line because the flag is not carried down into this layer
-    private static bool DebugModeRequested()
+    public static bool DebugModeRequested()
     {
         var args = Environment.GetCommandLineArgs();
         return Array.IndexOf(args, "--debug") >= 0;
-    }
-
-    //ApplyDependencyVersions: drops incompatible mods by the dependency versions declared in the manifest
-    //Must come before rule assembly; a dropped mod that still had rules would rewrite the kernel and other mods anyway
-    private static List<ScannedMod> ApplyDependencyVersions(List<ScannedMod> scanned)
-    {
-        var skipped = new HashSet<string>(StringComparer.Ordinal);
-        var errors = new List<string>();
-        ModDependencies.Filter(scanned.Select(m => m.Manifest).ToList(), skipped, errors);
-        if (skipped.Count == 0)
-            return scanned;
-
-        foreach (var error in errors)
-            Log.Warning($"Mod dependency unmet {error}");
-        return scanned.Where(m => !skipped.Contains(m.Manifest.Id)).ToList();
     }
 
     //CollectKernelAssemblies: the injectable kernel assembly names

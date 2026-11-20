@@ -36,4 +36,22 @@ public interface FontDescription
 
         public override string ToString() => $"{AtlasId}:{SpriteId}";
     }
+
+    //PlayerSprite type maps to vanilla FontDescription.PlayerSprite, a player head rendered as a glyph
+    //NC's Network layer cannot reference the Game layer's ResolvableProfile, so the profile is carried as id+name
+    public sealed class PlayerSprite(Guid id, string name, bool hat) : FontDescription
+    {
+        public Guid Id { get; } = id;
+        public string Name { get; } = name;
+        public bool Hat { get; } = hat;
+
+        public override bool Equals(object? obj)
+        {
+            return obj is PlayerSprite other && Id.Equals(other.Id) && Name == other.Name && Hat == other.Hat;
+        }
+
+        public override int GetHashCode() => HashCode.Combine(Id, Name, Hat);
+
+        public override string ToString() => $"{Name}:{Id}{(Hat ? ":hat" : string.Empty)}";
+    }
 }

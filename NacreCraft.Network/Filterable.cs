@@ -30,6 +30,22 @@ public sealed record Filterable<T>(T Raw, Optional<T> Filtered)
 
     //Get returns the filtered value when filtering is on, otherwise the bare value, maps to vanilla get
     public T Get(bool filterEnabled) => filterEnabled ? Filtered.OrElse(Raw) : Raw;
+
+    //Map applies a mapper to both variants, maps to vanilla map
+    public Filterable<U> Map<U>(Func<T, U> mapper)
+        => new(mapper(Raw), Filtered.IsPresent ? Optional<U>.Of(mapper(Filtered.Get())) : Optional<U>.Empty());
+
+    //Resolve applies a fallible mapper to both variants, maps to vanilla resolve
+    public Optional<Filterable<U>> Resolve<U>(Func<T, Optional<U>> mapper)
+    {
+        var raw = mapper(Raw);
+        if (!raw.IsPresent) return Optional<Filterable<U>>.Empty();
+        if (!Filtered.IsPresent) return Optional<Filterable<U>>.Of(new Filterable<U>(raw.Get(), Optional<U>.Empty()));
+        var filtered = mapper(Filtered.Get());
+        return filtered.IsPresent
+            ? Optional<Filterable<U>>.Of(new Filterable<U>(raw.Get(), filtered))
+            : Optional<Filterable<U>>.Empty();
+    }
 }
 
 //FilterableStreamCodec is a bare value plus an optional filtered value, maps to vanilla streamCodec

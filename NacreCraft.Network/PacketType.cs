@@ -12,6 +12,8 @@ public interface IPacketType
     ConnectionProtocol Protocol { get; }
     //Direction matches FlowDirection
     FlowDirection Direction { get; }
+    //Identifier is the vanilla identifier when the table set one, null otherwise; reports use it as the packet name
+    Identifier? Identifier { get; }
 }
 
 //PacketType packet type, maps to vanilla net.minecraft.network.protocol.PacketType

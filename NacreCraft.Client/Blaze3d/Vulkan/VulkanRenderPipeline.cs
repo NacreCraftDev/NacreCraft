@@ -1,4 +1,4 @@
-using Silk.NET.Core.Native;
+﻿using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using NacreCraft.Client.Blaze3d.Systems;
 using NacreCraft.Client.Blaze3d.Buffers;
@@ -389,9 +389,13 @@ public sealed unsafe class VulkanRenderPipeline : CompiledRenderPipeline
     public static Format ToVkFormat(GpuFormat fmt) => fmt switch
     {
         GpuFormat.R8Unorm => Format.R8Unorm,
+        GpuFormat.R8Snorm => Format.R8SNorm,
         GpuFormat.Rg8Unorm => Format.R8G8Unorm,
+        GpuFormat.Rg8Snorm => Format.R8G8SNorm,
         GpuFormat.Rgb8Unorm => Format.R8G8B8Unorm,
+        GpuFormat.Rgb8Snorm => Format.R8G8B8SNorm,
         GpuFormat.Rgba8Unorm => Format.R8G8B8A8Unorm,
+        GpuFormat.Rgba8Snorm => Format.R8G8B8A8SNorm,
         GpuFormat.Bgra8Unorm => Format.B8G8R8A8Unorm,
         GpuFormat.Rgba8UnormSrgb => Format.R8G8B8A8Srgb,
         GpuFormat.Bgra8UnormSrgb => Format.B8G8R8A8Srgb,
@@ -404,8 +408,12 @@ public sealed unsafe class VulkanRenderPipeline : CompiledRenderPipeline
         GpuFormat.Rgba8Uint => Format.R8G8B8A8Uint,
         GpuFormat.Rgba8Sint => Format.R8G8B8A8Sint,
         GpuFormat.R16Unorm => Format.R16Unorm,
+        GpuFormat.R16Snorm => Format.R16SNorm,
         GpuFormat.Rg16Unorm => Format.R16G16Unorm,
+        GpuFormat.Rg16Snorm => Format.R16G16SNorm,
+        GpuFormat.Rgb16Snorm => Format.R16G16B16SNorm,
         GpuFormat.Rgba16Unorm => Format.R16G16B16A16Unorm,
+        GpuFormat.Rgba16Snorm => Format.R16G16B16A16SNorm,
         GpuFormat.R16Uint => Format.R16Uint,
         GpuFormat.R16Sint => Format.R16Sint,
         GpuFormat.Rg16Uint => Format.R16G16Uint,
@@ -461,3 +469,5 @@ public sealed unsafe class VulkanRenderPipeline : CompiledRenderPipeline
         _disposed = true;
     }
 }
+
+

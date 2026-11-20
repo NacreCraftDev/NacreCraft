@@ -1,4 +1,5 @@
 using NacreCraft.Game.World.Level.Block;
+using NacreCraft.Primitives;
 using NacreCraft.Registry;
 using NacreCraft.Storage;
 
@@ -10,11 +11,31 @@ public abstract class AbstractHurtingProjectile : Projectile
 {
     protected AbstractHurtingProjectile(EntityType<object> type) : base(type) { }
 
+    protected AbstractHurtingProjectile(EntityType<object> type, double x, double y, double z, Vec3 direction)
+        : this(type)
+    {
+        SetPos(x, y, z);
+        Velocity = direction;
+    }
+
+    protected AbstractHurtingProjectile(EntityType<object> type, LivingEntity owner, Vec3 direction) : this(type)
+    {
+        SetOwner(owner);
+        SetPos(owner.GetEyePosition());
+        Velocity = direction;
+    }
+
     //DefaultGravity fireballs ignore gravity, maps to vanilla AbstractHurtingProjectile not adding gravity
     public override double DefaultGravity => 0.0;
 
-    //AirDrag fireball air drag 0.95, maps to vanilla 0.95
-    public override double AirDrag => 0.95;
+    //AirDrag fireball air drag is the inertia, maps to vanilla getInertia
+    public override double AirDrag => Inertia;
+
+    //Inertia velocity multiplier per tick, maps to vanilla getInertia, default 0.95
+    public virtual double Inertia => 0.95;
+
+    //ShouldBurn whether the projectile sets its owner on fire when passing through fire, maps to vanilla shouldBurn
+    public virtual bool ShouldBurn => true;
 
     public override void Tick()
     {

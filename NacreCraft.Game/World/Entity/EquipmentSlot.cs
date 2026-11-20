@@ -1,3 +1,6 @@
+using NacreCraft.Codec;
+using NacreCraft.Network;
+
 namespace NacreCraft.Game.World.Entity;
 
 //EquipmentSlot equipment slot, maps to vanilla net.minecraft.world.entity.EquipmentSlot
@@ -28,6 +31,17 @@ public enum EquipmentSlotType
 //Provides name/type/index/countLimit/byId/byName lookups matching vanilla
 public static class EquipmentSlotExtensions
 {
+    //Codec encodes by serialized name, maps to vanilla EquipmentSlot.CODEC
+    public static readonly Codec<EquipmentSlot> Codec = Codecs.String.ComapFlatMap(
+        name => TryByName(name) is { } slot
+            ? DataResult<EquipmentSlot>.Success(slot)
+            : DataResult<EquipmentSlot>.Error(() => $"Invalid slot '{name}'"),
+        slot => slot.GetName());
+
+    //StreamCodec network codec by slot id, maps to vanilla EquipmentSlot.STREAM_CODEC
+    public static readonly StreamCodec<RegistryFriendlyByteBuf, EquipmentSlot> StreamCodec =
+        new EquipmentSlotStreamCodec();
+
     //GetSlotType returns the equipment slot type, matches vanilla getType
     public static EquipmentSlotType GetSlotType(this EquipmentSlot slot) => slot switch
     {
@@ -88,10 +102,32 @@ public static class EquipmentSlotExtensions
         _ => throw new ArgumentException($"Invalid slot '{name}'")
     };
 
+    //TryByName looks up by name without throwing, used by the codec
+    public static EquipmentSlot? TryByName(string name) => name switch
+    {
+        "mainhand" => EquipmentSlot.MAINHAND,
+        "offhand" => EquipmentSlot.OFFHAND,
+        "feet" => EquipmentSlot.FEET,
+        "legs" => EquipmentSlot.LEGS,
+        "chest" => EquipmentSlot.CHEST,
+        "head" => EquipmentSlot.HEAD,
+        "body" => EquipmentSlot.BODY,
+        "saddle" => EquipmentSlot.SADDLE,
+        _ => null
+    };
+
     //IsArmor whether it is an armor slot, matches vanilla isArmor
     public static bool IsArmor(this EquipmentSlot slot)
     {
         var type = slot.GetSlotType();
         return type == EquipmentSlotType.HUMANOID_ARMOR || type == EquipmentSlotType.ANIMAL_ARMOR;
     }
+}
+
+//EquipmentSlotStreamCodec writes the vanilla slot id, maps to vanilla STREAM_CODEC
+internal sealed class EquipmentSlotStreamCodec : StreamCodec<RegistryFriendlyByteBuf, EquipmentSlot>
+{
+    public EquipmentSlot Decode(RegistryFriendlyByteBuf buf) => EquipmentSlotExtensions.ById(buf.ReadVarInt());
+
+    public void Encode(RegistryFriendlyByteBuf buf, EquipmentSlot value) => buf.WriteVarInt(value.GetId());
 }

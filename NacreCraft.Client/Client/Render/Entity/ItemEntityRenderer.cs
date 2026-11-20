@@ -1,5 +1,6 @@
 using System.Numerics;
 using NacreCraft.Client.Render.Model;
+using NacreCraft.Client.Render.Rendertype;
 using NacreCraft.Game.World.Entity;
 using NacreCraft.Game.World.Items;
 using NacreCraft.Client.Blaze3d.Systems;
@@ -63,6 +64,9 @@ public sealed class ItemEntityRenderer : EntityRenderer
 
     //Pipeline block textures have cutout pixels; use cutout to avoid black edges at transparent areas
     public override RenderPipeline Pipeline => EntityRenderPipelines.ENTITY_CUTOUT;
+
+    //RenderType dropped items use the item cutout family, which binds the atlas, overlay and lightmap
+    public override RenderType RenderType(EntityRenderState state) => RenderTypes.ItemCutout(RenderTypes.BlockAtlasLocation);
 
     //Render takes the six-face model of the item's block and assembles a small cube
     public override void Render(PoseStack poseStack, EntityVertexBuilder builder, EntityRenderState state)

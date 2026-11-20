@@ -30,6 +30,9 @@ public abstract class AbstractArrow : Projectile
     //InGround whether the arrow is stuck in a block
     public bool InGround => _inGround;
 
+    //InGroundTime ticks spent stuck in a block, maps to vanilla inGroundTime
+    public int InGroundTime => _inGroundTime;
+
     public override void Tick()
     {
         TickBase();

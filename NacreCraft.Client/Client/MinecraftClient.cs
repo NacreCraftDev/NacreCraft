@@ -114,6 +114,8 @@ public sealed class MinecraftClient : IDisposable
     private bool _worldRendererInitialized;
     //Lightmap light texture refreshed each Tick from Level.SkyBrightness; internal dirtiness check avoids re-upload
     private LightTexture? _lightTexture;
+    //DebugGizmos collector drained by the world pass every frame; mods and diagnostics add gizmos through it
+    public NacreCraft.Game.Gizmos.SimpleGizmoCollector DebugGizmos { get; } = new();
 
     //GameConfig client config, the options.txt load result
     public GameConfig Config { get; }
@@ -191,8 +193,9 @@ public sealed class MinecraftClient : IDisposable
     private void EnsureWorldRenderer()
     {
         if (_worldRendererInitialized) return;
+        //The Vulkan app publishes its device once the swapchain exists; retry on a later tick instead of latching a failure
+        if (_gpuApp is null || _resourceManager is null || _gpuApp.Device is null) return;
         _worldRendererInitialized = true;
-        if (_gpuApp is null || _resourceManager is null) return;
         try
         {
             var collector = new BlockTextureCollector(_resourceManager);
@@ -200,7 +203,7 @@ public sealed class MinecraftClient : IDisposable
             BlockTextureAtlas? atlas = null;
             if (sprites.Count > 0)
             {
-                atlas = new BlockTextureAtlas(_gpuApp.Device);
+                atlas = new BlockTextureAtlas(_gpuApp.Device, 2048);
                 if (!atlas.Build(sprites))
                 {
                     atlas.Dispose();
@@ -231,11 +234,14 @@ public sealed class MinecraftClient : IDisposable
                 workerCount: Math.Min(4, Math.Max(2, Environment.ProcessorCount / 2)));
             _worldDispatcher.Start();
             _worldRenderer = new LevelRenderer(_level, _camera, _worldDispatcher, pool);
+            _worldRenderer.Gizmos = DebugGizmos;
             //The entity render dispatcher is created along with world rendering
             //Dropped items hold their own model mapper instance; the background mesh-building thread already uses that mapper's cache dictionary, and sharing it would cause concurrent reads/writes
-            var entityDispatcher = new EntityRenderDispatcher(pool);
+            var entityDispatcher = new EntityRenderDispatcher(pool, _gpuApp.Device);
             entityDispatcher.Register(EntityTypes.ITEM.Id.ToString(),
                 new ItemEntityRenderer(new BlockStateModelMapper(_resourceManager, loader, baker)));
+            if (Environment.GetEnvironmentVariable("NC_DEBUG_ENTITIES") == "1")
+                entityDispatcher.Register("nc:debug_quad", new NacreCraft.Client.Render.Entity.DebugQuadRenderer());
             _worldRenderer.EntityDispatcher = entityDispatcher;
             //The moving block pass holds its own model mapper and mesh builder; the background mesh-building thread already uses that mapper's cache dictionary
             _worldRenderer.MovingBlocks = new MovingBlockRenderer(_level,
@@ -246,7 +252,7 @@ public sealed class MinecraftClient : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Warning($"World render pipeline creation failed {ex.Message}");
+            Log.Warning($"World render pipeline creation failed {ex}");
         }
     }
 
@@ -338,7 +344,12 @@ public sealed class MinecraftClient : IDisposable
     private LoadingOverlay? CreateStartupOverlay()
     {
         if (_screens is null || _gpuApp is null) return null;
-        var worldBuild = Task.Run(EnsureWorldRenderer);
+        var worldBuild = Task.Run(async () =>
+        {
+            //The Vulkan device is published only once the window loop starts; wait for it before touching GPU resources
+            while (_gpuApp.Device is null) await Task.Delay(50);
+            EnsureWorldRenderer();
+        });
         var stages = new List<(string Label, Func<float>)>
         {
             //The background build reports no intermediate progress, so the bar holds until it lands
@@ -507,9 +518,60 @@ public sealed class MinecraftClient : IDisposable
         //Sky brightness currently has no client time source, constant noon; it will be computed from time once time sync is added
         _lightTexture?.Update(1.0f);
         UpdateCamera();
+        UpdateRenderState();
+        if (Environment.GetEnvironmentVariable("NC_DEBUG_GIZMOS") == "1")
+            EmitDebugGizmos();
         TrackFrameTiming();
         _worldTelemetry?.Tick();
         _frameCount++;
+    }
+
+    private bool _debugGizmosLogged;
+
+    //UpdateRenderState publishes the window/options/camera snapshot the renderers read each frame
+    private void UpdateRenderState()
+    {
+        if (GpuApp is not { } app) return;
+        var state = app.RenderState;
+        state.WindowRenderState.Width = app.Window.SurfaceWidth;
+        state.WindowRenderState.Height = app.Window.SurfaceHeight;
+        state.WindowRenderState.GuiScale = app.Window.GuiScale;
+
+        state.OptionsRenderState.RenderDistance = Config.RenderDistance;
+        state.OptionsRenderState.Fov = Config.Fov;
+        state.OptionsRenderState.GlintSpeed = 0.5;
+
+        var camera = state.LevelRenderState.CameraRenderState;
+        var pos = _camera.Position;
+        camera.Pos = new NacreCraft.Primitives.Vec3(pos.X, pos.Y, pos.Z);
+        camera.BlockPos = new NacreCraft.Primitives.BlockPos(
+            (int)MathF.Floor(pos.X), (int)MathF.Floor(pos.Y), (int)MathF.Floor(pos.Z));
+        camera.XRot = _camera.XRot;
+        camera.YRot = _camera.YRot;
+        camera.Orientation = _camera.Rotation;
+        camera.ProjectionMatrix = _camera.GetProjectionMatrix();
+        camera.ViewRotationMatrix = _camera.GetViewMatrix();
+        camera.HudFov = Config.Fov;
+        camera.Initialized = true;
+        state.LevelRenderState.GameTime = _level.TickCount;
+    }
+
+    //EmitDebugGizmos diagnostic: a red box and a line around the local player, enabled with NC_DEBUG_GIZMOS=1
+    //It exists to exercise the RenderType/gizmo draw path until real gizmo producers are ported
+    private void EmitDebugGizmos()
+    {
+        var pos = Player.Pos;
+        if (!_debugGizmosLogged)
+        {
+            _debugGizmosLogged = true;
+            Log.Info("Debug gizmos enabled at " + pos.X.ToString("F1") + "," + pos.Y.ToString("F1") + "," + pos.Z.ToString("F1"));
+        }
+        using var scope = NacreCraft.Game.Gizmos.Gizmos.WithCollector(DebugGizmos);
+        NacreCraft.Game.Gizmos.Gizmos.Cuboid(
+            new NacreCraft.Primitives.AABB(pos.X - 1.0, pos.Y, pos.Z - 1.0, pos.X + 1.0, pos.Y + 2.0, pos.Z + 1.0),
+            NacreCraft.Game.Gizmos.GizmoStyle.Stroke(unchecked((int)0xFFFF3040)));
+        NacreCraft.Game.Gizmos.Gizmos.Line(pos,
+            new NacreCraft.Primitives.Vec3(pos.X, pos.Y + 3.0, pos.Z), unchecked((int)0xFF40FF80));
     }
 
     //TrackFrameTiming keeps the rolling FPS window and the last frame duration used by the telemetry samplers

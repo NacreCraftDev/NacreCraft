@@ -126,25 +126,43 @@ public sealed partial class ModManager
         => resourceName.Equals("icon.png", StringComparison.OrdinalIgnoreCase)
             || resourceName.EndsWith(".icon.png", StringComparison.OrdinalIgnoreCase);
 
-    //ShutdownAsync: calls each mod's Exit before the process exits, letting mods wrap up
+    //ShutdownAsync: calls each main-phase entrypoint's Exit before the process exits, letting mods wrap up
+    //Exit is an optional duck method on the entrypoint type, void or Task, no parameters
     //No unloading; assemblies and registered content persist until the process ends
     public async Task ShutdownAsync()
     {
         foreach (var mod in _mods.Values)
         {
-            if (mod.Status != ModStatus.Running || mod.ExitMethod is null || mod.Instance is null)
+            if (mod.Status != ModStatus.Running)
                 continue;
-            try
+
+            foreach (var binding in mod.Entrypoints)
             {
-                if (mod.ExitMethod.Invoke(mod.Instance, null) is Task task)
-                    await task;
-            }
-            catch (Exception ex)
-            {
-                OnError?.Invoke($"mod {mod.Name} failed to exit", ex);
+                if (binding.Phase != ModPhases.Main || binding.ExitMethod is null || binding.Instance is null)
+                    continue;
+                try
+                {
+                    if (binding.ExitMethod.Invoke(binding.Instance, null) is Task task)
+                        await task;
+                }
+                catch (Exception ex)
+                {
+                    OnError?.Invoke($"mod {mod.Name} failed to exit", ex);
+                }
             }
         }
     }
+
+    //GetContainers: the mod-facing read-only container views, one per mod in load order
+    internal IReadOnlyList<NacreCraft.ModLoader.Api.IModContainer> GetContainers()
+        => _loadOrder
+            .Where(_mods.ContainsKey)
+            .Select(name => (NacreCraft.ModLoader.Api.IModContainer)new ModContainerView(_mods[name]))
+            .ToList();
+
+    //GetContainer: one mod-facing container view, null when the id is not tracked
+    internal NacreCraft.ModLoader.Api.IModContainer? GetContainer(string name)
+        => _mods.TryGetValue(name, out var mod) ? new ModContainerView(mod) : null;
 
     //UpdateProgress: refreshes progress and broadcasts it
     private void UpdateProgress(string status, int completed, int total, string currentMod)

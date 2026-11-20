@@ -11,18 +11,7 @@ public sealed record ServerOpListEntry(NameAndId User, PermissionLevel Permissio
     public LevelBasedPermissionSet PermissionSet() => LevelBasedPermissionSet.ForLevel(Permissions);
 }
 
-//UserBanListEntry a player ban record in the vanilla shape, maps to net.minecraft.server.players.UserBanListEntry
-//The game-side list persists BanEntry with string timestamps, so this adapter keeps the same string form
-public sealed record UserBanListEntry(NameAndId User, string? DisplayName, string Reason, string Source, string Expires)
-{
-    public NameAndId GetUser() => User;
-
-    public string GetReason() => Reason;
-
-    public string GetSource() => Source;
-
-    public string GetExpires() => Expires;
-}
+//UserBanListEntry lives in BanListEntry.cs, the class hierarchy shared with BanListEntry<T>
 
 //IpBanListEntry an IP ban record in the vanilla shape, maps to net.minecraft.server.players.IpBanListEntry
 public sealed record IpBanListEntry(string Ip, string Reason, string Source, string Expires)

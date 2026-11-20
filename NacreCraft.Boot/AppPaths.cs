@@ -56,6 +56,9 @@ public static class AppPaths
     //BannedIpsPath IP ban list path root/banned-ips.json
     public static string BannedIpsPath => Path.Combine(BaseDirectory, "banned-ips.json");
 
+    //UsercachePath name to profile cache path root/usercache.json, matching the vanilla server root location
+    public static string UsercachePath => Path.Combine(BaseDirectory, "usercache.json");
+
     //SetOverride sets --output-dir to override the whole root
     //optionValue when null or whitespace it is ignored and AppContext.BaseDirectory is used
     public static void SetOverride(string? optionValue)

@@ -59,6 +59,136 @@ public static class EntityTypes
         public override float Height => 0.5f;
     }
 
+    //EvokerFangsType evoker fangs type, maps to vanilla EntityTypes.EVOKER_FANGS
+    public sealed class EvokerFangsType : EntityType<object>
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("evoker_fangs");
+        public override int RawId => 47;
+        public override int TrackingRangeChunks => 6;
+        public override float Width => 0.5f;
+        public override float Height => 0.8f;
+    }
+
+    //EyeOfEnderType eye of ender type, maps to vanilla EntityTypes.EYE_OF_ENDER
+    public sealed class EyeOfEnderType : EntityType<object>
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("eye_of_ender");
+        public override int RawId => 50;
+        public override int TrackingRangeChunks => 4;
+        public override float Width => 0.25f;
+        public override float Height => 0.25f;
+    }
+
+    //FireworkRocketType firework rocket type, maps to vanilla EntityTypes.FIREWORK_ROCKET
+    public sealed class FireworkRocketType : EntityType<object>
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("firework_rocket");
+        public override int RawId => 53;
+        public override int TrackingRangeChunks => 4;
+        public override float Width => 0.25f;
+        public override float Height => 0.25f;
+    }
+
+    //LlamaSpitType llama spit type, maps to vanilla EntityTypes.LLAMA_SPIT
+    public sealed class LlamaSpitType : EntityType<object>
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("llama_spit");
+        public override int RawId => 79;
+        public override int TrackingRangeChunks => 4;
+        public override float Width => 0.25f;
+        public override float Height => 0.25f;
+    }
+
+    //ShulkerBulletType shulker bullet type, maps to vanilla EntityTypes.SHULKER_BULLET
+    public sealed class ShulkerBulletType : EntityType<object>
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("shulker_bullet");
+        public override int RawId => 113;
+        public override int TrackingRangeChunks => 8;
+        public override float Width => 0.3125f;
+        public override float Height => 0.3125f;
+    }
+
+    //FishingBobberType fishing bobber type, maps to vanilla EntityTypes.FISHING_BOBBER
+    public sealed class FishingBobberType : EntityType<object>
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("fishing_bobber");
+        public override int RawId => 157;
+        public override int TrackingRangeChunks => 4;
+        public override float Width => 0.25f;
+        public override float Height => 0.25f;
+    }
+
+    //SpectralArrowType spectral arrow type, maps to vanilla EntityTypes.SPECTRAL_ARROW
+    public sealed class SpectralArrowType : EntityType<object>
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("spectral_arrow");
+        public override int RawId => 123;
+        public override int TrackingRangeChunks => 4;
+        public override float Width => 0.5f;
+        public override float Height => 0.5f;
+    }
+
+    //FireballType large fireball type, maps to vanilla EntityTypes.FIREBALL
+    public sealed class FireballType : EntityType<object>
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("fireball");
+        public override int RawId => 52;
+        public override int TrackingRangeChunks => 4;
+        public override float Width => 1f;
+        public override float Height => 1f;
+    }
+
+    //DragonFireballType dragon fireball type, maps to vanilla EntityTypes.DRAGON_FIREBALL
+    public sealed class DragonFireballType : EntityType<object>
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("dragon_fireball");
+        public override int RawId => 37;
+        public override int TrackingRangeChunks => 4;
+        public override float Width => 1f;
+        public override float Height => 1f;
+    }
+
+    //WitherSkullType wither skull type, maps to vanilla EntityTypes.WITHER_SKULL
+    public sealed class WitherSkullType : EntityType<object>
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("wither_skull");
+        public override int RawId => 148;
+        public override int TrackingRangeChunks => 4;
+        public override float Width => 0.3125f;
+        public override float Height => 0.3125f;
+    }
+
+    //ExperienceBottleType experience bottle type, maps to vanilla EntityTypes.EXPERIENCE_BOTTLE
+    public sealed class ExperienceBottleType : EntityType<object>
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("experience_bottle");
+        public override int RawId => 48;
+        public override int TrackingRangeChunks => 4;
+        public override float Width => 0.25f;
+        public override float Height => 0.25f;
+    }
+
+    //SplashPotionType splash potion type, maps to vanilla EntityTypes.SPLASH_POTION
+    public sealed class SplashPotionType : EntityType<object>
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("splash_potion");
+        public override int RawId => 105;
+        public override int TrackingRangeChunks => 4;
+        public override float Width => 0.25f;
+        public override float Height => 0.25f;
+    }
+
+    //LingeringPotionType lingering potion type, maps to vanilla EntityTypes.LINGERING_POTION
+    public sealed class LingeringPotionType : EntityType<object>
+    {
+        public override Identifier Id => Identifier.WithDefaultNamespace("lingering_potion");
+        public override int RawId => 106;
+        public override int TrackingRangeChunks => 4;
+        public override float Width => 0.25f;
+        public override float Height => 0.25f;
+    }
+
     //PlayerType player type, used for player tracking and AddEntity broadcast
     public sealed class PlayerType : EntityType<object>
     {
@@ -199,6 +329,23 @@ public static class EntityTypes
     //SLIME slime type, spawned by the oozing effect; the mob class is not ported, so no factory is given
     public static readonly SlimeType SLIME = new();
 
+    //Projectile entity types ported with the projectile batch
+    public static readonly EvokerFangsType EVOKER_FANGS = new() { Factory = (type, level) => new EvokerFangs(type) };
+    public static readonly EyeOfEnderType EYE_OF_ENDER = new() { Factory = (type, level) => new EyeOfEnder(type) };
+    public static readonly FireworkRocketType FIREWORK_ROCKET = new() { Factory = (type, level) => new FireworkRocketEntity(type) };
+    public static readonly LlamaSpitType LLAMA_SPIT = new() { Factory = (type, level) => new LlamaSpit(type) };
+    public static readonly ShulkerBulletType SHULKER_BULLET = new() { Factory = (type, level) => new ShulkerBullet(type) };
+    public static readonly FishingBobberType FISHING_BOBBER = new() { Factory = (type, level) => new FishingHook(type) };
+
+    //Projectile subpackage types: spectral arrow, fireballs, wither skull and potion throwables
+    public static readonly SpectralArrowType SPECTRAL_ARROW = new() { Factory = (type, level) => new SpectralArrow(type) };
+    public static readonly FireballType FIREBALL = new() { Factory = (type, level) => new LargeFireball(type) };
+    public static readonly DragonFireballType DRAGON_FIREBALL = new() { Factory = (type, level) => new DragonFireball(type) };
+    public static readonly WitherSkullType WITHER_SKULL = new() { Factory = (type, level) => new WitherSkull(type) };
+    public static readonly ExperienceBottleType EXPERIENCE_BOTTLE = new() { Factory = (type, level) => new ThrownExperienceBottle(type) };
+    public static readonly SplashPotionType SPLASH_POTION = new() { Factory = (type, level) => new ThrownSplashPotion(type) };
+    public static readonly LingeringPotionType LINGERING_POTION = new() { Factory = (type, level) => new ThrownLingeringPotion(type) };
+
     //_byRawId reverse map from network index to type, used by AddEntity decoding to resolve the entity type
     private static readonly Dictionary<int, EntityType<object>> ByRawId = new();
 
@@ -222,6 +369,19 @@ public static class EntityTypes
         Register(TRIDENT);
         Register(SILVERFISH);
         Register(SLIME);
+        Register(EVOKER_FANGS);
+        Register(EYE_OF_ENDER);
+        Register(FIREWORK_ROCKET);
+        Register(LLAMA_SPIT);
+        Register(SHULKER_BULLET);
+        Register(FISHING_BOBBER);
+        Register(SPECTRAL_ARROW);
+        Register(FIREBALL);
+        Register(DRAGON_FIREBALL);
+        Register(WITHER_SKULL);
+        Register(EXPERIENCE_BOTTLE);
+        Register(SPLASH_POTION);
+        Register(LINGERING_POTION);
     }
 
     //ById resolves an entity type by network index, null when unregistered

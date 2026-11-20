@@ -2,6 +2,7 @@ using NacreCraft.Codec;
 using NacreCraft.DataFixer.Util;
 using NacreCraft.Game.World.Food;
 using NacreCraft.Game.World.Items.Component;
+using NacreCraft.Game.World.Items.Equipment;
 using NacreCraft.Game.World.Items.Component.Predicates;
 using NacreCraft.Network;
 using NacreCraft.Game.World.Items.Component;
@@ -148,6 +149,12 @@ public static class DataComponents
         "food",
         new ObjectCodec<FoodProperties>(FoodProperties.Codec),
         new ObjectStreamCodec<FoodProperties>(FoodProperties.StreamCodec));
+
+    //EQUIPPABLE equippable component: target slot, sounds, asset and behavior flags
+    public static readonly DataComponentType<object> EQUIPPABLE = Register(
+        "equippable",
+        new ObjectCodec<Equippable>(Equippable.Codec),
+        new ObjectStreamCodec<Equippable>(Equippable.StreamCodec));
 
     //Register registers a single component type into BuiltInRegistries.DATA_COMPONENT_TYPE
     private static DataComponentType<object> Register(

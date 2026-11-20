@@ -83,6 +83,17 @@ public sealed class DataComponentPatch
     //NewBuilder creates a patch builder, maps to vanilla DataComponentPatch.builder
     public static Builder NewBuilder() => new();
 
+    //FromMap builds a patch that adds every component of the map, maps to the vanilla builder set(DataComponentMap) path
+    //Transient components are kept because the caller decides whether the patch is persisted or synced
+    public static DataComponentPatch FromMap(DataComponentMap components)
+    {
+        var map = new Dictionary<object, Optional<object>>();
+        foreach (var key in components.KeySet)
+            if (key is DataComponentType<object> type && components.Get(type) is { } value)
+                map[type] = Optional<object>.Of(value);
+        return map.Count == 0 ? Empty : new DataComponentPatch(map);
+    }
+
     //Equality compares patch content entry by entry, maps to vanilla equals
     public override bool Equals(object? obj)
         => ReferenceEquals(this, obj) || (obj is DataComponentPatch other && MapEquals(other));

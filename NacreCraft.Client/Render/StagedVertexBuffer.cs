@@ -66,8 +66,8 @@ public sealed class Draw
 }
 
 //ExecuteInfo draw execution info passed to IRenderPass in the GPU submission phase
-//VertexBuffer/IndexBuffer null means not uploaded this frame or no indices
-public sealed record ExecuteInfo(GpuBuffer VertexBuffer, GpuBuffer? IndexBuffer, int BaseVertex, int FirstIndex, int IndexCount);
+//VertexBuffer/IndexBuffer null means not uploaded this frame or no indices; VertexCount covers non-indexed draws
+public sealed record ExecuteInfo(GpuBuffer VertexBuffer, GpuBuffer? IndexBuffer, IndexType IndexType, int BaseVertex, int FirstIndex, int IndexCount, int VertexCount);
 
 //StagedVertexBuffer staged vertex buffer, maps to vanilla StagedVertexBuffer
 //The submission phase stages vertices via AppendDraw+GetVertexBuilder; EndDraw auto-generates QUADS indices
@@ -229,7 +229,9 @@ public sealed class StagedVertexBuffer : IDisposable
     //GetExecuteInfo returns the Draw's execution info, passed to IRenderPass in the submission phase
     public ExecuteInfo GetExecuteInfo(Draw draw)
     {
-        return new ExecuteInfo(_vertexBuffer!, _indexBuffer.IndexBuffer, draw.BaseVertex, draw.FirstIndex, draw.IndexCount);
+        return new ExecuteInfo(_vertexBuffer!, draw.IndexCount > 0 ? _indexBuffer.IndexBuffer : null,
+            draw.Topology == PrimitiveTopology.Quads ? IndexType.Int : IndexType.Short,
+            draw.BaseVertex, draw.FirstIndex, draw.IndexCount, draw.VertexCount);
     }
 
     //EndFrame resets the staging area while keeping GPU buffers for cross-frame reuse

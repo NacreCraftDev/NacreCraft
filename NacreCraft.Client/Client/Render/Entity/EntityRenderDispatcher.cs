@@ -1,177 +1,109 @@
 using System.Numerics;
-using System.Runtime.InteropServices;
 using NacreCraft.Client.Blaze3d.Systems;
-using NacreCraft.Client.Blaze3d.Buffers;
-using NacreCraft.Client.Blaze3d.Textures;
-using NacreCraft.Client.Blaze3d.Shaders;
 using NacreCraft.Client.Blaze3d.Vertex;
-using NacreCraft.Client.Blaze3d.Vulkan;
-using NacreCraft.Client.Blaze3d.Platform;
-using NacreCraft.Client.Blaze3d.Font;
-using NacreCraft.Client.Blaze3d.Pipeline;
 using NacreCraft.Client.Render;
-using NacreCraft.Client.Blaze3d.Resource;
-using NacreCraft.Client.Blaze3d.Audio;
-using NacreCraft.Client.Blaze3d.Framegraph;
-using NacreCraft.Client.Blaze3d.Preprocessor;
-using NacreCraft.Client.Blaze3d.Util;
-using NacreCraft.Client.Render.Model;
-using NacreCraft.Client.Render.Texture;
-using NacreCraft.Client.Render.Texture.Atlas;
-using NacreCraft.Client.Render.Item;
-using NacreCraft.Client.Render.Entity;
 using NacreCraft.Client.Render.Entity.State;
-using NacreCraft.Client.Render.State.Gui;
-using NacreCraft.Client.Gui;
-using NacreCraft.Client.Gui.Render;
-using NacreCraft.Client.Gui.Render.State;
-using NacreCraft.Client.Gui.Render.Pip;
-using NacreCraft.Client.Gui.Navigation;
-using NacreCraft.Client.Gui.Layouts;
-using NacreCraft.Client.Gui.Font;
-using NacreCraft.Client.Gui.Font.Providers;
-using NacreCraft.Client.Gui.Font.Glyphs;
-using NacreCraft.Client.Model;
-using NacreCraft.Client.Model.Geom;
-using NacreCraft.Client.Resources.Metadata.Gui;
+using NacreCraft.Logging;
 
 namespace NacreCraft.Client.Render.Entity;
 
-//EntityRenderDispatcher entity render dispatcher, maps to vanilla EntityRenderDispatcher
-//Manages the EntityRenderer registry and dispatches by EntityType
-//Holds an EntityVertexBuilder collecting all visible entity vertices; uploads to a GPU buffer then DrawIndexed
-//The PoC skeleton uses one vertex/index buffer and one pipeline for all entities; later versions batch by RenderLayer
+//EntityRenderDispatcher dispatches visible entities into RenderType batches, maps to vanilla EntityRenderDispatcher
+//Preparation writes every entity into a MultiBufferSource keyed by the renderer's RenderType; the world pass then records
+//one draw per render type through PreparedRenderType
 public sealed class EntityRenderDispatcher : IDisposable
 {
     private readonly Dictionary<string, EntityRenderer> _renderers = new();
     private readonly List<(EntityRenderState State, EntityRenderer Renderer)> _visible = new();
     private readonly EntityVertexBuilder _builder = new();
     private readonly GpuBufferPool _bufferPool;
-    private GpuBuffer? _vertexBuffer;
-    private GpuBuffer? _indexBuffer;
+    //_device used to create the RenderType batch buffers; Upload fills it on the first rendered frame because the
+    //Vulkan app's device is not ready yet when the world renderer is constructed
+    private GpuDevice? _device;
+    private MultiBufferSource.BufferSource? _buffers;
     private int _vertexCount;
-    private int _indexCount;
+    private bool _loggedFirstDraw;
+    private bool _loggedFirstPrepare;
     private bool _disposed;
-    //_layerRanges per-layer vertex/index ranges; Prepare does three passes batching by pipeline and records them, Draw sets pipeline + offset per layer
-    private readonly (int VertexStart, int VertexCount, int IndexStart, int IndexCount)[] _layerRanges = new (int, int, int, int)[3];
-    //_layerPipelines entity pipelines indexed by layer Solid=0 Cutout=1 Translucent=2, matching the RenderLayer enum order
-    private static readonly RenderPipeline[] s_layerPipelines =
-    {
-        EntityRenderPipelines.ENTITY_SOLID,
-        EntityRenderPipelines.ENTITY_CUTOUT,
-        EntityRenderPipelines.ENTITY_TRANSLUCENT
-    };
 
-    //EntityVertexCount last frame's entity vertex count, for debugging
     public int EntityVertexCount => _vertexCount;
-    //EntityIndexCount last frame's entity index count
-    public int EntityIndexCount => _indexCount;
-    //VisibleEntityCount last frame's visible entity count
+    public int EntityIndexCount => _vertexCount / 4 * 6;
     public int VisibleEntityCount => _visible.Count;
-    //HasContent whether there are renderable entity vertices
-    public bool HasContent => _indexCount > 0;
-    //LastDrawCallCount batches actually submitted by Draw last frame (one per layer, at most 3)
+    public bool HasContent => _vertexCount > 0;
     public int LastDrawCallCount { get; private set; }
 
-    public EntityRenderDispatcher(GpuBufferPool bufferPool) => _bufferPool = bufferPool;
+    public EntityRenderDispatcher(GpuBufferPool bufferPool, GpuDevice? device = null)
+    {
+        _bufferPool = bufferPool;
+        _device = device ?? bufferPool.Device;
+    }
 
-    //Register registers an entity renderer indexed by entityTypeName
     public void Register(string entityTypeName, EntityRenderer renderer)
         => _renderers[entityTypeName] = renderer;
 
-    //ClearEntities clears the visible entity list, called before Prepare each frame
     public void ClearEntities() => _visible.Clear();
 
-    //AddEntity adds a visible entity, called by LevelRenderer while iterating the entity list
-    //entityTypeName matches Register's key; unregistered entities are skipped
     public void AddEntity(string entityTypeName, EntityRenderState state)
     {
         if (_renderers.TryGetValue(entityTypeName, out var renderer))
             _visible.Add((state, renderer));
     }
 
-    //Prepare generates all visible entity vertices into builder, batching contiguous vertex segments by pipeline
-    //The caller handles the camera transform; poseStack starts from Identity and pushes a world transform per entity
-    //cameraPosition used to compute entity relative position
-    //Three passes Solid→Cutout→Translucent, each recording that layer's vertex/index range for Draw to render per layer
+    //Prepare writes every visible entity into the render-type batch, world-space so the projection carries the camera
     public void Prepare(Vector3 cameraPosition)
     {
-        _builder.Clear();
+        _buffers ??= _device is { } device ? new MultiBufferSource.BufferSource(device) : null;
+        if (_buffers is null) return;
+
+        _buffers.Discard();
         _vertexCount = 0;
-        _indexCount = 0;
-        for (var layerIndex = 0; layerIndex < s_layerPipelines.Length; layerIndex++)
+        foreach (var (state, renderer) in _visible)
         {
-            var pipeline = s_layerPipelines[layerIndex];
-            var vertexStart = _builder.VertexCount;
-            var indexStart = _builder.Indices.Count;
-            foreach (var (state, renderer) in _visible)
-            {
-                if (renderer.Pipeline != pipeline) continue;
-                var poseStack = new PoseStack();
-                //Entity world positions are relative to the camera so the shader ViewProj only contains camera rotation + projection
-                //Consistent with terrain: terrain's section offset is baked into vertex position
-                poseStack.Translate(
-                    state.Position.X - cameraPosition.X,
-                    state.Position.Y - cameraPosition.Y,
-                    state.Position.Z - cameraPosition.Z);
-                //Entity Y-axis rotation orientation
-                if (state.YRot != 0f)
-                    poseStack.Rotate(Quaternion.CreateFromAxisAngle(Vector3.UnitY, state.YRot));
-                renderer.Render(poseStack, _builder, state);
-            }
-            _layerRanges[layerIndex] = (vertexStart, _builder.VertexCount - vertexStart,
-                indexStart, _builder.Indices.Count - indexStart);
+            _builder.Begin(_buffers.GetBuffer(renderer.RenderType(state)));
+            var poseStack = new PoseStack();
+            poseStack.Translate(state.Position.X, state.Position.Y, state.Position.Z);
+            if (state.YRot != 0f)
+                poseStack.Rotate(Quaternion.CreateFromAxisAngle(Vector3.UnitY, state.YRot));
+            renderer.Render(poseStack, _builder, state);
+            _vertexCount += _builder.VertexCount;
         }
-        _vertexCount = _builder.VertexCount;
-        _indexCount = _builder.Indices.Count;
+
+        _builder.Clear();
+        if (!_loggedFirstPrepare)
+        {
+            _loggedFirstPrepare = true;
+            Log.Info($"Entity prepare visible={_visible.Count} vertices={_vertexCount} device={_device is not null}");
+        }
     }
 
-    //Upload uploads builder vertices/indices to GPU buffers, borrowing from the pool
-    //Skip without borrowing when empty, to avoid an empty DrawCall
+    //Upload records the render device; the staged buffers upload lazily in EndBatch
     public void Upload(GpuDevice device)
     {
-        //Return the previous frame's buffers
-        if (_vertexBuffer is not null) { _bufferPool.ReturnBuffer(_vertexBuffer); _vertexBuffer = null; }
-        if (_indexBuffer is not null) { _bufferPool.ReturnBuffer(_indexBuffer); _indexBuffer = null; }
-        if (_indexCount == 0) return;
-        //Upload vertices: 11 floats/vertex = 44 bytes
-        var vertexSpan = CollectionsMarshal.AsSpan(_builder.Vertices);
-        var vertexBytes = MemoryMarshal.AsBytes(vertexSpan).ToArray();
-        _vertexBuffer = _bufferPool.GetBuffer(vertexBytes.Length, GpuBuffer.UsageVertex | GpuBuffer.UsageCopyDst);
-        _vertexBuffer.Upload<byte>(vertexBytes);
-        //Upload indices: int/index = 4 bytes
-        var indexSpan = CollectionsMarshal.AsSpan(_builder.Indices);
-        var indexBytes = MemoryMarshal.AsBytes(indexSpan).ToArray();
-        _indexBuffer = _bufferPool.GetBuffer(indexBytes.Length, GpuBuffer.UsageIndex | GpuBuffer.UsageCopyDst);
-        _indexBuffer.Upload<byte>(indexBytes);
+        _device ??= device;
     }
 
-    //Draw records entity render commands batched by pipeline; a single buffer with per-layer offset DrawIndexed
-    //bindGlobals writes the terrain uniforms after each SetPipeline
-    //Solid→Cutout→Translucent order; per layer SetPipeline+DrawIndexed, skipping empty layers
+    //Draw records the prepared batches into the open world pass
     public void Draw(RenderPass pass, Action<RenderPass> bindGlobals)
     {
-        if (_vertexBuffer is null || _indexBuffer is null || _indexCount == 0) return;
-        pass.SetVertexBuffer(0, _vertexBuffer.Slice());
-        pass.SetIndexBuffer(_indexBuffer, NacreCraft.Client.Blaze3d.IndexType.Int);
-        LastDrawCallCount = 0;
-        for (var layerIndex = 0; layerIndex < s_layerPipelines.Length; layerIndex++)
+        if (_buffers is null || _vertexCount == 0)
         {
-            var (vertexStart, _, indexStart, indexCount) = _layerRanges[layerIndex];
-            if (indexCount == 0) continue;
-            pass.SetPipeline(s_layerPipelines[layerIndex]);
-            bindGlobals(pass);
-            pass.DisableScissor();
-            pass.DrawIndexed(indexCount, 1, indexStart, vertexStart, 0);
-            LastDrawCallCount++;
+            LastDrawCallCount = 0;
+            return;
+        }
+
+        _buffers.EndBatch(pass);
+        LastDrawCallCount = _buffers.LastDrawCount;
+        if (!_loggedFirstDraw && LastDrawCallCount > 0)
+        {
+            _loggedFirstDraw = true;
+            Log.Info($"Entity RenderType batches: draws={LastDrawCallCount} vertices={_vertexCount}");
         }
     }
 
     public void Dispose()
     {
         if (_disposed) return;
-        _vertexBuffer = null;
-        _indexBuffer = null;
+        _buffers?.Dispose();
+        _buffers = null;
         _disposed = true;
     }
 }

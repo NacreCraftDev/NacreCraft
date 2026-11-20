@@ -139,8 +139,9 @@ public abstract class LivingEntity : NacreCraft.Registry.Entity, IEquipmentHolde
     }
 
     //Equipment the equipment slots, maps to vanilla LivingEntity.createEquipment
-    //Mob and Player each held their own copy before the LivingEntity layer existed
-    public EntityEquipment Equipment { get; } = new();
+    //Mob and Player each held their own copy before the LivingEntity layer existed; Player overrides it with PlayerEquipment
+    private EntityEquipment? _equipment;
+    public virtual EntityEquipment Equipment => _equipment ??= new EntityEquipment();
 
     //GetItemBySlot returns the item in the given slot, maps to vanilla getItemBySlot
     public ItemStack GetItemBySlot(EquipmentSlot slot) => Equipment.Get(slot);

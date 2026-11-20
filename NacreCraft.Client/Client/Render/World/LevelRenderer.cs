@@ -19,6 +19,7 @@ using NacreCraft.Client.Blaze3d.Audio;
 using NacreCraft.Client.Blaze3d.Framegraph;
 using NacreCraft.Client.Blaze3d.Preprocessor;
 using NacreCraft.Client.Blaze3d.Util;
+using NacreCraft.Logging;
 using NacreCraft.Client.Render.Model;
 using NacreCraft.Client.Render.Texture;
 using NacreCraft.Client.Render.Texture.Atlas;
@@ -76,6 +77,11 @@ public sealed class LevelRenderer : IDisposable, IWorldRenderer
 
     //MovingBlocks moving block render pass; null means no rendering of advancing pistons, injected by the Game layer
     public MovingBlockRenderer? MovingBlocks { get; set; }
+
+    //Gizmos collected debug gizmos drawn at the end of the world pass, injected by the client
+    public NacreCraft.Game.Gizmos.SimpleGizmoCollector? Gizmos { get; set; }
+
+    private MultiBufferSource.BufferSource? _gizmoBuffers;
 
     //Performance metrics for GameScreen's F3 display
     public int SectionCount => _dispatcher.SectionCount;
@@ -139,7 +145,34 @@ public sealed class LevelRenderer : IDisposable, IWorldRenderer
                 CustomData = entity.DroppedItem,
             });
         }
+        AddDebugItemEntity(entities);
         entities.Prepare(_camera.Position);
+    }
+
+    //AddDebugEntity diagnostic: one dropped stone item in front of the camera, enabled with NC_DEBUG_ENTITIES=1
+    //It exercises the ItemEntityRenderer -> RenderTypes.ItemCutout path with the real block model and atlas
+    private static bool s_debugEntityLogged;
+    private static NacreCraft.Game.World.Items.ItemStack? s_debugStack;
+
+    private void AddDebugItemEntity(EntityRenderDispatcher entities)
+    {
+        if (Environment.GetEnvironmentVariable("NC_DEBUG_ENTITIES") != "1") return;
+        if (!s_debugEntityLogged)
+        {
+            s_debugEntityLogged = true;
+            Log.Info("Debug entity enabled");
+        }
+        s_debugStack ??= new NacreCraft.Game.World.Items.ItemStack(
+            NacreCraft.Game.World.Items.Items.STONE.BuiltInRegistryHolder, 1,
+            NacreCraft.Game.World.Items.Component.DataComponentPatch.Empty);
+        entities.AddEntity(NacreCraft.Game.World.Entity.EntityTypes.ITEM.Id.ToString(), new EntityRenderState
+        {
+            Position = _camera.Position + _camera.Forward * 3f - new Vector3(0f, 0.5f, 0f),
+            Name = "debug_item",
+            AgeInTicks = _level.TickCount,
+            LightCoords = 0xF000F0,
+            CustomData = s_debugStack
+        });
     }
 
     //Upload calls dispatcher.UploadTerrainBuffers to upload compiled meshes inside the Lock into GpuBufferPool-borrowed buffers
@@ -202,12 +235,29 @@ public sealed class LevelRenderer : IDisposable, IWorldRenderer
             MovingBlocks.Draw(pass, bindGlobals);
             DrawCallCount += MovingBlocks.LastDrawCallCount;
         }
-        //Entity rendering comes after terrain in the same world pass; depth test ensures correct occlusion
-        //Batched by model.Pipeline into Solid/Cutout/Translucent, each layer with its own SetPipeline
-        if (EntityDispatcher is not null && EntityDispatcher.HasContent)
+        //Entities and gizmos both use the RenderType batcher, whose transforms come from RenderSystem's projection and
+        //dynamic uniform rings; one reset per frame is enough, so it happens before either batch runs
+        var hasEntities = EntityDispatcher is { HasContent: true };
+        if (hasEntities || Gizmos is not null)
         {
-            EntityDispatcher.Draw(pass, bindGlobals);
+            RenderSystem.SetProjectionMatrix(ViewProj);
+            RenderSystem.ResetDynamicUniforms();
+        }
+
+        //Entity rendering comes after terrain in the same world pass; depth test ensures correct occlusion
+        if (hasEntities)
+        {
+            EntityDispatcher!.Draw(pass, bindGlobals);
             DrawCallCount += EntityDispatcher.LastDrawCallCount;
+        }
+
+        //Gizmos use the RenderType batcher and draw last so they overlay world geometry
+        if (Gizmos is not null && _bufferPool.Device is { } device)
+        {
+            _gizmoBuffers ??= new MultiBufferSource.BufferSource(device);
+            NacreCraft.Client.Render.Gizmos.GizmoRenderer.Draw(Gizmos, _gizmoBuffers);
+            _gizmoBuffers.EndBatch(pass);
+            DrawCallCount += 1;
         }
     }
 
@@ -317,6 +367,9 @@ public sealed class LevelRenderer : IDisposable, IWorldRenderer
         EntityDispatcher = null;
         MovingBlocks?.Dispose();
         MovingBlocks = null;
+        _gizmoBuffers?.Dispose();
+        _gizmoBuffers = null;
+        Gizmos = null;
     }
 
     private static readonly RenderLayer[] s_layers = { RenderLayer.Solid, RenderLayer.Cutout, RenderLayer.Translucent };

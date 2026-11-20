@@ -2,13 +2,20 @@
 
 //terrain vertex shader 世界渲染区块 mesh 顶点变换
 //顶点为 20 字节紧凑格式 位置/贴图/光照均已量化 见 ChunkVertexFormat
-//set 0 MATRICES_PROJECTION 含 ViewProj push constant 携带区域世界原点
+//set 0 MATRICES_PROJECTION 含 DynamicTransforms + Projection push constant 携带区域世界原点
 //顶点是 section 局部坐标 顶点里的 section 槽位给出区域内位移 shader 端相加得到世界坐标
 //face shading 已 bake 进顶点 color 不需要 Lighting UBO 方向光照
 
-layout(set = 0, binding = 0) uniform MatricesUbo {
-    mat4 ViewProj;
-} matrices;
+layout(set = 0, binding = 0) uniform DynamicTransforms {
+    mat4 ModelViewMat;
+    vec4 ColorModulator;
+    vec3 ModelOffset;
+    mat4 TextureMat;
+};
+
+layout(set = 0, binding = 1) uniform Projection {
+    mat4 ProjMat;
+};
 
 layout(push_constant) uniform PushConstants {
     //xyz 为区域世界原点 regionX*128 regionY*64 regionZ*128 w 保留
@@ -52,7 +59,8 @@ void main() {
     vec3 localPos = deinterleavePosition(a_Position) * VERTEX_SCALE + VERTEX_OFFSET;
     //a_LightAndData.w 是 section 在区域内的槽位 移动方块传 0 由 push constant 直接给出基准原点
     vec3 worldPos = push.RegionOrigin.xyz + sectionOffsetOf(a_LightAndData.w) + localPos;
-    gl_Position = matrices.ViewProj * vec4(worldPos, 1.0);
+    vec3 viewPos = worldPos + ModelOffset;
+    gl_Position = ProjMat * ModelViewMat * vec4(viewPos, 1.0);
 
     //解包贴图坐标 低 15 位为量化值 最高位是量化时向贴图中心收缩的 bias 符号 用一格 epsilon 还原
     vec2 texCoord = vec2(a_TexCoord & TEXTURE_MAX_VALUE) / float(TEXTURE_MAX_COORD);
@@ -62,5 +70,5 @@ void main() {
     //解包 light 低 8 位为方块光 高 8 位为天空光 取值 0-15 采样 lightmap 的格子中心
     fragLightCoord = (vec2(a_LightAndData.xy) + 0.5) / 16.0;
 
-    fragTint = a_Color;
+    fragTint = a_Color * ColorModulator;
 }

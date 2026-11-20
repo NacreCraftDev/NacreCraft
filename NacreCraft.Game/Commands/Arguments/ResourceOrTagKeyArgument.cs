@@ -6,11 +6,13 @@ namespace NacreCraft.Game.Commands.Arguments;
 
 //ResourceOrTagKeyArgument element key or tag key, maps to vanilla net.minecraft.commands.arguments.ResourceOrTagKeyArgument
 //A # prefix selects a tag key, otherwise the token is an element key
-public sealed class ResourceOrTagKeyArgument<T> : ArgumentType<ResourceOrTagKeyArgument<T>.Result> where T : class
+public sealed class ResourceOrTagKeyArgument<T> : ArgumentType<ResourceOrTagKeyArgument<T>.Result>, IRegistryKeyedArgument where T : class
 {
     private readonly Registry<T> _registry;
 
     public ResourceOrTagKeyArgument(Registry<T> registry) => _registry = registry;
+
+    public Identifier RegistryIdentifier => _registry.Key.Identifier;
 
     public Result Parse(StringReader reader)
     {

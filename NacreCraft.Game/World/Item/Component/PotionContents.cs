@@ -43,6 +43,23 @@ public sealed class PotionContents : IEquatable<PotionContents>
     public IReadOnlyList<MobEffectInstance> CustomEffects { get; }
     public Optional<string> CustomName { get; }
 
+    //Is whether the base potion is the given one, maps to vanilla is(Potion)
+    public bool Is(Holder<NacreCraft.Registry.Potion> potion)
+        => Potion.IsPresent && ReferenceEquals(Potion.Get().Value, potion.Value);
+
+    //GetAllEffects base potion effects followed by custom effects, maps to vanilla getAllEffects
+    public IReadOnlyList<MobEffectInstance> GetAllEffects()
+    {
+        var result = new List<MobEffectInstance>();
+        if (Potion.IsPresent && Potion.Get().Value is NacreCraft.Game.World.Effect.Potion potion)
+            result.AddRange(potion.Effects);
+        result.AddRange(CustomEffects);
+        return result;
+    }
+
+    //HasEffects whether any effect would be applied
+    public bool HasEffects => GetAllEffects().Count > 0;
+
     //CreateItemStack builds a stack of the given item carrying the potion, maps to vanilla createItemStack
     public static ItemStack CreateItemStack(Item item, Holder<NacreCraft.Registry.Potion> potion)
     {

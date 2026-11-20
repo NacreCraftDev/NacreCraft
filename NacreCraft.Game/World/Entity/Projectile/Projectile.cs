@@ -171,6 +171,21 @@ public abstract class Projectile : NacreCraft.Registry.Entity
         return true;
     }
 
+    //Deflection how the projectile reacts to a shield-like deflector, maps to vanilla getDeflection
+    public ProjectileDeflection Deflection { get; set; } = ProjectileDeflection.None;
+
+    //HitTargetOrDeflectSelf dispatches the hit, or deflects instead when a deflection is set, maps to vanilla hitTargetOrDeflectSelf
+    protected void HitTargetOrDeflectSelf(ProjectileHitResult hit, NacreCraft.Registry.Entity? deflector,
+        NacreCraft.Util.Random.RandomSource random)
+    {
+        if (!ReferenceEquals(Deflection, ProjectileDeflection.None))
+        {
+            Deflection.Deflect(this, deflector, random);
+            return;
+        }
+        OnHit(hit);
+    }
+
     //OnHit hit dispatch, maps to vanilla Projectile.onHit
     //On a block hit the block itself is notified first; blocks like targets use the hit point to compute the output strength
     protected virtual void OnHit(ProjectileHitResult hit)

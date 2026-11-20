@@ -42,6 +42,8 @@ public static class Registries
     public static readonly ResourceKey<Registry<MapCodec<EnchantmentValueEffect>>> ENCHANTMENT_VALUE_EFFECT_TYPE = CreateRegistryKey<MapCodec<EnchantmentValueEffect>>("enchantment_value_effect_type");
     public static readonly ResourceKey<Registry<Codec<EntitySubPredicate>>> ENTITY_SUB_PREDICATE_TYPE = CreateRegistryKey<Codec<EntitySubPredicate>>("entity_sub_predicate_type");
     public static readonly ResourceKey<Registry<EntityType<object>>> ENTITY_TYPE = CreateRegistryKey<EntityType<object>>("entity_type");
+    //Equipment asset registry, maps to the equipment_asset root used by the equippable component and armor materials
+    public static readonly ResourceKey<Registry<EquipmentAsset>> EQUIPMENT_ASSET = CreateRegistryKey<EquipmentAsset>("equipment_asset");
     public static readonly ResourceKey<Registry<IEnvironmentAttribute>> ENVIRONMENT_ATTRIBUTE = CreateRegistryKey<IEnvironmentAttribute>("environment_attribute");
     public static readonly ResourceKey<Registry<IAttributeType>> ATTRIBUTE_TYPE = CreateRegistryKey<IAttributeType>("attribute_type");
     public static readonly ResourceKey<Registry<FeatureSizeType<object>>> FEATURE_SIZE_TYPE = CreateRegistryKey<FeatureSizeType<object>>("worldgen/feature_size_type");

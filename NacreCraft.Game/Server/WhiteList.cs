@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using NacreCraft.Network.Protocol.Login;
 using NacreCraft.Logging;
 
@@ -6,7 +6,7 @@ namespace NacreCraft.Game.Server;
 
 //WhiteList whitelist, maps to vanilla net.minecraft.server.players.WhiteList
 //Persisted to whitelist.json with fields aligned with vanilla uuid/name; a list with only a name still hits by name
-public sealed class WhiteList
+public class WhiteList
 {
     private readonly string _path;
     private readonly Dictionary<Guid, WhiteListEntry> _byId = new();

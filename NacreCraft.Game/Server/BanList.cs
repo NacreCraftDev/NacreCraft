@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using NacreCraft.Network.Protocol.Login;
 
 namespace NacreCraft.Game.Server;
@@ -6,7 +6,7 @@ namespace NacreCraft.Game.Server;
 //BanList player ban list, maps to vanilla net.minecraft.server.players.UserBanList
 //Persisted to banned-players.json with fields aligned with vanilla uuid/name/created/source/expires/reason
 //Name matching as a fallback: in offline mode the uuid is derived from the name, so a hand-written list with only the name still hits
-public sealed class BanList : StoredJsonList<BanEntry>
+public class BanList : StoredJsonList<BanEntry>
 {
     //Forever never expires; like vanilla, this project does no expiry and always writes forever
     public const string Forever = "forever";

@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using NacreCraft.Config;
@@ -98,4 +100,23 @@ public sealed record NameAndId
 {
     public string Name { get; init; } = string.Empty;
     public string Id { get; init; } = string.Empty;
+
+    //Uuid the parsed uuid, Guid.Empty when the id is missing or malformed
+    public Guid Uuid => Guid.TryParse(Id, out var id) ? id : Guid.Empty;
+
+    //From builds a name and id pair from a uuid
+    public static NameAndId From(Guid id, string name) => new() { Name = name, Id = id.ToString("D") };
+
+    //CreateOffline builds the offline-mode profile of a name, maps to vanilla NameAndId.createOffline
+    //The uuid is UUID.nameUUIDFromBytes("OfflinePlayer:" + name), the same derivation the login flow uses
+    public static NameAndId CreateOffline(string name) => From(OfflineUuid(name), name);
+
+    //OfflineUuid the version-3 MD5 uuid of an offline player name
+    private static Guid OfflineUuid(string name)
+    {
+        var hash = MD5.HashData(Encoding.UTF8.GetBytes("OfflinePlayer:" + name));
+        hash[6] = (byte)((hash[6] & 0x0F) | 0x30);
+        hash[8] = (byte)((hash[8] & 0x3F) | 0x80);
+        return new Guid(hash, bigEndian: true);
+    }
 }

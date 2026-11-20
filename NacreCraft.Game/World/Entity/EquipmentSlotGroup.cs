@@ -42,6 +42,19 @@ public static class EquipmentSlotGroups
     public static readonly StreamCodec<RegistryFriendlyByteBuf, EquipmentSlotGroup> StreamCodec =
         new EquipmentSlotGroupStreamCodec();
 
+    //BySlot the group covering exactly the given slot, maps to vanilla EquipmentSlotGroup.bySlot
+    public static EquipmentSlotGroup BySlot(EquipmentSlot slot) => slot switch
+    {
+        EquipmentSlot.MAINHAND => EquipmentSlotGroup.Mainhand,
+        EquipmentSlot.OFFHAND => EquipmentSlotGroup.Offhand,
+        EquipmentSlot.FEET => EquipmentSlotGroup.Feet,
+        EquipmentSlot.LEGS => EquipmentSlotGroup.Legs,
+        EquipmentSlot.CHEST => EquipmentSlotGroup.Chest,
+        EquipmentSlot.HEAD => EquipmentSlotGroup.Head,
+        EquipmentSlot.BODY => EquipmentSlotGroup.Body,
+        _ => EquipmentSlotGroup.Any
+    };
+
     //Test whether the group covers the given slot, maps to vanilla EquipmentSlotGroup.test
     public static bool Test(this EquipmentSlotGroup group, EquipmentSlot slot) => group switch
     {

@@ -1,5 +1,7 @@
+using System.Numerics;
 using NacreCraft.Client.Blaze3d.Buffers;
 using NacreCraft.Client.Blaze3d.Textures;
+using NacreCraft.Client.Render;
 
 namespace NacreCraft.Client.Blaze3d.Systems;
 
@@ -23,6 +25,11 @@ public static class RenderSystem
     private static ProjectionType _projectionType = ProjectionType.Perspective;
     private static ProjectionType _savedProjectionType = ProjectionType.Perspective;
     private static GpuBuffer? _globalSettingsUniform;
+    private static DynamicUniforms? _dynamicUniforms;
+    //_projectionUbo owns the 64-byte projection block uploaded by SetProjectionMatrix(Matrix4x4)
+    private static GpuBuffer? _projectionUbo;
+    //_modelViewMatrix the transform uploaded for the current draw; NC uses a single matrix rather than vanilla's Matrix4fStack
+    private static Matrix4x4 _modelViewMatrix = Matrix4x4.Identity;
 
     private static readonly ScissorState ScissorStateForRenderTypeDraws = new();
     private static readonly Queue<(System.Action Callback, GpuFence Fence)> PendingFences = new();
@@ -54,15 +61,36 @@ public static class RenderSystem
             throw new InvalidOperationException("RenderSystem.DEVICE already initialized");
         _device = device;
         _samplerCache = new SamplerCache(device);
+        _dynamicUniforms = new DynamicUniforms();
+        _projectionUbo = device.CreateBuffer("Projection UBO", GpuBuffer.UsageUniform | GpuBuffer.UsageMapWrite, ProjectionMatrixUboSize);
     }
 
     public static void ShutdownRenderer()
     {
-        _samplerCache?.Dispose();
-        _samplerCache = null;
-        while (PendingFences.TryDequeue(out var task)) task.Fence.Dispose();
+        DetachRenderer();
         _device?.Dispose();
         _device = null;
+    }
+
+    //DetachRenderer releases every RenderSystem-owned resource but keeps the device alive, for owners that created the
+    //device themselves (the NC window app) and destroy it after RenderSystem lets go
+    public static void DetachRenderer()
+    {
+        _dynamicUniforms?.Dispose();
+        _dynamicUniforms = null;
+        _samplerCache?.Dispose();
+        _samplerCache = null;
+        _projectionUbo?.Dispose();
+        _projectionUbo = null;
+        _projectionMatrixBuffer = null;
+        _savedProjectionMatrixBuffer = null;
+        _shaderFog = null;
+        _shaderLightDirections = null;
+        _globalSettingsUniform = null;
+        _modelViewMatrix = Matrix4x4.Identity;
+        while (PendingFences.TryDequeue(out var task)) task.Fence.Dispose();
+        _device = null;
+        _renderThread = null;
     }
 
     public static GpuDevice GetDevice()
@@ -89,6 +117,17 @@ public static class RenderSystem
     {
         AssertOnRenderThread();
         _projectionMatrixBuffer = projectionMatrixBuffer;
+        _projectionType = type;
+    }
+
+    //SetProjectionMatrix uploads a matrix into RenderSystem's own projection UBO, maps to vanilla setProjectionMatrix
+    //The renderer calls this once per frame before drawing anything that uses MATRICES_PROJECTION
+    public static void SetProjectionMatrix(Matrix4x4 projectionMatrix, ProjectionType type = ProjectionType.Perspective)
+    {
+        AssertOnRenderThread();
+        var ubo = _projectionUbo ?? throw new InvalidOperationException("Can't set the projection matrix before the renderer was initialized");
+        ubo.Upload<Matrix4x4>(new[] { projectionMatrix });
+        _projectionMatrixBuffer = ubo.Slice();
         _projectionType = type;
     }
 
@@ -121,6 +160,34 @@ public static class RenderSystem
     public static void SetGlobalSettingsUniform(GpuBuffer buffer) => _globalSettingsUniform = buffer;
 
     public static GpuBuffer? GetGlobalSettingsUniform() => _globalSettingsUniform;
+
+    //GetDynamicUniforms returns the per-frame transform rings, maps to vanilla getDynamicUniforms
+    public static DynamicUniforms GetDynamicUniforms()
+        => _dynamicUniforms ?? throw new InvalidOperationException("Can't getDynamicUniforms() before the renderer was initialized");
+
+    //ResetDynamicUniforms starts a new frame for the transform rings
+    public static void ResetDynamicUniforms() => _dynamicUniforms?.Reset();
+
+    //GetModelViewMatrixCopy returns the current model-view matrix, maps to vanilla getModelViewMatrixCopy
+    public static Matrix4x4 GetModelViewMatrixCopy()
+    {
+        AssertOnRenderThread();
+        return _modelViewMatrix;
+    }
+
+    //SetModelViewMatrix updates the matrix later draws upload; NC has no Matrix4fStack, the renderer feeds the final matrix
+    public static void SetModelViewMatrix(Matrix4x4 matrix)
+    {
+        AssertOnRenderThread();
+        _modelViewMatrix = matrix;
+    }
+
+    //ResetModelViewMatrix returns to identity at the start of a frame
+    public static void ResetModelViewMatrix()
+    {
+        AssertOnRenderThread();
+        _modelViewMatrix = Matrix4x4.Identity;
+    }
 
     public static void QueueFencedTask(System.Action task)
     {

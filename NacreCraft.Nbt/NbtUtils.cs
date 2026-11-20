@@ -409,6 +409,164 @@ public static class NbtUtils
         return builder.ToString().LastIndexOf(value, StringComparison.Ordinal);
     }
 
+    // ============ structure template SNBT packing ============
+
+    //StructureToSnbt packs a structure template into the compact SNBT form, maps to vanilla structureToSnbt
+    //The palette becomes a list of state strings, block state indexes become the strings and blocks moves under data
+    public static string StructureToSnbt(CompoundTag structure)
+        => ToSnbt(PackStructureTemplate(structure));
+
+    //SnbtToStructure parses the compact SNBT form back into a full structure template, maps to vanilla snbtToStructure
+    public static CompoundTag SnbtToStructure(string snbt)
+        => UnpackStructureTemplate(TagParser<Tag>.ParseCompoundFully(snbt));
+
+    //PackStructureTemplate converts a full template to the compact form, maps to vanilla packStructureTemplate
+    //A palette list present takes precedence over the single palette; entities and blocks are sorted by Y/X/Z with empty
+    //position lists last, so the output is stable across runs
+    public static CompoundTag PackStructureTemplate(CompoundTag snbt)
+    {
+        var palettes = snbt.GetList(PaletteListTag);
+        var palette = palettes is not null ? palettes.GetList(0) ?? new ListTag() : snbt.GetListOrEmpty(PaletteTag);
+        var deflatedPalette = new ListTag();
+        foreach (var element in palette)
+        {
+            if (element is not CompoundTag compound) continue;
+            deflatedPalette.Add(new StringTag(PackBlockState(compound)));
+        }
+        snbt.Put(PaletteTag, deflatedPalette);
+
+        if (palettes is not null)
+        {
+            var newPalettes = new ListTag();
+            foreach (var oldPaletteTag in palettes)
+            {
+                if (oldPaletteTag is not ListTag oldPalette) continue;
+                var newPalette = new CompoundTag();
+                for (var i = 0; i < oldPalette.Count; i++)
+                {
+                    var key = deflatedPalette.GetString(i)?.Value;
+                    if (key is null || oldPalette.GetCompound(i) is not { } oldState) continue;
+                    newPalette.PutString(key, PackBlockState(oldState));
+                }
+                newPalettes.Add(newPalette);
+            }
+            snbt.Put(PaletteListTag, newPalettes);
+        }
+
+        var oldEntities = snbt.GetList(EntitiesTag);
+        if (oldEntities is not null)
+        {
+            var entities = new List<CompoundTag>();
+            foreach (var element in oldEntities)
+                if (element is CompoundTag entity) entities.Add(entity);
+            entities.Sort((a, b) => ComparePositionLists(a.GetList(PositionTag), b.GetList(PositionTag), doubles: true));
+            var newEntities = new ListTag();
+            foreach (var entity in entities) newEntities.Add(entity);
+            snbt.Put(EntitiesTag, newEntities);
+        }
+
+        var blocks = new List<CompoundTag>();
+        foreach (var element in snbt.GetListOrEmpty(BlocksTag))
+            if (element is CompoundTag block) blocks.Add(block);
+        blocks.Sort((a, b) => ComparePositionLists(a.GetList(PositionTag), b.GetList(PositionTag), doubles: false));
+        foreach (var block in blocks)
+        {
+            var index = block.GetIntValue(StructureBlockStateTag);
+            var state = index >= 0 && index < deflatedPalette.Count ? deflatedPalette.GetString(index)?.Value : null;
+            if (state is null)
+                throw new InvalidOperationException($"Block state index {index} is missing from the palette");
+            block.PutString(StructureBlockStateTag, state);
+        }
+        var data = new ListTag();
+        foreach (var block in blocks) data.Add(block);
+        snbt.Put(StructureDataTag, data);
+        snbt.Remove(BlocksTag);
+        return snbt;
+    }
+
+    //UnpackStructureTemplate converts the compact form back to a full template, maps to vanilla unpackStructureTemplate
+    //The palette strings expand back into block state compounds and the data indexes move back under blocks as integers
+    public static CompoundTag UnpackStructureTemplate(CompoundTag template)
+    {
+        var packedPalette = template.GetListOrEmpty(PaletteTag);
+        var paletteKeys = new List<string>();
+        foreach (var element in packedPalette)
+        {
+            var key = element.AsString();
+            if (key is not null) paletteKeys.Add(key);
+        }
+        var palette = new ListTag();
+        foreach (var key in paletteKeys) palette.Add(UnpackBlockState(key));
+
+        var oldPalettes = template.GetList(PaletteListTag);
+        if (oldPalettes is not null)
+        {
+            var newPalettes = new ListTag();
+            foreach (var oldPaletteTag in oldPalettes)
+            {
+                if (oldPaletteTag is not CompoundTag oldPalette) continue;
+                var newPalette = new ListTag();
+                foreach (var key in paletteKeys)
+                {
+                    var packedState = oldPalette.GetString(key)?.Value
+                        ?? throw new InvalidOperationException($"Entry {key} is missing from the palette");
+                    newPalette.Add(UnpackBlockState(packedState));
+                }
+                newPalettes.Add(newPalette);
+            }
+            template.Put(PaletteListTag, newPalettes);
+            template.Remove(PaletteTag);
+        }
+        else
+        {
+            template.Put(PaletteTag, palette);
+        }
+
+        var maybeBlocks = template.GetList(StructureDataTag);
+        if (maybeBlocks is not null)
+        {
+            var stateIds = new Dictionary<string, int>();
+            for (var i = 0; i < paletteKeys.Count; i++) stateIds[paletteKeys[i]] = i;
+            for (var i = 0; i < maybeBlocks.Count; i++)
+            {
+                if (maybeBlocks.GetCompound(i) is not { } block) continue;
+                var stateName = block.GetStringValue(StructureBlockStateTag);
+                if (!stateIds.TryGetValue(stateName, out var stateId))
+                    throw new InvalidOperationException($"Entry {stateName} is missing from the palette");
+                block.PutInt(StructureBlockStateTag, stateId);
+            }
+            template.Put(BlocksTag, maybeBlocks);
+            template.Remove(StructureDataTag);
+        }
+        return template;
+    }
+
+    //ComparePositionLists sorts position lists by Y, then X, then Z, putting entries without a position last
+    //Maps to the vanilla YXZ comparators wrapped in Comparators.emptiesLast
+    private static int ComparePositionLists(ListTag? a, ListTag? b, bool doubles)
+    {
+        if (a is null || b is null) return a is null ? (b is null ? 0 : 1) : -1;
+        var compare = ComparePositionComponent(a, b, 1, doubles);
+        if (compare != 0) return compare;
+        compare = ComparePositionComponent(a, b, 0, doubles);
+        if (compare != 0) return compare;
+        return ComparePositionComponent(a, b, 2, doubles);
+    }
+
+    private static int ComparePositionComponent(ListTag a, ListTag b, int index, bool doubles)
+        => doubles
+            ? (a.GetDouble(index)?.Value ?? 0d).CompareTo(b.GetDouble(index)?.Value ?? 0d)
+            : (a.GetInt(index)?.Value ?? 0).CompareTo(b.GetInt(index)?.Value ?? 0);
+
+    //Structure template tag names, matching the constants of StructureTemplate without taking a Game-layer dependency
+    private const string PaletteTag = "palette";
+    private const string PaletteListTag = "palettes";
+    private const string EntitiesTag = "entities";
+    private const string BlocksTag = "blocks";
+    private const string StructureDataTag = "data";
+    private const string StructureBlockStateTag = "state";
+    private const string PositionTag = "pos";
+
     // ============ data version read/write ============
 
     //Add the current data version to a CompoundTag. Mirrors vanilla addCurrentDataVersion(CompoundTag).

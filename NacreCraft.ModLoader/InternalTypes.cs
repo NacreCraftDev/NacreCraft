@@ -9,8 +9,6 @@ internal sealed class InternalModInfo
     public Type? EntryType { get; set; }
     public object? Instance { get; set; }
     public string AssemblyPath { get; set; } = string.Empty;
-    public MethodInfo? InitMethod { get; set; }
-    public MethodInfo? ExitMethod { get; set; }
     public List<string> Dependencies { get; set; } = new();
     public ModStatus Status { get; set; }
 
@@ -29,11 +27,19 @@ internal sealed class InternalModInfo
     //EmbeddedResources: all embedded resource names in the assembly, the icon fallback looks here
     public List<string> EmbeddedResources { get; set; } = new();
 
-    //LoadMilliseconds: initialization time in milliseconds, used by the UI to show slow-loading mods, null if initialization was not reached
-    public double? LoadMilliseconds { get; set; }
+    //Entrypoints: the resolved bindings of this mod, one per manifest entrypoint type
+    //Instances are created when their phase first runs, so a mod that never reaches a phase never pays for it
+    public List<EntrypointBinding> Entrypoints { get; } = new();
 
-    //InitLock: ensures a mod is initialized only once
-    public SemaphoreSlim InitLock { get; } = new(1, 1);
+    //Prepared: the assembly is loaded and the bindings resolved; no mod code has run yet
+    public bool Prepared { get; set; }
+
+    //LoadControlDone: the host's load control ran once for this mod
+    public bool LoadControlDone { get; set; }
+
+    //LoadMilliseconds: initialization time in milliseconds, accumulated over the loader-owned phases,
+    //used by the UI to show slow-loading mods, null if no phase ran
+    public double? LoadMilliseconds { get; set; }
 
     public ModInfo ToPublic() => new()
     {
@@ -72,10 +78,13 @@ internal sealed class InternalModInfo
     }
 }
 
-//ScanResult: the output of the scan phase
-internal sealed class ScanResult
+//EntrypointBinding: one resolved entrypoint of one mod
+//The instance and the phase method are created on first use; Exit is an optional duck method on main-phase types
+internal sealed class EntrypointBinding
 {
-    public List<InternalModInfo> Mods { get; } = new();
-    public List<string> Errors { get; } = new();
-    public List<string> Skipped { get; } = new();
+    public required string Phase { get; init; }
+    public required Type Type { get; init; }
+    public object? Instance { get; set; }
+    public MethodInfo? Method { get; set; }
+    public MethodInfo? ExitMethod { get; set; }
 }

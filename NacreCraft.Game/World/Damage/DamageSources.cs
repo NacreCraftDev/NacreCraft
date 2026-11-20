@@ -165,6 +165,22 @@ public sealed class DamageSources
     public DamageSource Thrown(NacreCraft.Registry.Entity projectile, NacreCraft.Registry.Entity? thrower)
         => Indirect(DamageTypes.THROWN, projectile, thrower);
 
+    //Spit llama spit, maps to vanilla spit
+    public DamageSource Spit(NacreCraft.Registry.Entity projectile, NacreCraft.Registry.Entity? owner)
+        => Indirect(DamageTypes.SPIT, projectile, owner);
+
+    //Fireworks firework rocket blast, maps to vanilla fireworks
+    public DamageSource Fireworks(NacreCraft.Registry.Entity projectile, NacreCraft.Registry.Entity? owner)
+        => Indirect(DamageTypes.FIREWORKS, projectile, owner);
+
+    //Fireball fireball, maps to vanilla fireball
+    public DamageSource Fireball(NacreCraft.Registry.Entity projectile, NacreCraft.Registry.Entity? owner)
+        => Indirect(DamageTypes.FIREBALL, projectile, owner);
+
+    //WitherSkull wither skull, maps to vanilla witherSkull
+    public DamageSource WitherSkull(NacreCraft.Registry.Entity projectile, NacreCraft.Registry.Entity? owner)
+        => Indirect(DamageTypes.WITHER_SKULL, projectile, owner);
+
     //IndirectMagic indirect magic damage, maps to vanilla indirectMagic
     public DamageSource IndirectMagic(NacreCraft.Registry.Entity direct, NacreCraft.Registry.Entity? causing)
         => Indirect(DamageTypes.INDIRECT_MAGIC, direct, causing);

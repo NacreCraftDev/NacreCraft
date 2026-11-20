@@ -19,6 +19,12 @@ public static class BuiltInRegistries
     public static readonly DefaultedRegistry<Biome> BIOME = RegisterDefaulted<Biome>(Registries.BIOME, "plains");
     public static readonly Registry<object> DEBUG_SUBSCRIPTION = RegisterSimple<object>(Registries.DEBUG_SUBSCRIPTION);
     public static readonly DefaultedRegistry<EntityType<object>> ENTITY_TYPE = RegisterDefaulted<EntityType<object>>(Registries.ENTITY_TYPE, "pig");
+    //EQUIPMENT_ASSET data driven equipment asset registry, referenced by armor materials and the equippable component
+    public static readonly Registry<EquipmentAsset> EQUIPMENT_ASSET = RegisterSimple<EquipmentAsset>(Registries.EQUIPMENT_ASSET);
+    //INSTRUMENT instrument registry, referenced by the instrument component
+    public static readonly Registry<Instrument> INSTRUMENT = RegisterSimple<Instrument>(Registries.INSTRUMENT);
+    //SULFUR_CUBE_ARCHETYPE data driven sulfur cube archetype registry, bootstrapped by SulfurCubeArchetypes
+    public static readonly Registry<SulfurCubeArchetype> SULFUR_CUBE_ARCHETYPE = RegisterSimple<SulfurCubeArchetype>(Registries.SULFUR_CUBE_ARCHETYPE);
     public static readonly DefaultedRegistry<Item> ITEM = RegisterDefaulted<Item>(Registries.ITEM, "air");
     public static readonly Registry<Potion> POTION = RegisterSimple<Potion>(Registries.POTION);
     //PARTICLE_TYPE has no default value; declared as a writable registry so built-in particle types can be registered in vanilla order at startup

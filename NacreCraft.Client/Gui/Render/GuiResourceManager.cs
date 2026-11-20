@@ -44,6 +44,8 @@ namespace NacreCraft.Client.Gui.Render;
 //The global DescriptorSet (GLOBALS+MATRICES) is bound by the caller at render pass start as set 0/1
 public sealed class GuiResourceManager : IDisposable
 {
+    //DynamicTransformsUboSize mat4 + vec4 + vec3(padded) + mat4, the vanilla DynamicTransforms block
+    public const int DynamicTransformsUboSize = 160;
     private readonly GpuDevice _device;
     private readonly int _surfaceWidth;
     private readonly int _surfaceHeight;
@@ -53,8 +55,11 @@ public sealed class GuiResourceManager : IDisposable
     //gui.vert declares ScreenSize but never uses it; a dummy Mat4 is passed to avoid a layout mismatch
     private readonly GpuBuffer _globalsBuffer;
 
-    //MATRICES_PROJECTION uniform buffer, bound by the name "Matrices"
+    //MATRICES_PROJECTION uniform buffer, bound by the name "Projection"
     private readonly GpuBuffer _projectionBuffer;
+
+    //DYNAMIC_TRANSFORMS uniform buffer, bound by the name "DynamicTransforms" with an identity model-view matrix
+    private readonly GpuBuffer _dynamicTransformsBuffer;
 
     //Font atlas texture
     private readonly FontAtlas? _fontAtlas;
@@ -87,6 +92,14 @@ public sealed class GuiResourceManager : IDisposable
         //The globals and projection buffers are bound by name through the pipeline's BindGroupLayouts
         _globalsBuffer = _device.CreateBuffer(null, GpuBuffer.UsageUniform | GpuBuffer.UsageMapWrite, 64);
         _projectionBuffer = _device.CreateBuffer(null, GpuBuffer.UsageUniform | GpuBuffer.UsageMapWrite, 64);
+        _dynamicTransformsBuffer = _device.CreateBuffer(null, GpuBuffer.UsageUniform | GpuBuffer.UsageMapWrite, DynamicTransformsUboSize);
+        var identityTransforms = Std140Builder.OnStack(DynamicTransformsUboSize)
+            .PutMat4f(Matrix4x4.Identity)
+            .PutVec4(Vector4.One)
+            .PutVec3(Vector3.Zero)
+            .PutMat4f(Matrix4x4.Identity)
+            .Get();
+        _dynamicTransformsBuffer.Upload<byte>(identityTransforms);
 
         //Font atlas texture
         if (_fontAtlas is not null)
@@ -121,8 +134,11 @@ public sealed class GuiResourceManager : IDisposable
     //GlobalsBuffer global uniform buffer, bound by the name "Globals"
     public GpuBuffer GlobalsBuffer => _globalsBuffer;
 
-    //ProjectionBuffer projection matrix uniform buffer, bound by the name "Matrices"
+    //ProjectionBuffer projection matrix uniform buffer, bound by the name "Projection"
     public GpuBuffer ProjectionBuffer => _projectionBuffer;
+
+    //DYNAMIC_TRANSFORMS uniform buffer, bound by the name "DynamicTransforms"
+    public GpuBuffer DynamicTransformsBuffer => _dynamicTransformsBuffer;
 
     //FontTexture font atlas TextureSetup for GuiRenderContext to inject
     public TextureSetup? FontTexture => _fontTexture;
@@ -229,6 +245,7 @@ public sealed class GuiResourceManager : IDisposable
         if (_disposed) return;
         _globalsBuffer.Dispose();
         _projectionBuffer.Dispose();
+        _dynamicTransformsBuffer.Dispose();
         foreach (var view in _textureViews.Values) view.Dispose();
         _textureViews.Clear();
         _fontImage?.Dispose();

@@ -1,5 +1,7 @@
 using NacreCraft.Client.Blaze3d.Pipeline;
 using NacreCraft.Client.Render;
+using NacreCraft.Client.Render.Rendertype;
+using NacreCraft.Registry;
 using NacreCraft.Client.Blaze3d.Systems;
 using NacreCraft.Client.Blaze3d.Buffers;
 using NacreCraft.Client.Blaze3d.Textures;
@@ -44,11 +46,9 @@ public enum DisplayMode
     PolygonOffset
 }
 
-//GlyphRenderTypes glyph render pipeline set, maps to vanilla GlyphRenderTypes
-//Holds the three RenderPipelines normal/seeThrough/polygonOffset + guiPipeline
-//createForGrayscaleTexture returns the grayscale pipeline set for R8 atlases
-//createForColorTexture returns the color pipeline set for RGBA8 atlases
-//select(DisplayMode) returns the matching pipeline for a DisplayMode
+//GlyphRenderTypes glyph render pipeline and render type set, maps to vanilla GlyphRenderTypes
+//The GUI glyph path still binds RenderPipelines directly; the RenderType members are the world-text path used by
+//TextRenderable/PlainTextRenderable and are created from the atlas identifier
 public sealed class GlyphRenderTypes
 {
     public RenderPipeline Normal { get; }
@@ -56,12 +56,25 @@ public sealed class GlyphRenderTypes
     public RenderPipeline PolygonOffset { get; }
     public RenderPipeline GuiPipeline { get; }
 
+    public RenderType? NormalRenderType { get; }
+    public RenderType? SeeThroughRenderType { get; }
+    public RenderType? PolygonOffsetRenderType { get; }
+
     public GlyphRenderTypes(RenderPipeline normal, RenderPipeline seeThrough, RenderPipeline polygonOffset, RenderPipeline guiPipeline)
+        : this(normal, seeThrough, polygonOffset, guiPipeline, null, null, null)
+    {
+    }
+
+    public GlyphRenderTypes(RenderPipeline normal, RenderPipeline seeThrough, RenderPipeline polygonOffset, RenderPipeline guiPipeline,
+        RenderType? normalRenderType, RenderType? seeThroughRenderType, RenderType? polygonOffsetRenderType)
     {
         Normal = normal;
         SeeThrough = seeThrough;
         PolygonOffset = polygonOffset;
         GuiPipeline = guiPipeline;
+        NormalRenderType = normalRenderType;
+        SeeThroughRenderType = seeThroughRenderType;
+        PolygonOffsetRenderType = polygonOffsetRenderType;
     }
 
     //createForGrayscaleTexture grayscale atlases use the GUI_TEXT_GRAYSCALE pipeline series
@@ -78,7 +91,26 @@ public sealed class GlyphRenderTypes
             RenderPipelines.GUI_TEXT_POLYGON_OFFSET,
             RenderPipelines.GUI_TEXT);
 
-    //select returns the matching pipeline for a DisplayMode, maps to vanilla GlyphRenderTypes.select
+    //Identifier overloads add the world-text RenderTypes used by TextRenderable
+    public static GlyphRenderTypes CreateForGrayscaleTexture(Identifier name)
+        => new(RenderPipelines.GUI_TEXT_GRAYSCALE,
+            RenderPipelines.GUI_TEXT_GRAYSCALE_SEE_THROUGH,
+            RenderPipelines.GUI_TEXT_GRAYSCALE_POLYGON_OFFSET,
+            RenderPipelines.GUI_TEXT_GRAYSCALE,
+            RenderTypes.TextGrayscale(name),
+            RenderTypes.TextGrayscaleSeeThrough(name),
+            RenderTypes.TextGrayscalePolygonOffset(name));
+
+    public static GlyphRenderTypes CreateForColorTexture(Identifier name)
+        => new(RenderPipelines.GUI_TEXT,
+            RenderPipelines.GUI_TEXT_SEE_THROUGH,
+            RenderPipelines.GUI_TEXT_POLYGON_OFFSET,
+            RenderPipelines.GUI_TEXT,
+            RenderTypes.Text(name),
+            RenderTypes.TextSeeThrough(name),
+            RenderTypes.TextPolygonOffset(name));
+
+    //Select returns the matching GUI pipeline for a DisplayMode
     public RenderPipeline Select(DisplayMode mode) => mode switch
     {
         DisplayMode.Normal => Normal,
@@ -86,4 +118,14 @@ public sealed class GlyphRenderTypes
         DisplayMode.PolygonOffset => PolygonOffset,
         _ => throw new ArgumentOutOfRangeException(nameof(mode))
     };
+
+    //SelectRenderType returns the matching world RenderType for a DisplayMode, maps to vanilla GlyphRenderTypes.select
+    public RenderType SelectRenderType(DisplayMode mode)
+        => mode switch
+        {
+            DisplayMode.Normal => NormalRenderType,
+            DisplayMode.SeeThrough => SeeThroughRenderType,
+            DisplayMode.PolygonOffset => PolygonOffsetRenderType,
+            _ => throw new ArgumentOutOfRangeException(nameof(mode))
+        } ?? throw new InvalidOperationException($"GlyphRenderTypes has no RenderType for {mode}");
 }

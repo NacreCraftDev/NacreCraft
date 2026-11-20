@@ -70,9 +70,31 @@ public sealed class ModManifest
     [JsonPropertyName("environment")]
     public string EnvironmentValue { get; set; } = "both";
 
-    //Entry: the entry class full name, the class needs a public Task Init()
+    //Entry: removed in manifest v2; kept only so the scanner can warn that the field is present and ignored
+    //The real entries live in Entrypoints now
     [JsonPropertyName("entry")]
     public string Entry { get; set; } = string.Empty;
+
+    //SchemaVersion: the manifest contract version; the loader reads schema 2 only and rejects anything else
+    [JsonPropertyName("schemaVersion")]
+    public int SchemaVersion { get; set; }
+
+    //Entrypoints: the phase table, mapping a phase name to the entrypoint type full names of that phase
+    //Phases are preLaunch/main/client/server; the loader invokes preLaunch and main itself, ModApi drives client and server later
+    [JsonPropertyName("entrypoints")]
+    public Dictionary<string, string[]> Entrypoints { get; set; } = new();
+
+    //Provides: alias ids another mod may name in depends instead of this id
+    [JsonPropertyName("provides")]
+    public List<string> Provides { get; set; } = new();
+
+    //Breaks: mods whose presence with a matching version makes this mod unloadable
+    [JsonPropertyName("breaks")]
+    public Dictionary<string, string> Breaks { get; set; } = new();
+
+    //Conflicts: mods whose presence with a matching version is reported as a warning; this mod still loads
+    [JsonPropertyName("conflicts")]
+    public Dictionary<string, string> Conflicts { get; set; } = new();
 
     //Depends: depended mods and required versions, the key is the mod id and the value is the version constraint
     //Dependencies not listed are not version-constrained and load as usual as long as the mod is present

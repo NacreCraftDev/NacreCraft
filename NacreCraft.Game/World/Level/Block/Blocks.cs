@@ -146,6 +146,12 @@ public static partial class Blocks
     //Cobweb cobweb block, placed by the weaving effect, maps to vanilla Blocks.COBWEB
     public static BlockBehaviour Cobweb => Lookup("cobweb");
 
+    //Obsidian obsidian block, the nether portal frame material, maps to vanilla Blocks.OBSIDIAN
+    public static BlockBehaviour Obsidian => Lookup("obsidian");
+
+    //NetherPortal nether portal block, placed by the portal shape and forcer, maps to vanilla Blocks.NETHER_PORTAL
+    public static BlockBehaviour NetherPortal => Lookup("nether_portal");
+
     //Lookup returns a registered block by registry name, falls back to air before the block table has bootstrapped
     private static BlockBehaviour Lookup(string path)
         => BuiltInRegistries.BLOCK.GetValue(Identifier.WithDefaultNamespace(path)) as BlockBehaviour ?? AIR;
